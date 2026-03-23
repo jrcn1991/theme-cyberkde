@@ -1,0 +1,494 @@
+diff --git a/src/terminalDisplay/TerminalDisplay.cpp b/src/terminalDisplay/TerminalDisplay.cpp
+index c80e571..3ea4f20 100644
+--- a/src/terminalDisplay/TerminalDisplay.cpp
++++ b/src/terminalDisplay/TerminalDisplay.cpp
+@@ -34,6 +34,30 @@
+ #include <QTimer>
+ #include <QVBoxLayout>
+ 
++#include <KConfigGroup>
++#include <KSharedConfig>
++
++#include <cmath>
++
++namespace
++{
++// CyberKDE animation tuning (milliseconds / cells); scaled by the KDE animation speed.
++constexpr qreal CYBER_REVEAL_MS = 300;
++constexpr qreal CYBER_TRAIL_MS = 240;
++constexpr int CYBER_BURST_WINDOW_MS = 300;
++constexpr int CYBER_BURST_CELLS = 6000; // more than this within the window is drawn at once
++constexpr int CYBER_QUIET_MS = 600; // no animation this long after a mouse wheel scroll
++constexpr int CYBER_TRAIL_MAX_CELLS = 40;
++constexpr int CYBER_HALO = 4;
++constexpr int CYBER_PULSE_MS = 1600; // halo breathing period
++constexpr int CYBER_MAX_SHIFT = 24; // redraw-style scrolls detected up to this many lines
++
++quint64 cyberCellKey(int line, int column)
++{
++    return (quint64(quint32(line)) << 16) | quint16(column);
++}
++}
++
+ // KDE
+ #include <KColorScheme>
+ #include <KCursor>
+@@ -250,6 +274,13 @@ TerminalDisplay::TerminalDisplay(QWidget *parent)
+     _blinkCursorTimer->setInterval(QApplication::cursorFlashTime() / 2);
+     connect(_blinkCursorTimer, &QTimer::timeout, this, &Konsole::TerminalDisplay::blinkCursorEvent);
+ 
++    // CyberKDE: clock and frame timer for the text reveal and the cursor trail
++    _cyberClock.start();
++    _cyberFactor = KConfigGroup(KSharedConfig::openConfig(), QStringLiteral("KDE")).readEntry("AnimationDurationFactor", 1.0);
++    _cyberTimer = new QTimer(this);
++    _cyberTimer->setInterval(16);
++    connect(_cyberTimer, &QTimer::timeout, this, &Konsole::TerminalDisplay::cyberAnimationTick);
++
+     // hide mouse cursor on keystroke or idle
+     KCursor::setAutoHideCursor(this, true);
+     setMouseTracking(true);
+@@ -460,6 +491,8 @@ void TerminalDisplay::updateImage()
+     // Better control over screen resizing visual glitches
+     _screenWindow->updateCurrentLine();
+ 
++    bool cyberImageScrolled = false; // CyberKDE: whether _image followed the scroll
++
+     // optimization - scroll the existing image where possible and
+     // avoid expensive text drawing for parts of the image that
+     // can simply be moved up or down
+@@ -476,6 +509,7 @@ void TerminalDisplay::updateImage()
+                 _resizeWidget->hide();
+             }
+             _scrollBar->scrollImage(_screenWindow->scrollCount(), _screenWindow->scrollRegion(), _image, _imageSize);
++            cyberImageScrolled = true;
+             if (viewResizeWidget) {
+                 _resizeWidget->show();
+             }
+@@ -515,6 +549,12 @@ void TerminalDisplay::updateImage()
+     auto dirtyMask = new char[columnsToUpdate + 2];
+     QRegion dirtyRegion;
+ 
++    // CyberKDE: cells whose character changed (not just colors/selection/cursor)
++    QVector<quint64> cyberFresh;
++    QRegion cyberFreshRegion;
++    const int cyberTopLine = _screenWindow->currentLine();
++    const int cyberShift = cyberDetectShift(newimg, linesToUpdate, columnsToUpdate, columns);
++
+     for (y = 0; y < linesToUpdate; ++y) {
+         const Character *currentLine = &_image[y * _columns];
+         const Character *const newLine = &newimg[y * columns];
+@@ -526,11 +566,25 @@ void TerminalDisplay::updateImage()
+         // its cell boundaries
+         memset(dirtyMask, 0, columnsToUpdate + 2);
+ 
++        const int cyberFreshBefore = cyberFresh.size();
+         for (x = 0; x < columnsToUpdate; ++x) {
+             if (newLine[x] != currentLine[x]) {
+                 dirtyMask[x] = 1;
++                // Compare with where this row's text was before a redraw-style scroll (see cyberDetectShift).
++                const char32_t before = cyberShift == 0  ? currentLine[x].character
++                    : y + cyberShift < linesToUpdate ? _image[(y + cyberShift) * _columns + x].character
++                                                     : U' ';
++                if (newLine[x].character != before && !newLine[x].isSpace() && !newLine[x].isRightHalfOfDoubleWide()) {
++                    cyberFresh.append(cyberCellKey(cyberTopLine + y, x));
++                }
+             }
+         }
++        if (cyberFresh.size() != cyberFreshBefore) {
++            cyberFreshRegion |= highdpi_adjust_rect(QRect(_contentRect.left() + tLx,
++                                                          _contentRect.top() + tLy + _terminalFont->fontHeight() * y,
++                                                          _terminalFont->fontWidth() * columnsToUpdate,
++                                                          _terminalFont->fontHeight()));
++        }
+ 
+         if (!_resizing) { // not while _resizing, we're expecting a paintEvent
+             for (x = 0; x < columnsToUpdate; ++x) {
+@@ -593,6 +647,7 @@ void TerminalDisplay::updateImage()
+         memcpy((void *)currentLine, (const void *)newLine, columnsToUpdate * sizeof(Character));
+     }
+     _lineProperties = newLineProperties;
++    cyberNoteFreshCells(cyberFresh, cyberFreshRegion, cyberImageScrolled);
+ 
+     // if the new _image is smaller than the previous _image, then ensure that the area
+     // outside the new _image is cleared
+@@ -746,6 +801,8 @@ void TerminalDisplay::paintEvent(QPaintEvent *pe)
+         paint.drawRect(x, y, width() - sb - 1, height() - y - 1);
+     }
+ 
++    cyberPaintCursorEffects(paint);
++
+     const bool drawDimmed = _dimWhenInactive && !hasFocus();
+     if (drawDimmed) {
+         const QColor dimColor(0, 0, 0, _dimValue);
+@@ -889,6 +946,8 @@ void TerminalDisplay::focusOutEvent(QFocusEvent *)
+ 
+     // If waiting for a triple click - losing focus cancels that (do the pending copy)
+     copyToX11Selection(true);
++
++    update(); // CyberKDE: erase the cursor halo
+ }
+ 
+ void TerminalDisplay::focusInEvent(QFocusEvent *)
+@@ -902,6 +961,9 @@ void TerminalDisplay::focusInEvent(QFocusEvent *)
+     if (_allowBlinkingText && _hasTextBlinker) {
+         _blinkTextTimer->start();
+     }
++
++    update(); // CyberKDE: draw the cursor halo
++    _cyberTimer->start(); // CyberKDE: halo breathing
+ }
+ 
+ void TerminalDisplay::blinkTextEvent()
+@@ -937,6 +999,180 @@ void TerminalDisplay::updateCursor()
+     update(cursorRect);
+ }
+ 
++qreal TerminalDisplay::cyberRevealProgress(int x, int y) const
++{
++    if (_cyberBirths.isEmpty() || _screenWindow.isNull()) {
++        return 1.0;
++    }
++    const auto it = _cyberBirths.constFind(cyberCellKey(_screenWindow->currentLine() + y, x));
++    if (it == _cyberBirths.constEnd()) {
++        return 1.0;
++    }
++    return qBound(0.0, (_cyberClock.elapsed() - it.value()) / (CYBER_REVEAL_MS * _cyberFactor), 1.0);
++}
++
++int TerminalDisplay::cyberDetectShift(const Character *newimg, int lines, int columns, int newColumns) const
++{
++    // Full-screen apps (Claude Code, less, vim) repaint instead of scrolling. Find how many rows the
++    // content moved up by sampling a few rows: a row that moved up by k matches old row y + k.
++    // Only rows not yet overwritten in _image are compared, so only upward moves are detected.
++    const auto sameText = [&](int newRow, int oldRow) {
++        const Character *moved = &newimg[newRow * newColumns];
++        const Character *previous = &_image[oldRow * _columns];
++        bool hasText = false;
++        for (int x = 0; x < columns; ++x) {
++            if (moved[x].character != previous[x].character) {
++                return false;
++            }
++            hasText |= !moved[x].isSpace();
++        }
++        return hasText;
++    };
++    const int samples[] = {lines / 4, lines / 2, (lines * 3) / 4};
++    for (int k = 1; k <= qMin(CYBER_MAX_SHIFT, lines / 2); ++k) {
++        int hits = 0;
++        for (const int row : samples) {
++            if (row + k < lines && sameText(row, row + k)) {
++                ++hits;
++            }
++        }
++        if (hits >= 2) {
++            return k;
++        }
++    }
++    return 0;
++}
++
++void TerminalDisplay::cyberNoteFreshCells(const QVector<quint64> &fresh, const QRegion &region, bool imageScrolled)
++{
++    if (_cyberFactor <= 0.0 || _screenWindow.isNull()) {
++        return;
++    }
++    const qint64 now = _cyberClock.elapsed();
++
++    // Big or continuous output (logs, full-screen redraws) is drawn at once, without animation.
++    if (now - _cyberBurstStart > CYBER_BURST_WINDOW_MS) {
++        _cyberBurstStart = now;
++        _cyberBurstCells = 0;
++    }
++    _cyberBurstCells += fresh.size();
++    // Scrolling a full-screen app (Claude Code, less) with the wheel repaints the screen with old
++    // text; while the wheel is in use (see wheelEvent) nothing is animated.
++    const bool calm = _cyberBurstCells <= CYBER_BURST_CELLS && now >= _cyberQuietUntil
++        && (_screenWindow->scrollCount() == 0 || imageScrolled);
++
++    if (calm && !fresh.isEmpty()) {
++        for (const quint64 key : fresh) {
++            _cyberBirths.insert(key, now);
++        }
++        _cyberRevealRegion |= region;
++        _cyberRevealUntil = now + qint64(CYBER_REVEAL_MS * _cyberFactor);
++    }
++
++    // Cursor trail: a translucent block that follows short cursor moves.
++    const QPoint cursor = cursorPosition();
++    if (cursor != _cyberCursorLast) {
++        const QRect oldRect = imageToWidget(highdpi_adjust_rect(QRect(_cyberCursorLast, QSize(1, 1))));
++        const QRect newRect = imageToWidget(highdpi_adjust_rect(QRect(cursor, QSize(1, 1))));
++        const QPoint delta = cursor - _cyberCursorLast;
++        if (calm && _cyberCursorLast.x() >= 0 && qAbs(delta.x()) + qAbs(delta.y()) <= CYBER_TRAIL_MAX_CELLS && hasFocus()) {
++            _cyberTrailFrom = oldRect;
++            _cyberTrailTo = newRect;
++            _cyberTrailStart = now;
++        }
++        update(oldRect.adjusted(-CYBER_HALO, -CYBER_HALO, CYBER_HALO, CYBER_HALO));
++        update(newRect.adjusted(-CYBER_HALO, -CYBER_HALO, CYBER_HALO, CYBER_HALO));
++        _cyberCursorLast = cursor;
++    }
++
++    if ((!_cyberRevealRegion.isEmpty() || _cyberTrailStart != 0) && !_cyberTimer->isActive()) {
++        _cyberTimer->start();
++    }
++}
++
++void TerminalDisplay::cyberAnimationTick()
++{
++    const qint64 now = _cyberClock.elapsed();
++    bool running = false;
++
++    if (!_cyberRevealRegion.isEmpty()) {
++        update(_cyberRevealRegion);
++        if (now >= _cyberRevealUntil) {
++            // This last repaint already draws everything settled.
++            _cyberRevealRegion = QRegion();
++            _cyberBirths.clear();
++        } else {
++            running = true;
++        }
++    }
++
++    if (_cyberTrailStart != 0) {
++        update(_cyberTrailFrom.united(_cyberTrailTo).adjusted(-CYBER_HALO, -CYBER_HALO, CYBER_HALO, CYBER_HALO));
++        if (now - _cyberTrailStart >= CYBER_TRAIL_MS * _cyberFactor) {
++            _cyberTrailStart = 0;
++        } else {
++            running = true;
++        }
++    }
++
++    // Breathing halo: keep repainting the cursor surroundings while the terminal has focus.
++    if (hasFocus() && _cyberFactor > 0.0 && !_screenWindow.isNull() && isCursorOnDisplay()) {
++        const QRect cursorRect = imageToWidget(highdpi_adjust_rect(QRect(_visualCursorPosition, QSize(1, 1))));
++        update(cursorRect.adjusted(-CYBER_HALO - 1, -CYBER_HALO - 1, CYBER_HALO + 1, CYBER_HALO + 1));
++        running = true;
++    }
++
++    if (!running) {
++        _cyberTimer->stop();
++    }
++}
++
++void TerminalDisplay::cyberPaintCursorEffects(QPainter &paint)
++{
++    if (_cyberFactor <= 0.0 || !hasFocus() || _screenWindow.isNull() || !isCursorOnDisplay()) {
++        return;
++    }
++    QColor color = _terminalColor->cursorColor();
++    if (!color.isValid()) {
++        color = _terminalColor->foregroundColor();
++    }
++    const QRect cursorRect = imageToWidget(highdpi_adjust_rect(QRect(_visualCursorPosition, QSize(1, 1))));
++
++    paint.save();
++    paint.setRenderHint(QPainter::Antialiasing, false);
++    paint.setBrush(Qt::NoBrush);
++
++    // Localized glow around the active cursor, breathing slowly while the terminal has focus.
++    const qreal phase = qreal(_cyberClock.elapsed() % CYBER_PULSE_MS) / CYBER_PULSE_MS;
++    const qreal pulse = 0.65 + 0.35 * std::sin(6.283185307179586 * phase);
++    for (int i = 1; i <= CYBER_HALO; ++i) {
++        QColor glow = color;
++        glow.setAlphaF(0.38 * pulse / i);
++        paint.setPen(QPen(glow, 1));
++        paint.drawRect(cursorRect.adjusted(-i, -i, i - 1, i - 1));
++    }
++
++    if (_cyberTrailStart != 0) {
++        const qreal t = qBound(0.0, (_cyberClock.elapsed() - _cyberTrailStart) / (CYBER_TRAIL_MS * _cyberFactor), 1.0);
++        const qreal eased = 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);
++        const QRectF from(_cyberTrailFrom);
++        const QRectF to(_cyberTrailTo);
++        const QRectF tail(from.topLeft() + (to.topLeft() - from.topLeft()) * eased, from.size());
++        QColor head = color;
++        head.setAlphaF(0.6 * (1.0 - t));
++        QColor rear = _terminalColor->colorTable()[3]; // ANSI red (table: 0 fg, 1 bg, 2..9 colors 0-7)
++        rear.setAlphaF(0.45 * (1.0 - t));
++        // Same line: a red-to-cyan streak from the tail to the cursor; otherwise a ghost block sliding in.
++        const QRectF streak = qFuzzyCompare(from.top(), to.top()) ? tail.united(to) : tail;
++        QLinearGradient gradient(tail.center(), to.center());
++        gradient.setColorAt(0.0, rear);
++        gradient.setColorAt(1.0, head);
++        paint.fillRect(streak, gradient);
++    }
++
++    paint.restore();
++}
++
+ /* ------------------------------------------------------------------------- */
+ /*                                                                           */
+ /*                          Geometry & Resizing                              */
+@@ -1677,6 +1913,7 @@ void TerminalDisplay::wheelEvent(QWheelEvent *ev)
+ {
+     static QElapsedTimer enable_zoom_timer;
+     static bool enable_zoom = true;
++    _cyberQuietUntil = _cyberClock.elapsed() + qint64(CYBER_QUIET_MS); // CyberKDE: no glitch while scrolling
+     // Only vertical scrolling is supported
+     if (qAbs(ev->angleDelta().y()) < qAbs(ev->angleDelta().x())) {
+         return;
+diff --git a/src/terminalDisplay/TerminalDisplay.h b/src/terminalDisplay/TerminalDisplay.h
+index 4725730..3e0a37c 100644
+--- a/src/terminalDisplay/TerminalDisplay.h
++++ b/src/terminalDisplay/TerminalDisplay.h
+@@ -30,6 +30,9 @@ class QDrag;
+ class QDragEnterEvent;
+ class QDropEvent;
+ class QLabel;
++#include <QElapsedTimer>
++#include <QHash>
++
+ class QTimer;
+ class QEvent;
+ class QVBoxLayout;
+@@ -329,6 +332,12 @@ public:
+         return _cursorBlinking;
+     }
+ 
++    /**
++     * CyberKDE: reveal progress (0..1) of the character at image position (x, y).
++     * Freshly written characters fade in with a short tint; 1 means settled.
++     */
++    qreal cyberRevealProgress(int x, int y) const;
++
+     bool textBlinking() const
+     {
+         return _textBlinking;
+@@ -827,6 +836,25 @@ private:
+     UBiDi *ubidi = nullptr;
+     QPoint _visualCursorPosition = {0, 0};
+ 
++    // CyberKDE: text reveal and cursor trail animations
++    void cyberNoteFreshCells(const QVector<quint64> &fresh, const QRegion &region, bool imageScrolled);
++    void cyberAnimationTick();
++    void cyberPaintCursorEffects(QPainter &paint);
++    int cyberDetectShift(const Character *newimg, int lines, int columns, int newColumns) const;
++    QElapsedTimer _cyberClock;
++    QTimer *_cyberTimer = nullptr;
++    qreal _cyberFactor = 1.0;
++    QHash<quint64, qint64> _cyberBirths; // (absolute line, column) -> time it was written
++    QRegion _cyberRevealRegion;
++    qint64 _cyberRevealUntil = 0;
++    qint64 _cyberBurstStart = 0;
++    int _cyberBurstCells = 0;
++    qint64 _cyberQuietUntil = 0; // animations paused until then (mouse wheel scrolling)
++    QPoint _cyberCursorLast = {-1, -1};
++    QRect _cyberTrailFrom;
++    QRect _cyberTrailTo;
++    qint64 _cyberTrailStart = 0;
++
+     int _selModeModifiers;
+     bool _selModeByModifiers; // Selection started by Shift+Arrow
+ 
+diff --git a/src/terminalDisplay/TerminalPainter.cpp b/src/terminalDisplay/TerminalPainter.cpp
+index 9d6e724..2ebae5e 100644
+--- a/src/terminalDisplay/TerminalPainter.cpp
++++ b/src/terminalDisplay/TerminalPainter.cpp
+@@ -385,7 +385,8 @@ void TerminalPainter::drawContents(Character *image,
+                                                oldRendition,
+                                                oldColor,
+                                                normalWeight,
+-                                               boldWeight);
++                                               boldWeight,
++                                               m_parentDisplay->cyberRevealProgress(word_log_x, y));
+                             lastCharType = charType;
+                         }
+                         if (charType != 0) {
+@@ -413,7 +414,8 @@ void TerminalPainter::drawContents(Character *image,
+                                    oldRendition,
+                                    oldColor,
+                                    normalWeight,
+-                                   boldWeight);
++                                   boldWeight,
++                                   m_parentDisplay->cyberRevealProgress(log_x, y));
+             }
+         }
+         if (wordMode && lastCharType != 0) {
+@@ -428,7 +430,8 @@ void TerminalPainter::drawContents(Character *image,
+                                oldRendition,
+                                oldColor,
+                                normalWeight,
+-                               boldWeight);
++                               boldWeight,
++                               m_parentDisplay->cyberRevealProgress(word_log_x, y));
+         }
+         if (!printerFriendly) {
+             drawAboveText(paint,
+@@ -1060,7 +1063,8 @@ void TerminalPainter::drawTextCharacters(QPainter &painter,
+                                          RenditionFlags &oldRendition,
+                                          QColor oldColor,
+                                          QFont::Weight normalWeight,
+-                                         QFont::Weight boldWeight)
++                                         QFont::Weight boldWeight,
++                                         qreal reveal)
+ {
+     // setup painter
+     if (style.rendition.f.conceal != 0) {
+@@ -1142,6 +1146,24 @@ void TerminalPainter::drawTextCharacters(QPainter &painter,
+         }
+     }
+ 
++    // CyberKDE: freshly written text "decodes": it fades in from the cursor color to its own color,
++    // with red/cyan ghosts converging on it and a short scan line underneath (drawn with the text).
++    const qreal savedOpacity = painter.opacity();
++    const bool revealing = reveal < 1.0 && !printerFriendly;
++    qreal eased = 1.0;
++    QColor tint = m_parentDisplay->terminalColor()->cursorColor();
++    if (!tint.isValid()) {
++        tint = characterColor;
++    }
++    if (revealing) {
++        const qreal inverse = 1.0 - reveal;
++        eased = 1.0 - inverse * inverse * inverse;
++        characterColor = QColor::fromRgbF(tint.redF() + (characterColor.redF() - tint.redF()) * eased,
++                                          tint.greenF() + (characterColor.greenF() - tint.greenF()) * eased,
++                                          tint.blueF() + (characterColor.blueF() - tint.blueF()) * eased);
++        painter.setOpacity(savedOpacity * (0.15 + 0.85 * eased));
++    }
++
+     if (characterColor != oldColor) {
+         QPen pen = painter.pen();
+         if (pen.color() != characterColor) {
+@@ -1169,6 +1191,20 @@ void TerminalPainter::drawTextCharacters(QPainter &painter,
+             // We shift half way down here to center
+             y += m_parentDisplay->terminalFont()->lineSpacing() / 2;
+         }
++        if (revealing) {
++            const qreal spread = 3.0 * (1.0 - eased);
++            painter.save();
++            painter.setOpacity(savedOpacity * 0.6 * (1.0 - eased));
++            painter.setPen(colorTable[3]); // ANSI red (table: 0 fg, 1 bg, 2..9 colors 0-7)
++            painter.drawText(QPointF(rect.x() - spread, y), text);
++            painter.setPen(tint);
++            painter.drawText(QPointF(rect.x() + spread, y), text);
++            QColor scan = tint;
++            scan.setAlphaF(0.9 * (1.0 - eased));
++            painter.setOpacity(savedOpacity);
++            painter.fillRect(QRectF(rect.x(), rect.bottom(), rect.width(), 1), scan);
++            painter.restore();
++        }
+         painter.drawText(rect.x(), y, text);
+         if (0 && text.toUcs4().length() >= 1) {
+             fprintf(stderr, " %lli  ", (qint64)text.toUcs4().length());
+@@ -1181,5 +1217,6 @@ void TerminalPainter::drawTextCharacters(QPainter &painter,
+     if (restoreFont) {
+         painter.setFont(savedFont);
+     }
++    painter.setOpacity(savedOpacity);
+ }
+ }
+diff --git a/src/terminalDisplay/TerminalPainter.h b/src/terminalDisplay/TerminalPainter.h
+index 55159dc..2bbe31a 100644
+--- a/src/terminalDisplay/TerminalPainter.h
++++ b/src/terminalDisplay/TerminalPainter.h
+@@ -131,7 +131,8 @@ private:
+                             RenditionFlags &oldRendition,
+                             QColor oldColor,
+                             QFont::Weight normalWeight,
+-                            QFont::Weight boldWeight);
++                            QFont::Weight boldWeight,
++                            qreal reveal = 1.0);
+ };
+ 
+ }

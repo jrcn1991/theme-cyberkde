@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="44" viewBox="0 0 210 44">
+<!-- CyberKDE — gerado por generator/gen_aurorae.py; não editar à mão -->
+<g id="active-center"><rect x="10" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M21.000,24.000 L25.000,19.000 L29.000,24.000 Z" fill="#A9A9BA"/></g>
+<g id="hover-center"><rect x="50" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M52.000,13.000 L78.000,13.000 L78.000,27.586 L74.586,31.000 L52.000,31.000 Z" fill="#2D1921"/><path d="M51.000,12.000 L79.000,12.000 L79.000,28.000 L75.000,32.000 L51.000,32.000 Z M52.000,13.000 L78.000,13.000 L78.000,27.586 L74.586,31.000 L52.000,31.000 Z" fill="#843132" fill-rule="evenodd"/><path d="M61.000,24.000 L65.000,19.000 L69.000,24.000 Z" fill="#DCDCE4"/></g>
+<g id="pressed-center"><rect x="90" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M92.000,13.000 L118.000,13.000 L118.000,27.586 L114.586,31.000 L92.000,31.000 Z" fill="#57252A"/><path d="M91.000,12.000 L119.000,12.000 L119.000,28.000 L115.000,32.000 L91.000,32.000 Z M92.000,13.000 L118.000,13.000 L118.000,27.586 L114.586,31.000 L92.000,31.000 Z" fill="#F75049" fill-rule="evenodd"/><path d="M101.000,24.000 L105.000,19.000 L109.000,24.000 Z" fill="#DCDCE4"/></g>
+<g id="inactive-center"><rect x="130" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M141.000,24.000 L145.000,19.000 L149.000,24.000 Z" fill="#76768A"/></g>
+<g id="deactivated-center"><rect x="170" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M181.000,24.000 L185.000,19.000 L189.000,24.000 Z" fill="#444453"/></g>
+</svg>

@@ -1,0 +1,23 @@
+{
+  "KPackageStructure": "KWin/Effect",
+  "KPlugin": {
+    "Name": "CyberKDE Barra",
+    "Description": "Accent rule, glow and chamfered frame on the Plasma top bar (CyberKDE).",
+    "Icon": "preferences-system-windows-effect-glide",
+    "Category": "Appearance",
+    "Authors": [
+      {
+        "Name": "Rafael Neves"
+      }
+    ],
+    "Id": "cyberkde_barra",
+    "License": "GPL-3.0-or-later",
+    "Version": "1.0",
+    "EnabledByDefault": false,
+    "Website": "https://github.com/jrcn1991/theme-cyberkde",
+    "Description[pt_BR]": "Barra superior do Plasma no estilo \"filete neon\": filete na cor de destaque na borda de baixo, brilho e quadro chanfrado em volta do menu iniciar. Desenhado sobre a barra, sem mudar os widgets."
+  },
+  "X-KDE-Ordering": "60",
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js"
+}

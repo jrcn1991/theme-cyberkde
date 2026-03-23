@@ -1,0 +1,23 @@
+{
+  "KPackageStructure": "KWin/Effect",
+  "KPlugin": {
+    "Name": "CyberKDE Popups",
+    "Description": "Plasma popups revealed from their trigger, menus and tooltips with a short slide, notifications entering from the edge (CyberKDE). Replaces Fading and Sliding Popups.",
+    "Icon": "preferences-system-windows-effect-fadingpopups",
+    "Category": "Appearance",
+    "Authors": [
+      {
+        "Name": "Rafael Neves"
+      }
+    ],
+    "Id": "cyberkde_popups",
+    "License": "GPL-3.0-or-later",
+    "Version": "1.0",
+    "EnabledByDefault": false,
+    "Website": "https://github.com/jrcn1991/theme-cyberkde",
+    "Description[pt_BR]": "Popups do Plasma revelados a partir do acionador, menus e dicas com deslize curto, notificações entrando pela borda. Substitui Fading popups e Sliding popups."
+  },
+  "X-KDE-Ordering": "60",
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js"
+}

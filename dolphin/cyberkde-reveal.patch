@@ -1,0 +1,203 @@
+diff --git a/src/kitemviews/kitemlistview.cpp b/src/kitemviews/kitemlistview.cpp
+index bcfa27e..0af146b 100644
+--- a/src/kitemviews/kitemlistview.cpp
++++ b/src/kitemviews/kitemlistview.cpp
+@@ -33,6 +33,10 @@
+ #include <QTimer>
+ #include <QVariantAnimation>
+ 
++#include <KConfigGroup>
++#include <KSharedConfig>
++#include <QSequentialAnimationGroup>
++
+ namespace
+ {
+ // Time in ms until reaching the autoscroll margin triggers
+@@ -118,6 +122,11 @@ KItemListView::KItemListView(QGraphicsWidget *parent)
+     m_animation = new KItemListViewAnimation(this);
+     connect(m_animation, &KItemListViewAnimation::finished, this, &KItemListView::slotAnimationFinished);
+ 
++    m_revealTimeout = new QTimer(this);
++    m_revealTimeout->setSingleShot(true);
++    m_revealTimeout->setInterval(300);
++    connect(m_revealTimeout, &QTimer::timeout, this, &KItemListView::revealVisibleItems);
++
+     m_rubberBand = new KItemListRubberBand(this);
+     connect(m_rubberBand, &KItemListRubberBand::activationChanged, this, &KItemListView::slotRubberBandActivationChanged);
+ 
+@@ -1897,6 +1906,11 @@ void KItemListView::doLayout(LayoutAnimationHint hint, int changedIndex, int cha
+             }
+             widget->resize(itemBounds.size());
+ 
++            if (m_revealPending) {
++                // Stays hidden until revealVisibleItems() plays the cascade.
++                widget->setOpacity(0.0);
++            }
++
+             if (animate && changedCount < 0) {
+                 // Items have been deleted.
+                 if (i >= changedIndex) {
+@@ -1943,7 +1957,7 @@ void KItemListView::doLayout(LayoutAnimationHint hint, int changedIndex, int cha
+                     // The item is an inserted item. Animate the appearing of the item.
+                     // For performance reasons no animation is done when changedCount is equal
+                     // to all available items.
+-                    if (changedCount < m_model->count()) {
++                    if (changedCount < m_model->count() && !m_revealPending) {
+                         m_animation->start(widget, KItemListViewAnimation::CreateAnimation);
+                     }
+                 } else if (!m_animation->isStarted(widget, KItemListViewAnimation::CreateAnimation)) {
+@@ -2119,6 +2133,8 @@ KItemListWidget *KItemListView::createWidget(int index)
+ 
+ void KItemListView::recycleWidget(KItemListWidget *widget)
+ {
++    stopRevealAnimation(widget);
++
+     if (m_grouped) {
+         recycleGroupHeaderForWidget(widget);
+     }
+@@ -2130,6 +2146,76 @@ void KItemListView::recycleWidget(KItemListWidget *widget)
+     widgetCreator()->recycle(widget);
+ }
+ 
++void KItemListView::setItemsRevealPending(bool pending)
++{
++    m_revealPending = pending;
++    if (pending) {
++        m_revealTimeout->start();
++    } else {
++        m_revealTimeout->stop();
++    }
++}
++
++void KItemListView::revealVisibleItems()
++{
++    m_revealTimeout->stop();
++    if (!m_revealPending) {
++        return;
++    }
++    m_revealPending = false;
++
++    // Honors the global animation speed (System Settings > Animations); 0 means instant.
++    const qreal factor = KConfigGroup(KSharedConfig::openConfig(), QStringLiteral("KDE")).readEntry("AnimationDurationFactor", 1.0);
++    const int duration = qRound(220 * factor);
++
++    QList<int> indexes = m_visibleItems.keys();
++    std::sort(indexes.begin(), indexes.end());
++    const int count = indexes.count();
++
++    // 28 ms between items, but the whole cascade never takes more than ~450 ms.
++    const qreal stagger = count > 1 ? qMin(28.0, 450.0 / (count - 1)) * factor : 0.0;
++
++    for (int order = 0; order < count; ++order) {
++        KItemListWidget *widget = m_visibleItems.value(indexes[order]);
++        stopRevealAnimation(widget);
++        if (duration <= 0) {
++            continue;
++        }
++
++        auto *fade = new QVariantAnimation;
++        fade->setDuration(duration);
++        fade->setEasingCurve(QEasingCurve::OutCubic);
++        fade->setStartValue(0.0);
++        fade->setEndValue(1.0);
++        connect(fade, &QVariantAnimation::valueChanged, widget, [widget](const QVariant &value) {
++            const qreal progress = value.toReal();
++            widget->setOpacity(progress);
++            widget->setTransform(QTransform::fromTranslate(-12.0 * (1.0 - progress), 0.0));
++        });
++
++        auto *cascade = new QSequentialAnimationGroup(this);
++        cascade->addPause(qRound(order * stagger));
++        cascade->addAnimation(fade);
++        connect(cascade, &QAbstractAnimation::finished, this, [this, widget]() {
++            m_revealAnimations.remove(widget);
++        });
++        m_revealAnimations.insert(widget, cascade);
++
++        widget->setOpacity(0.0);
++        widget->setTransform(QTransform::fromTranslate(-12.0, 0.0));
++        cascade->start(QAbstractAnimation::DeleteWhenStopped);
++    }
++}
++
++void KItemListView::stopRevealAnimation(KItemListWidget *widget)
++{
++    if (QAbstractAnimation *cascade = m_revealAnimations.take(widget)) {
++        cascade->stop(); // DeleteWhenStopped also deletes it
++    }
++    widget->setOpacity(1.0);
++    widget->setTransform(QTransform());
++}
++
+ void KItemListView::setWidgetIndex(KItemListWidget *widget, int index)
+ {
+     const int oldIndex = widget->index();
+diff --git a/src/kitemviews/kitemlistview.h b/src/kitemviews/kitemlistview.h
+index 1a4ff0d..e530bd4 100644
+--- a/src/kitemviews/kitemlistview.h
++++ b/src/kitemviews/kitemlistview.h
+@@ -34,6 +34,7 @@ class KItemListViewLayouter;
+ class KItemListWidget;
+ class KItemListWidgetInformant;
+ class KItemListWidgetCreatorBase;
++class QAbstractAnimation;
+ class QTimer;
+ class QPropertyAnimation;
+ class QVariantAnimation;
+@@ -278,6 +279,15 @@ public:
+      */
+     void endTransaction();
+ 
++    /**
++     * CyberKDE: while a directory is loading, newly shown item widgets stay
++     * transparent until revealVisibleItems() plays a staggered fade/slide
++     * cascade over the visible items. A timeout reveals them anyway if loading
++     * takes long (e.g. remote folders).
++     */
++    void setItemsRevealPending(bool pending);
++    void revealVisibleItems();
++
+     bool isTransactionActive() const;
+ 
+     /**
+@@ -801,6 +811,12 @@ private:
+ 
+     KItemListSizeHintResolver *m_sizeHintResolver;
+ 
++    // CyberKDE: staggered reveal of the items after a directory has been loaded.
++    void stopRevealAnimation(KItemListWidget *widget);
++    bool m_revealPending = false;
++    QTimer *m_revealTimeout = nullptr;
++    QHash<KItemListWidget *, QAbstractAnimation *> m_revealAnimations;
++
+     friend class KItemListContainer; // Accesses scrollBarRequired()
+     friend class KItemListHeader; // Accesses m_headerWidget
+     friend class KItemListController;
+diff --git a/src/views/dolphinview.cpp b/src/views/dolphinview.cpp
+index 3c94906..a7048fd 100644
+--- a/src/views/dolphinview.cpp
++++ b/src/views/dolphinview.cpp
+@@ -2062,6 +2062,7 @@ void DolphinView::slotRenamingResult(KJob *job)
+ void DolphinView::slotDirectoryLoadingStarted()
+ {
+     m_loadingState = LoadingState::Loading;
++    m_view->setItemsRevealPending(true);
+     updatePlaceholderLabel();
+ 
+     // Disable the writestate temporary until it can be determined in a fast way
+@@ -2077,6 +2078,7 @@ void DolphinView::slotDirectoryLoadingStarted()
+ void DolphinView::slotDirectoryLoadingCompleted()
+ {
+     m_loadingState = LoadingState::Completed;
++    m_view->revealVisibleItems();
+ 
+     // Update the view-state. This has to be done asynchronously
+     // because the view might not be in its final state yet.
+@@ -2095,6 +2097,7 @@ void DolphinView::slotDirectoryLoadingCompleted()
+ void DolphinView::slotDirectoryLoadingCanceled()
+ {
+     m_loadingState = LoadingState::Canceled;
++    m_view->revealVisibleItems();
+ 
+     updatePlaceholderLabel();
+ 

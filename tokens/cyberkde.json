@@ -1,0 +1,70 @@
+{
+  "_origem": "Direção de arte neomilitar do CyberKDE (cores, superfícies, medidas e tempos). Fonte única de verdade: todos os temas são gerados a partir daqui.",
+  "reference": {
+    "red": "#F75049",
+    "cyan": "#5EF6FF",
+    "white": "#FFFFFF",
+    "darkestBlue": "#0E0E17"
+  },
+  "secondary": {
+    "gray": "#D6D0D0",
+    "green": "#1DED83",
+    "blue": "#2570D4",
+    "violet": "#9D2BF5",
+    "orange": "#FB932E",
+    "gold": "#F0B537"
+  },
+  "_conforto": "Superfícies e texto suavizados em 13/09/2026: branco puro sobre #0E0E17 cansava a vista em uso real. Documento: base #0E0E17, texto #FFFFFF.",
+  "surface": {
+    "base": "#12121C",
+    "panel": "#181824",
+    "raised": "#1F1F2E",
+    "input": "#14141F",
+    "alternate": "#161621"
+  },
+  "text": {
+    "primary": "#DCDCE4",
+    "secondary": "#A9A9BA",
+    "disabled": "#76768A",
+    "onRed": "#0E0E17",
+    "onSelection": "#FFFFFF"
+  },
+  "line": {
+    "neutral": "#343442",
+    "brandOpacity": 0.35,
+    "activeOpacity": 1.0
+  },
+  "fill": {
+    "hoverOpacity": 0.10,
+    "selectedOpacity": 0.20,
+    "pressedOpacity": 0.30
+  },
+  "focus": {
+    "ring": "#5EF6FF",
+    "width": 2
+  },
+  "geometry": {
+    "unit": 4,
+    "chamferSmall": 4,
+    "chamferStandard": 6,
+    "chamferWide": 12,
+    "markerWidth": 3,
+    "lineDecorative": 1,
+    "lineEmphasis": 2
+  },
+  "font": {
+    "ui": "Rajdhani",
+    "uiWeight": "Medium",
+    "identity": "Orbitron",
+    "mono": "JetBrains Mono",
+    "sizePt": 12
+  },
+  "motion": {
+    "press": 60,
+    "micro": 80,
+    "fast": 140,
+    "standard": 220,
+    "close": 160,
+    "modal": 240
+  }
+}

@@ -1,0 +1,62 @@
+# Pacotes do Dolphin e do Konsole com o patch do CyberKDE, para o Ubuntu 26.04.
+#
+# Quem instala o tema não compila nada: o "cyberkde animados" baixa estes .deb e confere o SHA-256
+# fixado no código do tema. Rodar à mão (Actions → apps → Run workflow) com a tag da release, por
+# exemplo "apps-25.12.3-1", quando mudar o patch ou quando o Ubuntu atualizar o Dolphin/Konsole.
+# Depois: copiar os SHA-256 da release para "apps_debs" em scripts/cyberkde.
+name: apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag da release (ex.: apps-25.12.3-1)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        app: [dolphin, konsole]
+    # Imagem real do Ubuntu 26.04, fixada por digest (a mesma do fork do Latte).
+    container: ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build ${{ matrix.app }}
+        run: bash scripts/empacotar-apps.sh "${{ matrix.app }}" dist/apps
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.app }}
+          path: dist/apps/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        run: cd dist && cat ./*.sha256 > SHA256SUMS && cat SHA256SUMS
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: Dolphin/Konsole CyberKDE (${{ inputs.tag }})
+          target_commitish: ${{ github.sha }}
+          body: |
+            Dolphin and Konsole with the CyberKDE animation patch, built on Ubuntu 26.04 from commit ${{ github.sha }}.
+            Installed by `cyberkde animados`, which checks the SHA-256 pinned in the theme.
+          files: |
+            dist/*.deb
+            dist/SHA256SUMS

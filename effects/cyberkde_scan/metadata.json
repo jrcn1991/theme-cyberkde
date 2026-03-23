@@ -1,0 +1,24 @@
+{
+  "KPackageStructure": "KWin/Effect",
+  "KPlugin": {
+    "Name": "CyberKDE Scan",
+    "Description": "Windows open and close with a target region, a scan line and a settle (CyberKDE)",
+    "Icon": "preferences-system-windows-effect-scale",
+    "Category": "Window Open/Close Animation",
+    "Authors": [
+      {
+        "Name": "Rafael Neves"
+      }
+    ],
+    "Id": "cyberkde_scan",
+    "License": "GPL-3.0-or-later",
+    "Version": "1.0",
+    "EnabledByDefault": false,
+    "Website": "https://github.com/jrcn1991/theme-cyberkde",
+    "Description[pt_BR]": "Abre e fecha janelas com região de destino, varredura e estabilização"
+  },
+  "X-KDE-Ordering": "60",
+  "X-KWin-Exclusive-Category": "toplevel-open-close-animation",
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js"
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="44" viewBox="0 0 210 44">
+<!-- CyberKDE — gerado por generator/gen_aurorae.py; não editar à mão -->
+<g id="active-center"><rect x="10" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M21.000,18.000 L29.000,26.000 M29.000,18.000 L21.000,26.000" fill="none" stroke="#A9A9BA" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g id="hover-center"><rect x="50" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M51.000,12.000 L79.000,12.000 L79.000,28.000 L75.000,32.000 L51.000,32.000 Z" fill="#F75049"/><path d="M61.000,18.000 L69.000,26.000 M69.000,18.000 L61.000,26.000" fill="none" stroke="#0E0E17" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g id="pressed-center"><rect x="90" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M91.000,12.000 L119.000,12.000 L119.000,28.000 L115.000,32.000 L91.000,32.000 Z" fill="#B23D3C"/><path d="M101.000,18.000 L109.000,26.000 M109.000,18.000 L101.000,26.000" fill="none" stroke="#0E0E17" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g id="inactive-center"><rect x="130" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M141.000,18.000 L149.000,26.000 M149.000,18.000 L141.000,26.000" fill="none" stroke="#76768A" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g id="deactivated-center"><rect x="170" y="10" width="30" height="24" fill="#000000" fill-opacity="0"/><path d="M181.000,18.000 L189.000,26.000 M189.000,18.000 L181.000,26.000" fill="none" stroke="#444453" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></g>
+</svg>

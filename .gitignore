@@ -1,0 +1,30 @@
+build/
+__pycache__/
+dist/
+dolphin/src/
+dolphin/build/
+konsole/src/
+konsole/build/
+LOJA.md
+
+# Só na máquina de quem mantém o tema (não vai para o GitHub):
+# documentação e guias internos
+DOCUMENTACAO.md
+Cyberpunk_2077_Concepcao_UI_Kit (1).md
+modules/CONTRATO.md
+modules/*/NOTES.md
+# imagens de terceiros (referência de design)
+imagens-referencia/
+scripts/baixar_imagens_referencia.sh
+# material bruto e ferramentas de desenvolvimento
+assets/icons/ai-raw/
+assets/icons/ai-alt/
+assets/icons/scripts/
+assets/icons/preview*.png
+modules/*/preview/
+modules/papeis-de-parede/opcoes/
+modules/papeis-de-parede/generator/gen_wallpapers.sh
+modules/plasma/generator/preview.py
+# cópias das configurações originais e histórico do antigo repositório privado
+backups/
+latte/

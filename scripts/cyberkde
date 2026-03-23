@@ -1,0 +1,1474 @@
+#!/usr/bin/env bash
+# cyberkde — aplica e reverte o tema CyberKDE por fases.
+#
+#   cyberkde on          liga TUDO (todas as fases, inclusive as dos módulos)
+#   cyberkde on [fase] [--sem-sudo] [--json] [--progresso]
+#                        aplica uma fase: dolphin, janelas (moldura + animações)
+#                        carregamento (Dolphin compilado com cascata de itens), icones,
+#                        konsole (tema do terminal) ou konsole-anim (Konsole compilado com animações)
+#   cyberkde animados    instala o Dolphin (cascata) e o Konsole (animações) com o patch, por pacote
+#                        revisado (Ubuntu 26.04); depois: cyberkde on carregamento / konsole-anim
+#   cyberkde dolphin-build / konsole-build  (desenvolvimento) compila os mesmos apps nesta máquina
+#   cyberkde off         devolve todas as chaves alteradas aos valores originais
+#   cyberkde status [--json]  mostra o que está aplicado (--json: uma linha para programas)
+#   cyberkde cor '#hex'  troca a cor de destaque do tema inteiro ('cyberkde cor padrao' volta ao vermelho)
+#                        opções: --sem-sudo (nunca pede senha; login fica pendente) e --json (para programas)
+#   cyberkde papel [imagem|padrao]  papel de parede próprio para a área de trabalho e o bloqueio
+#                        ('padrao' volta às imagens do tema)
+#   cyberkde padrao [app] abre o app (padrão: dolphin) com a aparência original, para comparar
+#   cyberkde install     só instala/atualiza os arquivos do tema (cores, Kvantum, fontes)
+#   cyberkde checar      confere pré-requisitos e problemas conhecidos (diz como corrigir cada um)
+#   cyberkde layout [tema|manter]  barra em cima + dock como nas capturas, ou painéis como estão
+#   cyberkde latte       instala o Latte Dock NG (a dock das capturas) pelo pacote revisado (Ubuntu 26.04)
+#   cyberkde uninstall   off + remove os arquivos instalados (e o próprio programa, se veio do instalar.sh)
+#
+# Cada chave alterada tem o valor original registrado em $state/ledger.tsv na
+# primeira vez que é gravada; "off" percorre esse registro ao contrário.
+
+set -euo pipefail
+
+project="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+config="${XDG_CONFIG_HOME:-$HOME/.config}"
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/cyberkde"
+ledger="$state/ledger.tsv"
+absent="@@CYBERKDE_ABSENT@@"
+# Plugin do Kvantum: o caminho muda com a distribuição (Debian/Ubuntu usam a pasta multiarch).
+kvantum_plugin=""
+for f in /usr/lib/*/qt6/plugins/styles/libkvantum.so /usr/lib{64,}/qt6/plugins/styles/libkvantum.so; do
+  if [[ -e $f ]]; then kvantum_plugin=$f; break; fi
+done
+unset f
+kvantum_ok() { [[ -n $kvantum_plugin ]]; }
+files="$state/files.tsv"  # arquivos criados/substituídos: destino<TAB>backup (ou -)
+
+# Apps compilados com patch próprio ficam em ~/.local/opt/cyberkde-<app>, com lançador em ~/.local/bin/<app>.
+dolphin_wrapper="$HOME/.local/bin/dolphin"
+
+# Cor de destaque em uso (a mesma que os geradores leem em generator/cyberlib.py).
+accent_file="$config/cyberkde/cor"
+# A cor PEDIDA é a que fica gravada e a que o "cor" mostra de volta. A APLICADA é a
+# mesma, clareada só o bastante para ler sobre o tema (ver _legivel em cyberlib.py): com superfícies
+# escuras, uma cor escura como #202030 daria 1,01:1 contra a superfície, ou seja, sumiria.
+accent_color() {
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cyberlib import RED_PEDIDO; print(RED_PEDIDO)' "$project/generator"
+}
+accent_applied() {
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cyberlib import RED; print(RED)' "$project/generator"
+}
+
+# Uma execução por vez de tudo que altera o sistema (on, off, cor, install...): quem chega com a
+# trava tomada sai na hora com o código 3, sem esperar.
+take_lock() {
+  mkdir -p "$state"
+  exec 9>"$state/cyberkde.lock"
+  flock -n 9
+}
+busy() {
+  echo "Outra execução do cyberkde está em andamento; tente de novo daqui a pouco." >&2
+  exit 3
+}
+
+# Roda um comando SEM o descritor da trava (fd 9). O bash não marca close-on-exec, então todo filho
+# herda a trava aberta com "exec 9>". Um filho que sobreviva ao script — o diálogo do askpass
+# esperando a senha, um app aberto pelo "padrao" — continuaria segurando a trava depois que o
+# cyberkde termina, e a execução seguinte levaria "ocupado" sem ninguém entender por quê.
+# Use isto em TUDO que possa viver mais que o script.
+sem_travas() { "$@" 9>&-; }
+
+# Registro de módulo: alguns módulos guardam o estado num .tsv próprio (papeis-de-parede.tsv), fora
+# do ledger e do files.tsv. Sem olhar para eles, o "off" saía em "Nada aplicado" sem rodar os
+# OFF_HOOKS e o papel de parede ficava preso no do CyberKDE.
+modulo_registro() {
+  local f
+  for f in "$state"/*.tsv; do
+    case ${f##*/} in ledger.tsv | files.tsv) continue ;; esac
+    if [[ -s $f ]]; then return 0; fi
+  done
+  [[ -e $state/appletsrc.orig ]]  # painéis guardados pela fase barra-e-dock
+}
+
+# "cyberkde cor": troca a cor de destaque do tema inteiro. Interface estável para programas que
+# chamam o cyberkde (DOCUMENTACAO.md, seção "Interface do cyberkde cor"):
+#   cyberkde cor [#RRGGBB|padrao] [--sem-sudo] [--json]
+#   saída: 0 aplicado · 1 falha · 2 cor/opção inválida · 3 ocupado · 4 aplicado, com pendências de sudo
+cor_json=0
+cor_exit() {  # código mensagem
+  (( BASH_SUBSHELL > 0 )) && exit "$1"  # erro dentro de $(...): quem responde é o processo principal
+  trap - ERR
+  if (( cor_json )); then
+    printf '{"erro":"%s","codigo":%d}\n' "$2" "$1" >&3
+  else
+    echo "$2" >&2
+  fi
+  exit "$1"
+}
+cor_marker="$state/cor-incompleta"
+# SIGTERM/SIGINT/SIGHUP no meio da aplicação: garante o painel de pé e sai com o código 5. A trava
+# se solta quando o processo e os filhos terminam (mande o sinal ao grupo de processos inteiro).
+# A marca de "incompleta" continua lá.
+cor_interrupted() {
+  trap - TERM INT HUP
+  pgrep -x plasmashell >/dev/null || systemctl --user start plasma-plasmashell.service >/dev/null 2>&1 || true
+  cor_exit 5 "interrompido: rode o mesmo comando de novo para completar"
+}
+json_list() { local out="" i; for i in "$@"; do out+="${out:+,}\"$i\""; done; printf '[%s]' "$out"; }
+
+# Frases prontas para a tela de quem chama (campo "avisos" do --json). O "pendentesSudo" diz QUAL
+# fase ficou pendente; isto diz o que se vê na tela por causa disso. Importa porque a fase "login"
+# aplica o splash e a tela de bloqueio mesmo sem root, e só a tela do SDDM fica para trás: dizer só
+# "login pendente" faria parecer que nada foi aplicado.
+# Sem aspas nem barras invertidas nas frases: o json_list não escapa.
+avisos_de() {  # fases pendentes... -> uma frase por linha
+  local f
+  for f in "$@"; do
+    case $f in
+      login) echo "A tela de login continua com o tema anterior: ela fica em /usr e só muda com root. O splash e a tela de bloqueio já foram aplicados." ;;
+    esac
+  done
+}
+accent_is_default() { [[ -s $accent_file ]] && echo false || echo true; }
+
+# "Ligado" = há chave alterada ou arquivo substituído registrado. É a mesma definição que o "cor"
+# usa para decidir se reaplica as fases, e a que o "status --json" mostra. Um registro só de
+# módulo (ver modulo_registro) não conta como ligado: é reversão pela metade, e o status diz isso
+# no campo "reversaoPendente".
+tema_ligado() { [[ -s $ledger || -s $files ]]; }
+
+cmd_cor() {
+  local value="" arg bad=0
+  for arg in "$@"; do
+    case $arg in
+      --json) cor_json=1 ;;
+      --sem-sudo) CYBERKDE_SEM_SUDO=1 ;;
+      --progresso) cor_progresso=1 ;;
+      *) if [[ -z $value && $arg != -* ]]; then value=$arg; else bad=1; fi ;;
+    esac
+  done
+  # --json: a saída padrão fica só com a linha JSON; as mensagens vão para a saída de erro.
+  if (( cor_json )); then exec 3>&1 1>&2; else exec 3>&1; fi
+  (( bad == 0 )) || cor_exit 2 "uso: cyberkde cor [#RRGGBB|padrao] [--sem-sudo] [--json]"
+  if [[ -z $value ]]; then  # só leitura: não trava nem regenera nada
+    local current aplicada ligado=false
+    current=$(accent_color)
+    aplicada=$(accent_applied)
+    if tema_ligado; then ligado=true; fi
+    local completa=true
+    if [[ -e $cor_marker ]]; then completa=false; fi
+    if (( cor_json )); then
+      printf '{"cor":"%s","corAplicada":"%s","padrao":%s,"temaLigado":%s,"completa":%s}\n' \
+        "$current" "$aplicada" "$(accent_is_default)" "$ligado" "$completa" >&3
+    else
+      echo "Cor de destaque: $current$([[ -s $accent_file ]] || echo ' (padrão)')"
+      if [[ $aplicada != "$current" ]]; then
+        echo "  (o tema usa $aplicada: a cor pedida não teria contraste para ler sobre o fundo)"
+      fi
+      if [[ $completa == false ]]; then
+        echo "A última troca de cor foi interrompida; rode o mesmo comando de novo para completar."
+      fi
+    fi
+    return
+  fi
+  [[ $value == padrao || $value =~ ^#?[0-9A-Fa-f]{6}$ ]] || cor_exit 2 "cor inválida: use #RRGGBB ou padrao"
+  take_lock || cor_exit 3 "ocupado: outra execução do cyberkde está em andamento"
+  set -E
+  trap 'cor_exit 1 "falha ao aplicar a cor (detalhes na saída de erro)"' ERR
+  trap cor_interrupted TERM INT HUP
+  # Marca de aplicação em andamento: só é apagada no fim. Se o processo morrer no meio (mesmo com
+  # SIGKILL), a leitura da cor devolve "completa":false, e basta rodar o mesmo comando de novo.
+  : >"$cor_marker"
+  if [[ $value == padrao ]]; then
+    rm -f "$accent_file"
+  else
+    mkdir -p "$(dirname -- "$accent_file")"
+    value=${value#\#}
+    printf '#%s\n' "${value^^}" >"$accent_file"
+  fi
+  local accent aplicada
+  accent=$(accent_color)
+  aplicada=$(accent_applied)
+  local p ligado=false reiniciado=false
+  local -a fases=() aplicadas=() puladas=() pendentes=()
+  if tema_ligado; then ligado=true; fi
+  # A mensagem só promete regenerar quando vai mesmo: com o tema desligado não há o que regenerar.
+  if [[ $ligado == true ]]; then
+    echo "Cor de destaque: $accent — regenerando o tema…"
+  else
+    echo "Cor de destaque: $accent"
+  fi
+  if [[ $aplicada != "$accent" ]]; then
+    echo "  Contraste: $accent não leria sobre o fundo do tema; o tema usa $aplicada." \
+      "A cor pedida continua sendo a sua e é a que aparece em 'cyberkde cor'."
+  fi
+  for p in "${CYBERKDE_PHASES[@]}"; do
+    # O papel de parede fica como está: a cor não mexe nele.
+    if [[ $p != papeis-de-parede ]]; then fases+=("$p"); fi
+  done
+  if [[ $ligado == true ]]; then
+    progress_total=$(( INSTALL_STEPS + ${#CYBERKDE_INSTALLS[@]} + ${#fases[@]} + 2 ))  # + kwin e painel
+  else
+    progress_total=1  # nenhuma etapa; 1 e não 0 porque quem desenha a barra divide por este número
+  fi
+  progress inicio
+  sem_sudo_pendentes="$state/sem-sudo-pendentes"  # as_needed anota aqui o que ficou sem gravar
+  if [[ $ligado == true ]]; then
+    install_files
+    # Tema ligado: reaplica as fases com a cor nova.
+    for p in "${fases[@]}"; do
+      progress fase "$p"
+      : >"$sem_sudo_pendentes"
+      if ("phase_$p"); then
+        if [[ -s $sem_sudo_pendentes ]]; then
+          pendentes+=("$p")
+          echo "  … $p (pendente: precisa de sudo)"
+        else
+          aplicadas+=("$p")
+          echo "  ✓ $p"
+        fi
+      else
+        puladas+=("$p")
+        echo "  – $p (pulada)"
+      fi
+    done
+    progress kwin
+    reload_kwin
+    progress painel  # o painel guarda cache do tema e dos ícones
+    if restart_plasmashell; then reiniciado=true; fi
+    if (( ${#pendentes[@]} )); then
+      echo "Aplicado, menos: ${pendentes[*]} (precisa de sudo). Para completar, rode no terminal:" \
+        "cyberkde cor $([[ -s $accent_file ]] && echo "'$accent'" || echo padrao)"
+    else
+      echo "Pronto. Reabra os aplicativos para ver a cor nova."
+    fi
+  else
+    # Com o tema desligado, regenerar seria trabalho jogado fora: ninguém lê esses arquivos e o
+    # "cyberkde on" chama install_files com a cor do momento (seriam ~25 s de CPU à toa).
+    echo "Tema desligado: a cor vale no próximo 'cyberkde on'."
+  fi
+  progress fim
+  rm -f "$sem_sudo_pendentes" "$cor_marker"
+  trap - ERR TERM INT HUP
+  if (( cor_json )); then
+    local -a avisos=()
+    mapfile -t avisos < <(avisos_de "${pendentes[@]}")
+    printf '{"cor":"%s","corAplicada":"%s","padrao":%s,"temaLigado":%s,"aplicadas":%s,"puladas":%s,"pendentesSudo":%s,"avisos":%s,"plasmaReiniciado":%s}\n' \
+      "$accent" "$aplicada" "$(accent_is_default)" "$ligado" "$(json_list "${aplicadas[@]}")" \
+      "$(json_list "${puladas[@]}")" "$(json_list "${pendentes[@]}")" "$(json_list "${avisos[@]}")" \
+      "$reiniciado" >&3
+  fi
+  (( ${#pendentes[@]} == 0 )) || exit 4
+}
+
+install_effect() {
+  local src="$project/effects/cyberkde_scan" final="$data/kwin/effects/cyberkde_scan" dst
+  dst=$(mktemp -d)  # monta ao lado e troca de uma vez no fim (swap_dir)
+  mkdir -p "$dst/contents/code" "$dst/contents/shaders"
+  cp "$src/metadata.json" "$dst/"
+  sed "s/#F75049/$(accent_applied)/" "$src/main.js" >"$dst/contents/code/main.js"  # cor de destaque atual
+  # O KWin escolhe scan_core.frag (GLSL 1.40) ou scan.frag (legado) conforme o contexto OpenGL.
+  { printf '#version 140\n#include "colormanagement.glsl"\n#define TEX texture\nin vec2 texcoord0;\nout vec4 fragColor;\n\n'
+    cat "$src/shader.glsl"; } >"$dst/contents/shaders/scan_core.frag"
+  { printf '#include "colormanagement.glsl"\n#define TEX texture2D\n#define fragColor gl_FragColor\nvarying vec2 texcoord0;\n\n'
+    cat "$src/shader.glsl"; } >"$dst/contents/shaders/scan.frag"
+  chmod 755 "$dst"
+  swap_dir "$dst" "$final"
+  rm -rf -- "$dst"
+}
+
+# Faz o KWin reler a configuração e recarregar o efeito (necessário após reinstalar).
+reload_kwin() {
+  qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+  # O reconfigure não descarrega um efeito sozinho quando a chave some. Por isso o efeito do tema é
+  # descarregado e recarregado conforme o kwinrc (sem chave = desligado). Os efeitos que não são do
+  # tema ficam com o KWin.
+  qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect cyberkde_scan >/dev/null 2>&1 || true
+  if [[ $(kreadconfig6 --file kwinrc --group Plugins --key cyberkde_scanEnabled --default false) == true ]]; then
+    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect cyberkde_scan >/dev/null 2>&1 || true
+  fi
+}
+
+# Reinicia o painel (o plasmashell guarda cache do tema e dos ícones). Se ele estiver rodando fora do
+# serviço (iniciado à mão num terminal), um "systemctl restart" não o substitui: a instância nova vê
+# a antiga e sai na hora. Nesse caso, encerra a antiga e devolve o painel ao systemd. Só retorna 0
+# quando há um plasmashell novo rodando pelo serviço.
+restart_plasmashell() {
+  local before i pid
+  if [[ -n ${CYBERKDE_CENA:-} ]]; then
+    # Capturas e testes num KWin virtual: o plasmashell da cena não é do systemd (o da sessão real é).
+    plasmashell_parar
+    setsid plasmashell --no-respawn >/dev/null 2>&1 </dev/null 9>&- &
+    for i in {1..50}; do qdbus6 org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 && return 0; sleep 0.2; done
+    return 1
+  fi
+  before=" $(pgrep -x plasmashell | tr '\n' ' ')"
+  # O serviço aceita 3 partidas por minuto (StartLimitBurst): "off" e "on" seguidos passavam disso e o
+  # plasmashell não voltava (tela preta, só o dock). Zerar o contador antes de cada partida.
+  systemctl --user reset-failed plasma-plasmashell.service >/dev/null 2>&1 || true
+  if systemctl --user is-active -q plasma-plasmashell.service; then
+    systemctl --user restart plasma-plasmashell.service || { plasmashell_sem_servico; return; }
+  else
+    kquitapp6 plasmashell >/dev/null 2>&1 || true
+    for i in {1..50}; do pgrep -x plasmashell >/dev/null || break; sleep 0.2; done
+    pkill -x plasmashell 2>/dev/null || true
+    systemctl --user start plasma-plasmashell.service || { plasmashell_sem_servico; return; }
+  fi
+  for i in {1..50}; do
+    for pid in $(pgrep -x plasmashell); do
+      if [[ $before != *" $pid "* ]] && systemctl --user is-active -q plasma-plasmashell.service; then
+        return 0
+      fi
+    done
+    sleep 0.2
+  done
+  return 1
+}
+
+# Último recurso quando o systemd recusa a partida: o plasmashell direto, fora do serviço (o próximo
+# "cyberkde on/off" o devolve ao serviço). Sem ele a sessão ficaria sem painel e sem área de trabalho.
+plasmashell_sem_servico() {
+  local i
+  systemctl --user reset-failed plasma-plasmashell.service >/dev/null 2>&1 || true
+  systemctl --user start plasma-plasmashell.service >/dev/null 2>&1 && return 0
+  echo "Aviso: o systemd recusou reiniciar o plasmashell; iniciando fora do serviço." >&2
+  setsid plasmashell >/dev/null 2>&1 </dev/null 9>&- &
+  for i in {1..50}; do qdbus6 org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 && return 0; sleep 0.2; done
+  echo "O painel não voltou. Para recuperar: systemctl --user reset-failed plasma-plasmashell.service &&" \
+    "systemctl --user start plasma-plasmashell.service" >&2
+  return 1
+}
+
+# Para o plasmashell desta sessão e espera ele sair do D-Bus. Quem chama (o "off") regrava o appletsrc
+# em seguida, então não precisa esperar ele salvar: um plasmashell iniciado há pouco às vezes não sai
+# no stop e o systemd esperava o TimeoutStopSec inteiro (40 s). Aqui: pede para sair, espera até 5 s e
+# então encerra à força.
+plasmashell_parar() {
+  local i pid
+  if [[ -n ${CYBERKDE_CENA:-} ]]; then
+    kquitapp6 plasmashell >/dev/null 2>&1 &
+    for i in {1..25}; do qdbus6 org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 || break; sleep 0.2; done
+    # Só o plasmashell desta cena: o da sessão real também roda com --no-respawn.
+    for pid in $(pgrep -x plasmashell || true); do
+      tr '\0' '\n' 2>/dev/null <"/proc/$pid/environ" | grep -qxF "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}" &&
+        kill -KILL "$pid" 2>/dev/null
+    done
+    return 0
+  fi
+  # Sessão real: pede para parar sem bloquear e espera o PROCESSO sumir (não só o D-Bus ou o estado
+  # do serviço: quem vem depois, como o papel de parede do "off", confere com pgrep). Com o pedido de
+  # parada em andamento, o KILL encerra a parada sem o systemd reiniciar o plasmashell.
+  systemctl --user reset-failed plasma-plasmashell.service >/dev/null 2>&1 || true
+  systemctl --user stop --no-block plasma-plasmashell.service >/dev/null 2>&1 || true
+  kquitapp6 plasmashell >/dev/null 2>&1 &
+  for i in {1..25}; do pgrep -x plasmashell >/dev/null || break; sleep 0.2; done
+  if pgrep -x plasmashell >/dev/null; then
+    systemctl --user kill -s KILL plasma-plasmashell.service >/dev/null 2>&1 || true
+    pkill -KILL -x plasmashell 2>/dev/null || true
+    for i in {1..25}; do pgrep -x plasmashell >/dev/null || break; sleep 0.2; done
+  fi
+  for i in {1..25}; do
+    case $(systemctl --user show -p ActiveState --value plasma-plasmashell.service 2>/dev/null) in
+      inactive | failed | "") break ;;
+    esac
+    sleep 0.2
+  done
+  systemctl --user reset-failed plasma-plasmashell.service >/dev/null 2>&1 || true
+  return 0
+}
+
+# O plasmashell guarda cache do tema do Plasma e dos ícones: sem reiniciar, o painel e a área de
+# trabalho continuam com a aparência antiga mesmo com as chaves já gravadas.
+refresh_plasmashell() {
+  restart_plasmashell && return 0
+  echo "Aviso: não consegui reiniciar o plasmashell; o painel e a área de trabalho podem continuar" \
+    "com os ícones antigos. Rode: systemctl --user reset-failed plasma-plasmashell.service &&" \
+    "systemctl --user restart plasma-plasmashell.service" >&2
+}
+
+# Fases cujo resultado só aparece depois de reiniciar o plasmashell. O papel de parede fica de fora:
+# com o plasmashell no ar ele é aplicado por D-Bus, com efeito imediato.
+phase_needs_plasmashell() {  # fase
+  case $1 in icones-sistema | plasma) return 0 ;; *) return 1 ;; esac
+}
+
+# Troca uma pasta instalada pela nova quase de uma vez (cópia oculta ao lado + rename), para uma
+# interrupção no meio não deixar o tema sem a pasta. Os nomes temporários são ocultos para o KDE
+# não listá-los como temas.
+swap_dir() {  # origem destino
+  local src=$1 dst=$2 parent name
+  parent=$(dirname -- "$dst")
+  name=$(basename -- "$dst")
+  mkdir -p "$parent"
+  rm -rf -- "$parent/.$name.novo" "$parent/.$name.velho"
+  cp -a -- "$src" "$parent/.$name.novo"
+  if [[ -e $dst ]]; then mv -T -- "$dst" "$parent/.$name.velho"; fi
+  mv -T -- "$parent/.$name.novo" "$dst"
+  rm -rf -- "$parent/.$name.velho"
+}
+
+# Barra de progresso ("cyberkde cor --progresso"): uma linha no stderr anunciando cada etapa que
+# começa; "feitas" conta as etapas já concluídas. Sem a opção, não imprime nada.
+cor_progresso=0
+progress_done=0
+progress_total=0
+progress() {  # etapa [nome]
+  (( cor_progresso )) || return 0
+  local extra=""
+  if [[ -n ${2:-} ]]; then extra=",\"$([[ $1 == fase ]] && echo fase || echo item)\":\"$2\""; fi
+  printf 'PROGRESSO {"etapa":"%s"%s,"feitas":%d,"total":%d}\n' "$1" "$extra" "$progress_done" "$progress_total" >&2
+  if [[ $1 != inicio && $1 != fim ]]; then progress_done=$((progress_done + 1)); fi
+}
+
+INSTALL_STEPS=6  # etapas próprias de install_files; cada módulo (CYBERKDE_INSTALLS) soma mais uma
+install_files() {
+  progress arquivos kvantum
+  python3 "$project/generator/gen_kvantum.py" >/dev/null
+  install -Dm644 "$project/themes/color-schemes/CyberKDE.colors" "$data/color-schemes/CyberKDE.colors"
+  install -Dm644 -t "$config/Kvantum/CyberKDE" "$project/themes/kvantum/CyberKDE/CyberKDE.kvconfig" \
+    "$project/themes/kvantum/CyberKDE/CyberKDE.svg"
+  progress arquivos janelas
+  python3 "$project/generator/gen_aurorae.py" >/dev/null
+  swap_dir "$project/themes/aurorae/CyberKDE" "$data/aurorae/themes/CyberKDE"
+  progress arquivos konsole
+  python3 "$project/generator/gen_konsole.py" >/dev/null
+  install -Dm644 -t "$data/konsole" "$project/themes/konsole/CyberKDE.colorscheme" "$project/themes/konsole/CyberKDE.profile"
+  progress arquivos icones
+  python3 "$project/generator/gen_icons.py" >/dev/null
+  swap_dir "$project/themes/icons/CyberKDE" "$data/icons/CyberKDE"
+  progress arquivos efeito
+  install_effect
+  progress arquivos fontes
+  install -Dm644 -t "$data/fonts/CyberKDE" "$project/assets/fonts/"*.ttf
+  fc-cache -f "$data/fonts" >/dev/null
+  local hook
+  for hook in "${CYBERKDE_INSTALLS[@]}"; do
+    progress arquivos "${hook#install_}"
+    "$hook"
+  done
+  echo "Arquivos do tema instalados."
+}
+
+# kreadconfig6/kwriteconfig6 com grupos aninhados: "A][B][C" vira --group A --group B --group C.
+kcfg() {  # read|write arquivo grupo chave [argumentos...]
+  local tool=kreadconfig6 file=$2 group=$3 key=$4 part
+  [[ $1 == write ]] && tool=kwriteconfig6
+  shift 4
+  local -a groups=()
+  while IFS= read -r part; do
+    groups+=(--group "$part")
+  done < <(printf '%s\n' "${group//\]\[/$'\n'}")
+  "$tool" --file "$file" "${groups[@]}" --key "$key" "$@"
+}
+
+# Grava um valor lembrando o original (só na primeira vez) para o "off" devolver.
+set_key() {  # arquivo grupo chave valor
+  local file=$1 group=$2 key=$3 value=$4 orig
+  mkdir -p "$state"
+  touch "$ledger"
+  if ! grep -qF -- "$file"$'\t'"$group"$'\t'"$key"$'\t' "$ledger"; then
+    orig=$(kcfg read "$file" "$group" "$key" --default "$absent")
+    printf '%s\t%s\t%s\t%s\n' "$file" "$group" "$key" "$orig" >>"$ledger"
+  fi
+  kcfg write "$file" "$group" "$key" "$value"
+}
+
+phase_dolphin() {
+  set_key "$config/Kvantum/kvantum.kvconfig" General theme CyberKDE
+  set_key dolphinrc KDE widgetStyle kvantum
+  set_key dolphinrc UiSettings ColorScheme CyberKDE
+  # Fonte: fica a do sistema. A Rajdhani nos nomes de arquivo cansou a vista em uso real.
+}
+
+# Moldura de todas as janelas (Aurorae) + animação de abrir/fechar (efeito do KWin).
+phase_janelas() {
+  set_key kwinrc org.kde.kdecoration2 library org.kde.kwin.aurorae
+  set_key kwinrc org.kde.kdecoration2 theme __aurorae__svg__CyberKDE
+  set_key kwinrc Plugins cyberkde_scanEnabled true
+  # Minimizar e maximizar ficam com os efeitos que o sistema já usa: a varredura só anima abrir e
+  # fechar.
+  reload_kwin
+}
+
+# Konsole: perfil padrão CyberKDE (cores ANSI, cursor ciano, JetBrains Mono) + interface só nele.
+phase_konsole() {
+  set_key "$config/Kvantum/kvantum.kvconfig" General theme CyberKDE
+  set_key konsolerc "Desktop Entry" DefaultProfile CyberKDE.profile
+  set_key konsolerc KDE widgetStyle kvantum
+  # Sem [UiSettings] ColorScheme aqui: o Konsole 25.12 reescreve essa chave vazia ao abrir. As cores
+  # vêm do esquema global (fase "apps").
+}
+
+# Konsole compilado com texto novo em fade e rastro/halo no cursor.
+phase_konsole-anim() {
+  use_patched konsole org.kde.konsole
+}
+
+# Todos os apps Qt/KDE: estilo Kvantum e esquema de cores CyberKDE no kdeglobals (o mesmo que o Tema
+# Global da loja aplica). Sem isto, só o Dolphin e o Konsole mudam e o resto fica no Breeze claro.
+phase_apps() {
+  if kvantum_ok; then
+    set_key "$config/Kvantum/kvantum.kvconfig" General theme CyberKDE
+    set_key kdeglobals KDE widgetStyle kvantum
+  fi
+  set_key kdeglobals General ColorScheme CyberKDE
+  apply_colorscheme CyberKDE
+}
+
+# O plasma-apply-colorscheme copia as cores do esquema para o kdeglobals e avisa os apps abertos. Ele
+# não faz nada se o nome já for o atual, e o CyberKDE.colors muda com a cor de destaque: por isso o
+# nome é trocado antes, para forçar a cópia.
+apply_colorscheme() {  # esquema
+  command -v plasma-apply-colorscheme >/dev/null || return 0
+  kwriteconfig6 --file kdeglobals --group General --key ColorScheme __cyberkde__
+  plasma-apply-colorscheme "$1" >/dev/null 2>&1 || kwriteconfig6 --file kdeglobals --group General --key ColorScheme "$1"
+}
+
+# O "off" já devolveu a chave ColorScheme; falta copiar de volta as cores do esquema original (sem a
+# chave, o padrão do Plasma: BreezeLight).
+off_apps() {
+  local orig
+  orig=$(kreadconfig6 --file kdeglobals --group General --key ColorScheme --default BreezeLight)
+  [[ $orig == CyberKDE || $orig == __cyberkde__ ]] && orig=BreezeLight
+  if [[ -f $data/color-schemes/$orig.colors || -f /usr/share/color-schemes/$orig.colors ]]; then
+    local had
+    had=$(kreadconfig6 --file kdeglobals --group General --key ColorScheme)
+    apply_colorscheme "$orig"
+    # Sem chave antes do tema: continua sem chave (o padrão do sistema vale).
+    [[ -n $had ]] || kwriteconfig6 --file kdeglobals --group General --key ColorScheme --delete
+  fi
+}
+
+# Ícones de pastas e locais gerados com IA, por enquanto só no Dolphin.
+phase_icones() {
+  set_key dolphinrc Icons Theme CyberKDE
+}
+
+# Executa como root só quando o destino não é gravável pelo usuário (arquivos do sistema).
+as_needed() {  # destino comando...
+  local dst=$1 dir
+  shift
+  dir=$(dirname -- "$dst")
+  while [[ ! -e $dir ]]; do dir=$(dirname -- "$dir"); done
+  if [[ -w $dir && (! -e $dst || -w $dst) ]]; then
+    "$@"
+  elif [[ ${CYBERKDE_SEM_SUDO:-0} == 1 ]] ||
+    { [[ ! -t 0 && -z ${SUDO_ASKPASS:-} ]] && ! sudo -n true 2>/dev/null; }; then
+    # Sem terminal e sem SUDO_ASKPASS o sudo não tem como pedir a senha: em vez de falhar calado (a
+    # fase saía com "✓"), fica pendente, como no modo sem sudo.
+    # Modo sem sudo (cyberkde cor --sem-sudo, ou CYBERKDE_SEM_SUDO=1): nunca pede senha; o destino
+    # fica sem gravar e é informado como pendente.
+    if [[ -n ${sem_sudo_pendentes:-} ]]; then
+      printf '%s\n' "$dst" >>"$sem_sudo_pendentes"
+      # O "off" também avisa no stderr; no "cor" o stderr fica só para as linhas PROGRESSO.
+      if [[ ${sem_sudo_avisa:-0} == 1 ]]; then echo "Pendente (sem sudo): $dst" >&2; fi
+    else
+      echo "Pendente (sem sudo): $dst" >&2
+    fi
+  else
+    # Com SUDO_ASKPASS definido (execução sem terminal), a senha vem do auxiliar.
+    # umask 022: um umask restritivo (ex.: 007) deixaria arquivos do sistema ilegíveis para quem roda
+    # sem ser root (ex.: o SDDM lendo o tema em /usr/share).
+    # sem_travas: o "sudo -A" abre o diálogo do askpass, que fica vivo esperando a senha.
+    if ! sem_travas sudo ${SUDO_ASKPASS:+-A} sh -c 'umask 022; exec "$@"' sh "$@"; then
+      # Senha errada ou sudo negado: pendente, para a fase não aparecer como aplicada.
+      if [[ -n ${sem_sudo_pendentes:-} ]]; then printf '%s\n' "$dst" >>"$sem_sudo_pendentes"; fi
+      echo "Não gravado (o sudo falhou): $dst" >&2
+      return 1
+    fi
+  fi
+}
+
+# Registra o destino na primeira vez, guardando uma cópia do original (ou "-" se não existia).
+remember_path() {  # destino
+  local dst=$1 backup=-
+  mkdir -p "$state/files"
+  touch "$files"
+  grep -qF -- "$dst"$'\t' "$files" && return
+  if [[ -e $dst || -L $dst ]]; then
+    backup="$state/files/$(printf '%s' "$dst" | md5sum | cut -c1-16)"
+    cp -a -- "$dst" "$backup"
+  fi
+  printf '%s\t%s\n' "$dst" "$backup" >>"$files"
+}
+
+# Grava um arquivo (conteúdo pela entrada padrão) guardando o original, para o "off" devolver.
+put_file() {  # destino
+  local dst=$1 tmp
+  tmp=$(mktemp)
+  cat >"$tmp"
+  remember_path "$dst"
+  # Conteúdo igual ao que já está lá: nada a gravar (e nada de sudo).
+  if [[ -f $dst ]] && cmp -s -- "$tmp" "$dst"; then
+    rm -f -- "$tmp"
+    return 0
+  fi
+  as_needed "$dst" mkdir -p -- "$(dirname -- "$dst")"
+  as_needed "$dst" rm -f -- "$dst"
+  as_needed "$dst" tee -- "$dst" <"$tmp" >/dev/null
+  rm -f -- "$tmp"
+}
+
+# Copia uma pasta inteira para o destino guardando a original, para o "off" devolver.
+put_dir() {  # origem destino
+  local src=$1 dst=$2
+  remember_path "$dst"
+  # Pasta idêntica à que já está lá: nada a gravar (e nada de sudo).
+  diff -rq --no-dereference -- "$src" "$dst" >/dev/null 2>&1 && return 0
+  as_needed "$dst" rm -rf -- "$dst"
+  as_needed "$dst" mkdir -p -- "$(dirname -- "$dst")"
+  as_needed "$dst" cp -r --preserve=mode,timestamps -- "$src" "$dst"
+}
+
+# Memória livre agora, em MB (MemAvailable).
+mem_livre_mb() { awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo; }
+
+# Compila sem derrubar a sessão: jobs pela memória livre (~800 MB por compilador; o Latte com -O2 e
+# 2 processos teve pico de 1,4 GB), prioridade
+# baixa e, com o systemd, um limite de memória só para a compilação. Sem isso o ninja abre nproc+2
+# compiladores e, numa máquina de 4 GB, o OOM-killer levou junto o KWin e o plasmashell (VM, 25/09).
+compilar() {  # pasta-de-build
+  local livre jobs cpus limite
+  livre=$(mem_livre_mb)
+  cpus=$(nproc)
+  limite=$(( livre * 70 / 100 ))
+  jobs=$(( limite / 800 ))
+  (( jobs < 1 )) && jobs=1
+  (( jobs > cpus )) && jobs=$cpus
+  echo "Compilando com $jobs processo(s) (${livre} MB livres; limite de ${limite} MB para a compilação)."
+  local -a baixo=(nice -n 19)
+  command -v ionice >/dev/null && baixo+=(ionice -c3)
+  if [[ -z ${CYBERKDE_CENA:-} ]] && systemd-run --user --scope --quiet -p MemoryMax=64M true 2>/dev/null; then
+    # Estourou o limite: o kernel mata só a compilação, não a sessão.
+    systemd-run --user --scope --quiet -p MemoryMax="${limite}M" -p MemorySwapMax=0 \
+      "${baixo[@]}" cmake --build "$1" -j "$jobs"
+  else
+    "${baixo[@]}" cmake --build "$1" -j "$jobs"
+  fi
+}
+
+# Dependências de compilação do app antes de baixar o código. No Ubuntu/Debian vêm do "apt-get
+# build-dep", que precisa do código-fonte do apt (deb-src) habilitado; o tema não mexe nas fontes do
+# apt por conta própria: diz o comando. Sem apt, só confere as ferramentas básicas.
+build_deps() {  # pacote-fonte
+  local falta=() c
+  for c in git cmake ninja g++; do command -v "$c" >/dev/null || falta+=("$c"); done
+  if command -v apt-get >/dev/null; then
+    if apt-cache showsrc "$1" 2>/dev/null | grep -q '^Package:'; then
+      if apt-get -s build-dep "$1" 2>/dev/null | grep -q '^Inst ' || (( ${#falta[@]} )); then
+        echo "Instalando as dependências de compilação do $1 (pede a senha)…"
+        sem_travas sudo ${SUDO_ASKPASS:+-A} apt-get build-dep -y "$1" &&
+          sem_travas sudo ${SUDO_ASKPASS:+-A} apt-get install -y git ninja-build ||
+          { echo "Não consegui instalar as dependências de compilação do $1." >&2; return 1; }
+      fi
+      return 0
+    fi
+    if (( ${#falta[@]} )); then
+      echo "Para compilar o $1 faltam as ferramentas e bibliotecas de compilação. Elas vêm do código-fonte" \
+        "do apt (deb-src), que está desligado. Para ligar (Ubuntu 26.04) e rodar de novo:" >&2
+      echo "  sudo sed -i 's/^Types: deb\$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources && sudo apt update" >&2
+      echo "  cyberkde $2-build" >&2
+      return 1
+    fi
+    return 0  # ferramentas presentes: segue; se faltar biblioteca, o cmake diz qual
+  fi
+  if (( ${#falta[@]} )); then
+    echo "Para compilar o $1 faltam: ${falta[*]} (e os pacotes de desenvolvimento do KF6/Qt6)." >&2
+    return 1
+  fi
+}
+
+# Baixa o código da mesma versão do app do sistema, aplica os patches de <app>/*.patch e
+# compila em ~/.local/opt/cyberkde-<app>. Uso: build_patched <app> <repositório no invent.kde.org>.
+build_patched() {
+  local app=$1 repo=$2 version tag
+  local src="$project/$app/src" build="$project/$app/build" prefix="$HOME/.local/opt/cyberkde-$app" multiarch
+  # Pasta de bibliotecas do prefixo: lib/<multiarch> no Debian/Ubuntu; lib64 ou lib nas outras.
+  multiarch=$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)
+  version=$("/usr/bin/$app" --version 2>/dev/null | awk '{print $2}')
+  tag="v$version"
+  build_deps "$app" "$app" || exit 1
+  if [[ ! -d $src/.git ]]; then
+    git clone -q --depth 1 -b "$tag" "https://invent.kde.org/$repo.git" "$src"
+  elif [[ $(git -C "$src" describe --tags 2>/dev/null) != "$tag" ]]; then
+    git -C "$src" fetch -q --depth 1 origin tag "$tag"
+    git -C "$src" checkout -q -f "$tag"
+  fi
+  git -C "$src" checkout -q -f -- .
+  git -C "$src" apply "$project/$app/"*.patch
+  cmake -S "$src" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+    -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_INSTALL_RPATH="${multiarch:+$prefix/lib/$multiarch;}$prefix/lib64;$prefix/lib" >/dev/null
+  compilar "$build"
+  rm -rf "$prefix"
+  cmake --install "$build" >/dev/null
+  echo "$version" >"$prefix/.cyberkde-version"
+  echo "$app $version com patch CyberKDE instalado em $prefix."
+}
+
+# Aponta o comando e o atalho do app para a versão compilada (originais guardados).
+use_patched() {  # app id-do-atalho
+  local app=$1 desktop=$2 prefix="$HOME/.local/opt/cyberkde-$1" wrapper="$HOME/.local/bin/$1"
+  # O pacote (cyberkde animados) fica em /opt; a compilação de desenvolvimento, em ~/.local/opt.
+  if [[ -x /opt/cyberkde-$app/bin/$app ]]; then prefix=/opt/cyberkde-$app; fi
+  if [[ ! -x $prefix/bin/$app ]]; then
+    echo "Opcional: $app animado não instalado (cyberkde animados)." >&2
+    exit 1
+  fi
+  local system_version plugins
+  plugins=$(find "$prefix"/lib* -maxdepth 2 -type d -name plugins -print -quit 2>/dev/null || true)
+  system_version=$("/usr/bin/$app" --version 2>/dev/null | awk '{print $2}')
+  if [[ $(cat "$prefix/.cyberkde-version") != "$system_version" ]]; then
+    echo "Aviso: o $app do sistema foi atualizado para $system_version; rode 'cyberkde $app-build'." >&2
+  fi
+  put_file "$wrapper" <<EOF
+#!/bin/sh
+# CyberKDE: $app com patch próprio (compilado por 'cyberkde $app-build').
+prefix="$prefix"
+export QT_PLUGIN_PATH="${plugins:-$prefix/lib/plugins}\${QT_PLUGIN_PATH:+:\$QT_PLUGIN_PATH}"
+exec "\$prefix/bin/$app" "\$@"
+EOF
+  chmod +x "$wrapper"
+  sed "s|^Exec=$app|Exec=$wrapper|" "/usr/share/applications/$desktop.desktop" |
+    put_file "$data/applications/$desktop.desktop"
+}
+
+# Dolphin com cascata de carregamento: atalho, comando e serviço D-Bus "Mostrar na pasta".
+phase_carregamento() {
+  use_patched dolphin org.kde.dolphin
+  local service
+  for service in org.freedesktop.FileManager1 org.kde.dolphin.FileManager1; do
+    # Sem SystemdService, o D-Bus usa o Exec abaixo em vez do serviço do sistema.
+    printf '[D-BUS Service]\nName=org.freedesktop.FileManager1\nExec=%s --daemon\n' "$dolphin_wrapper" |
+      put_file "$data/dbus-1/services/$service.service"
+  done
+}
+
+# Fases na ordem do "cyberkde on" (tudo); os módulos acrescentam as suas ao serem carregados.
+CYBERKDE_PHASES=(dolphin apps janelas carregamento icones konsole konsole-anim)
+CYBERKDE_INSTALLS=()  # funções install_<módulo>, chamadas por install_files
+CYBERKDE_OFF_HOOKS=(off_apps) # funções off_<módulo>, chamadas no fim do "off"
+CYBERKDE_PRE_OFF_HOOKS=()     # chamadas no começo do "off", antes de devolver chaves e arquivos
+
+# Módulos em modules/<nome>/phase.sh (contrato em modules/CONTRATO.md).
+for module in "$project"/modules/*/phase.sh; do
+  [[ -f $module ]] && source "$module"
+done
+# A barra e a dock por último: o Latte (re)iniciado por ela tem de subir já com o tema de ícones e o
+# tema do Plasma aplicados, senão fica com os ícones antigos até reiniciar.
+fases_ordenadas=()
+for p in "${CYBERKDE_PHASES[@]}"; do [[ $p == barra-e-dock ]] || fases_ordenadas+=("$p"); done
+if [[ " ${CYBERKDE_PHASES[*]} " == *" barra-e-dock "* ]]; then fases_ordenadas+=(barra-e-dock); fi
+CYBERKDE_PHASES=("${fases_ordenadas[@]}")
+unset fases_ordenadas p
+
+# "cyberkde on": liga o tema. Interface estável para programas que chamam o cyberkde
+# (DOCUMENTACAO.md, seção "Interface do cyberkde on"):
+#   cyberkde on [fase] [--sem-sudo] [--json] [--progresso]
+#   saída: 0 aplicado · 1 falha · 2 fase ou opção inválida · 3 ocupado · 4 aplicado, com pendências
+#          de sudo · 5 interrompido
+cmd_on() {
+  local phase="" arg bad=0 p reiniciado=false painel=false
+  for arg in "$@"; do
+    case $arg in
+      --json) cor_json=1 ;;
+      --sem-sudo) CYBERKDE_SEM_SUDO=1 ;;
+      --progresso) cor_progresso=1 ;;
+      *) if [[ -z $phase && $arg != -* ]]; then phase=$arg; else bad=1; fi ;;
+    esac
+  done
+  phase=${phase:-tudo}
+  # --json: a saída padrão fica só com a linha JSON; as mensagens vão para a saída de erro.
+  if (( cor_json )); then exec 3>&1 1>&2; else exec 3>&1; fi
+  (( bad == 0 )) || cor_exit 2 "uso: cyberkde on [fase] [--sem-sudo] [--json] [--progresso]"
+  if [[ $phase != tudo ]] && ! declare -F "phase_$phase" >/dev/null; then
+    cor_exit 2 "fase desconhecida: $phase"
+  fi
+  take_lock || cor_exit 3 "ocupado: outra execução do cyberkde está em andamento"
+  set -E
+  trap 'cor_exit 1 "falha ao ligar o tema (detalhes na saída de erro)"' ERR
+  trap cor_interrupted TERM INT HUP
+  kvantum_ok || echo "Aviso: Kvantum não instalado; as formas chanfradas só aparecem depois de instalar o Kvantum para Qt 6 (no Ubuntu/Debian: qt-style-kvantum)." >&2
+
+  local -a fases=() aplicadas=() puladas=() pendentes=()
+  if [[ $phase == tudo ]]; then
+    fases=("${CYBERKDE_PHASES[@]}")
+    painel=true
+  else
+    fases=("$phase")
+    if phase_needs_plasmashell "$phase"; then painel=true; fi
+  fi
+  progress_total=$(( INSTALL_STEPS + ${#CYBERKDE_INSTALLS[@]} + ${#fases[@]} ))
+  if [[ $phase == tudo ]]; then progress_total=$(( progress_total + 1 )); fi   # kwin
+  if [[ $painel == true ]]; then progress_total=$(( progress_total + 1 )); fi
+  progress inicio
+  sem_sudo_pendentes="$state/sem-sudo-pendentes"  # as_needed anota aqui o que ficou sem gravar
+  install_files
+  for p in "${fases[@]}"; do
+    progress fase "$p"
+    : >"$sem_sudo_pendentes"
+    # Subshell: uma fase que não pode rodar (ex.: app ainda não compilado) não impede as outras.
+    if ("phase_$p"); then
+      if [[ -s $sem_sudo_pendentes ]]; then
+        pendentes+=("$p")
+        echo "  … $p (pendente: precisa de sudo)"
+      else
+        aplicadas+=("$p")
+        echo "  ✓ $p"
+      fi
+    else
+      puladas+=("$p")
+      echo "  – $p (pulada)"
+    fi
+  done
+  if [[ $phase == tudo ]]; then
+    progress kwin
+    reload_kwin
+  fi
+  if [[ $painel == true ]]; then
+    progress painel  # o painel guarda cache do tema e dos ícones
+    if restart_plasmashell; then
+      reiniciado=true
+    else
+      echo "Aviso: não consegui reiniciar o plasmashell; o painel e a área de trabalho podem" \
+        "continuar com os ícones antigos." >&2
+    fi
+  fi
+  progress fim
+  rm -f "$sem_sudo_pendentes"
+  trap - ERR TERM INT HUP
+  if (( ${#pendentes[@]} )); then
+    local retomar="cyberkde on"
+    if [[ $phase != tudo ]]; then retomar+=" $phase"; fi
+    echo "Aplicado, menos: ${pendentes[*]} (precisa de sudo). Para completar, rode no terminal:" \
+      "$retomar"
+  elif [[ $phase == tudo ]]; then
+    echo "CyberKDE ligado. Reabra os aplicativos para ver tudo; 'cyberkde off' volta ao padrão."
+  elif [[ $phase == dolphin ]]; then
+    echo "Fase 'dolphin' aplicada. Feche e reabra o Dolphin para ver o resultado."
+  else
+    echo "Fase '$phase' aplicada; já vale para as janelas abertas e as próximas."
+  fi
+  if (( cor_json )); then
+    local -a avisos=()
+    mapfile -t avisos < <(avisos_de "${pendentes[@]}")
+    printf '{"fase":"%s","cor":"%s","corAplicada":"%s","padrao":%s,"temaLigado":true,"aplicadas":%s,"puladas":%s,"pendentesSudo":%s,"avisos":%s,"plasmaReiniciado":%s}\n' \
+      "$phase" "$(accent_color)" "$(accent_applied)" "$(accent_is_default)" "$(json_list "${aplicadas[@]}")" \
+      "$(json_list "${puladas[@]}")" "$(json_list "${pendentes[@]}")" "$(json_list "${avisos[@]}")" \
+      "$reiniciado" >&3
+  fi
+  (( ${#pendentes[@]} == 0 )) || exit 4
+}
+
+# Processos ainda de pé rodando os binários que o CyberKDE compilou. O "off" devolve o lançador, o
+# .desktop e os serviços D-Bus, mas não mexe em quem já estava rodando — e um Dolphin nosso que
+# detenha org.freedesktop.FileManager1 continua servindo "abrir pasta" para o sistema inteiro
+# depois que o tema saiu, sem sintoma nenhum para quem usa. Em 20/09 era exatamente esse o estado
+# da máquina: o daemon das 11:25 servindo o nome com o tema desligado desde as 13h.
+# TERM e não KILL: o Dolphin salva o estado das janelas ao sair.
+# O Konsole fica FORA de propósito: encerrar um terminal mata o que estiver rodando dentro dele,
+# inclusive uma sessão de trabalho de outra pessoa. Aqui só avisamos.
+encerra_compilados() {
+  local pid exe konsole=0
+  [[ -z ${CYBERKDE_CENA:-} ]] || return 0  # KWin virtual: os processos achados seriam os da sessão real
+  for pid in $(pgrep -u "$USER" . 2>/dev/null || true); do
+    exe=$(readlink -f "/proc/$pid/exe" 2>/dev/null) || continue
+    case $exe in
+      "$HOME/.local/opt/cyberkde-dolphin/"* | /opt/cyberkde-dolphin/*)
+        echo "  encerrando o Dolphin do CyberKDE que continuava rodando (pid $pid)."
+        kill -TERM "$pid" 2>/dev/null || true
+        ;;
+      "$HOME/.local/opt/cyberkde-konsole/"* | /opt/cyberkde-konsole/*) konsole=$(( konsole + 1 )) ;;
+    esac
+  done
+  if (( konsole )); then
+    echo "Ainda há $konsole Konsole do CyberKDE aberto; feche essas janelas quando puder." \
+      "Não encerro terminal sozinho: mataria o que estiver rodando dentro." >&2
+  fi
+}
+
+cmd_off() {
+  # Antes da saída antecipada: um processo de tema desligado tem de cair mesmo quando não há mais
+  # nada registrado para desfazer (um "off" repetido, ou o processo sobrevivendo ao off anterior).
+  encerra_compilados
+  if [[ ! -s $ledger && ! -s $files ]] && ! modulo_registro; then
+    echo "Nada aplicado; o sistema já está no padrão."
+    return
+  fi
+  local file group key orig dst backup falhou=0 pendentes hook
+  for hook in "${CYBERKDE_PRE_OFF_HOOKS[@]}"; do
+    "$hook" || falhou=1
+  done
+  if [[ -s $ledger ]]; then
+    tac "$ledger" | while IFS=$'\t' read -r file group key orig; do
+      if [[ $orig == "$absent" ]]; then
+        kcfg write "$file" "$group" "$key" --delete
+      else
+        kcfg write "$file" "$group" "$key" "$orig"
+      fi
+    done
+    rm -f "$ledger"
+  fi
+  if [[ -s $files ]]; then
+    pendentes=$(mktemp)
+    local sem_sudo_pendentes=$pendentes sem_sudo_avisa=1  # as_needed anota o que ficou sem gravar
+    # Sem pipeline: o "while" tem de rodar no shell principal, senão o registro do que faltou
+    # morre no subshell junto com ele.
+    while IFS=$'\t' read -r dst backup; do
+      # Destino que não existe e não tinha original: não há o que desfazer. Sem isto o "off" pede
+      # sudo para apagar um arquivo que nunca chegou ao disco — acontece sempre que o "on" rodou
+      # --sem-sudo, porque o remember_path registra ANTES de escrever (a ordem inversa seria pior:
+      # uma interrupção deixaria arquivo gravado e fora do registro, ou seja, sem volta).
+      if [[ ! -e $dst && ! -L $dst && $backup == - ]]; then continue; fi
+      as_needed "$dst" rm -rf -- "$dst"
+      if [[ $backup != - ]]; then
+        as_needed "$dst" cp -r --preserve=mode,timestamps -- "$backup" "$dst"
+      fi
+    done < <(tac "$files")
+    sem_sudo_pendentes="" sem_sudo_avisa=0
+    if [[ -s $pendentes ]]; then
+      # Guarda só o que NÃO foi devolvido (e as cópias), para um "off" com sudo terminar o serviço.
+      awk -F'\t' 'NR == FNR { p[$0] = 1; next } ($1 in p)' "$pendentes" "$files" >"$files.novo"
+      mv -f "$files.novo" "$files"
+      echo "Não devolvi $(wc -l <"$files") arquivo(s) de sistema (sem sudo); o registro foi mantido" \
+        "em $files. Rode 'cyberkde off' num terminal, com sudo, para terminar." >&2
+      falhou=1
+    else
+      rm -rf "$files" "$state/files"
+    fi
+    rm -f "$pendentes"
+  fi
+  for hook in "${CYBERKDE_OFF_HOOKS[@]}"; do
+    "$hook" || falhou=1
+  done
+  reload_kwin
+  refresh_plasmashell
+  if (( falhou )); then
+    echo "Reversão INCOMPLETA: veja as pendências acima." >&2
+    return 1
+  fi
+  echo "Valores originais restaurados. Reabra os aplicativos afetados."
+}
+
+# Parte do "status" que olha a sessão: animações do KWin carregadas, vídeo por software, barra e dock.
+status_sessao() {
+  local info efeitos e
+  if ! info=$(qdbus6 org.kde.KWin /KWin supportInformation 2>/dev/null); then
+    echo "Sessão: fora do Plasma (sem KWin no D-Bus); não dá para conferir animações e dock."
+    return
+  fi
+  efeitos=$(qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadedEffects 2>/dev/null | tr '\n' ' ')
+  for e in cyberkde_scan cyberkde_popups; do
+    if [[ $(kreadconfig6 --file kwinrc --group Plugins --key "${e}Enabled" --default false) == true ]]; then
+      if [[ " $efeitos " == *" $e "* ]]; then echo "Animação $e: carregada."
+      else echo "Animação $e: ligada, mas o KWin NÃO a carregou."; fi
+    fi
+  done
+  if grep -qiE 'OpenGL renderer string: .*(llvmpipe|softpipe|software)' <<<"$info"; then
+    echo "Vídeo por software (llvmpipe): o KWin desliga todas as animações. Numa VM, ligue a aceleração 3D."
+  fi
+  if layout_tema; then
+    local dock="nenhuma"
+    if [[ -n $(latte_pids) ]]; then dock="Latte Dock"; elif [[ -s $dock_plasma_id ]]; then dock="painel do Plasma"; fi
+    echo "Layout: barra em cima e dock ($dock$([[ -e $appletsrc_orig ]] || echo ', ainda não aplicado'))."
+  else
+    echo "Layout: manter (barra e dock como estavam)."
+  fi
+}
+
+# "cyberkde status [--json]": só leitura. Não toma a trava e não grava nada. O --json é uma linha para
+# programas; "ligado" é sempre o PRIMEIRO campo, para quem casa o JSON por prefixo.
+cmd_status() {
+  local arg json=0
+  for arg in "$@"; do
+    case $arg in
+      --json) json=1 ;;
+      *) echo "uso: cyberkde status [--json]" >&2; exit 2 ;;
+    esac
+  done
+  if (( json )); then
+    local ligado=false pendente=false completa=true chaves=0
+    if tema_ligado; then ligado=true; fi
+    if [[ ! -s $ledger ]] && { [[ -s $files ]] || modulo_registro; }; then pendente=true; fi
+    if [[ -e $cor_marker ]]; then completa=false; fi
+    if [[ -s $ledger ]]; then chaves=$(wc -l <"$ledger"); fi
+    printf '{"ligado":%s,"cor":"%s","corAplicada":"%s","padrao":%s,"chaves":%d,"reversaoPendente":%s,"completa":%s,"kvantum":%s}\n' \
+      "$ligado" "$(accent_color)" "$(accent_applied)" "$(accent_is_default)" "$chaves" \
+      "$pendente" "$completa" "$(kvantum_ok && echo true || echo false)"
+    return
+  fi
+  printf 'Kvantum: %s\n' "$(kvantum_ok && echo instalado || echo 'NÃO instalado')"
+  status_sessao
+  if [[ ! -s $ledger ]]; then
+    if [[ -s $files ]] || modulo_registro; then
+      echo "CyberKDE: nenhuma chave alterada, mas ainda há registro de arquivos ou de módulos;" \
+        "rode 'cyberkde off' para terminar a reversão."
+    else
+      echo "CyberKDE: desligado (nenhuma chave alterada)."
+    fi
+    return
+  fi
+  echo "CyberKDE: ligado. Chaves alteradas (arquivo · grupo · chave = atual  [original]):"
+  local file group key orig
+  while IFS=$'\t' read -r file group key orig; do
+    # Saída fechada (ex.: "| head") com o SIGPIPE ignorado por quem chamou: para em silêncio.
+    printf '  %s · %s · %s = %s  [%s]\n' "${file##*/}" "$group" "$key" \
+      "$(kcfg read "$file" "$group" "$key")" \
+      "$([[ $orig == "$absent" ]] && echo 'ausente' || echo "$orig")" 2>/dev/null || return 0
+  done <"$ledger"
+}
+
+# Abre um app com a aparência original sem desligar o tema: usa um XDG_CONFIG_HOME
+# temporário com links para as configs reais, exceto os arquivos alterados pelo
+# CyberKDE, que viram cópias com os valores originais do registro.
+cmd_padrao() {
+  local app=${1:-dolphin} tmp file group key orig rel
+  tmp=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/cyberkde-padrao.XXXXXX")
+  (shopt -s nullglob dotglob; for f in "$config"/*; do ln -s "$f" "$tmp/"; done)
+  if [[ -s $ledger ]]; then
+    while IFS=$'\t' read -r file group key orig; do
+      [[ $file == /* ]] || file="$config/$file"
+      rel=${file#"$config"/}
+      [[ $rel == */* ]] && continue  # só arquivos da raiz; o resto só vale com o estilo do tema
+      [[ -L $tmp/$rel ]] && cp --remove-destination -- "$file" "$tmp/$rel"
+      if [[ $orig == "$absent" ]]; then
+        kcfg write "$tmp/$rel" "$group" "$key" --delete
+      else
+        kcfg write "$tmp/$rel" "$group" "$key" "$orig"
+      fi
+    done <"$ledger"
+  fi
+  local args=()
+  [[ $app == dolphin ]] && args=(--new-window)
+  # Sempre o programa do sistema, mesmo com versões compiladas pelo CyberKDE no PATH.
+  local bin="/usr/bin/$app"
+  [[ -x $bin ]] || bin=$app
+  # 9>&-: o app aberto aqui vive muito mais que o script (ver sem_travas).
+  XDG_CONFIG_HOME="$tmp" setsid "$bin" "${args[@]}" "${@:2}" >/dev/null 2>&1 </dev/null 9>&- &
+  echo "Abrindo '$app' com a aparência original (configuração temporária em $tmp)."
+}
+
+# "cyberkde papel": escolhe a imagem própria (fica em ~/.config/cyberkde/papel-de-parede). Só grava a
+# escolha; quem aplica é o "on", como na cor.
+cmd_papel() {
+  local file="$config/cyberkde/papel-de-parede" img=${1:-}
+  if [[ -z $img ]]; then
+    if [[ -s $file ]]; then echo "Papel de parede: $(<"$file")"; else echo "Papel de parede: o do tema (padrão)."; fi
+    return
+  fi
+  if [[ $img == padrao ]]; then
+    rm -f -- "$file"
+    echo "Papel de parede: o do tema."
+  else
+    [[ -f $img ]] || { echo "Imagem não encontrada: $img" >&2; exit 2; }
+    mkdir -p -- "$(dirname -- "$file")"
+    readlink -f -- "$img" >"$file"
+    echo "Papel de parede: $(<"$file")"
+  fi
+  if tema_ligado; then
+    echo "Para aplicar agora: cyberkde on papeis-de-parede"
+  fi
+}
+
+# "cyberkde checar": pré-requisitos e problemas conhecidos, antes de instalar ou ligar. Só leitura.
+# Cada item diz o que fazer. Saída: 0 tudo certo (ou só avisos) · 1 algo impede · 2 algo deve ser
+# corrigido antes (o instalar.sh para, a não ser com --continuar).
+cmd_checar() {
+  local impede=0 corrigir=0
+  item() {  # nível texto [correção...]
+    local nivel=$1 txt=$2
+    shift 2
+    case $nivel in
+      impede) impede=1; printf '  ✗ %s\n' "$txt" ;;
+      corrigir) corrigir=1; printf '  ! %s\n' "$txt" ;;
+      aviso) printf '  · %s\n' "$txt" ;;
+    esac
+    local c
+    for c in "$@"; do printf '      %s\n' "$c"; done
+  }
+  tem() { local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 && return 0; done; return 1; }
+  echo "Conferindo pré-requisitos e problemas conhecidos…"
+
+  if (( EUID == 0 )); then
+    item impede "Rodando como root. O tema é por usuário: rode sem sudo (quando precisar, o cyberkde pede a senha)."
+  fi
+  local -a faltam=()
+  tem kwriteconfig6 || faltam+=("kwriteconfig6 (KDE Plasma 6)")
+  tem kreadconfig6 || faltam+=("kreadconfig6 (KDE Plasma 6)")
+  tem qdbus6 || faltam+=("qdbus6 (qdbus-qt6)")
+  tem python3 || faltam+=(python3)
+  tem magick convert || faltam+=("ImageMagick (imagemagick)")
+  tem flock || faltam+=("flock (util-linux)")
+  tem fc-cache || faltam+=("fc-cache (fontconfig)")
+  [[ -d /usr/share/icons/breeze-dark ]] || faltam+=("ícones Breeze (kf6-breeze-icon-theme)")
+  if (( ${#faltam[@]} )); then
+    item impede "Faltam programas: ${faltam[*]}." \
+      "Ubuntu/Debian: sudo apt install python3 imagemagick qdbus-qt6 fontconfig util-linux kf6-breeze-icon-theme"
+  fi
+  local plasma
+  plasma=$(plasmashell --version 2>/dev/null | awk '{print $2}')
+  if [[ -z $plasma ]]; then
+    item impede "KDE Plasma não encontrado. O CyberKDE é um tema do Plasma 6." \
+      "Ubuntu: sudo apt install kde-plasma-desktop (e escolha a sessão Plasma no login)"
+  elif [[ ${plasma%%.*} != 6 ]]; then
+    item impede "Plasma $plasma: o CyberKDE precisa do Plasma 6."
+  fi
+
+  if ! kvantum_ok; then
+    item corrigir "Kvantum para Qt 6 não instalado: sem ele os apps ficam sem as formas chanfradas das capturas." \
+      "Ubuntu/Debian: sudo apt install qt-style-kvantum    Fedora: sudo dnf install kvantum    Arch: sudo pacman -S kvantum"
+  fi
+
+  # SDDM sem X: no Ubuntu 26.04 não há mais Xorg, e o SDDM só abre em Wayland se for configurado
+  # (sem isso a tela de login fica preta depois de reiniciar).
+  local dm=""
+  dm=$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)
+  if [[ ${dm##*/} == sddm.service ]]; then
+    if ! tem Xorg X && [[ ! -x /usr/lib/xorg/Xorg ]] &&
+      ! grep -qs '^[[:space:]]*DisplayServer[[:space:]]*=[[:space:]]*wayland' /etc/sddm.conf /etc/sddm.conf.d/*.conf /usr/lib/sddm/sddm.conf.d/*.conf; then
+      item corrigir "O SDDM está configurado para X11, mas o sistema não tem Xorg: a tela de login fica preta depois de reiniciar (problema do sistema, não do tema)." \
+        "Crie /etc/sddm.conf.d/10-wayland.conf com:" \
+        "  [General]" "  DisplayServer=wayland" "  GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell" \
+        "  [Wayland]" "  CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1"
+    fi
+  elif [[ -n $dm ]]; then
+    item aviso "A tela de login é o ${dm##*/}, não o SDDM: ela fica como está (o resto do tema funciona)."
+  fi
+
+  if [[ -z ${DBUS_SESSION_BUS_ADDRESS:-} ]] || ! qdbus6 org.kde.KWin /KWin >/dev/null 2>&1; then
+    item aviso "Fora de uma sessão Plasma (sem KWin no D-Bus): dá para instalar, mas ligue o tema de dentro da sessão."
+  else
+    local info
+    info=$(qdbus6 org.kde.KWin /KWin supportInformation 2>/dev/null || true)
+    if grep -qiE 'OpenGL renderer string: .*(llvmpipe|softpipe|software)' <<<"$info"; then
+      item aviso "Vídeo por software (llvmpipe): o KWin desliga as animações, inclusive as do tema." \
+        "Numa máquina virtual, ligue a aceleração 3D (VirtualBox: Tela → Habilitar aceleração 3D)."
+    fi
+    if [[ ${XDG_SESSION_TYPE:-} != wayland ]]; then
+      item aviso "Sessão X11: o Latte Dock NG só funciona no Wayland; a dock fica a do Plasma."
+    fi
+  fi
+
+  if [[ -z $(latte_instalado) ]]; then
+    if [[ -n $(latte_deb) ]]; then
+      item aviso "Latte Dock não instalado: a dock é um painel do Plasma. Para a dock das capturas:" \
+        "cyberkde latte (pacote revisado; pede a senha)"
+    else
+      item aviso "$latte_fora_da_lista"
+    fi
+  fi
+  if [[ -n $(apps_deb dolphin)$(apps_deb konsole) ]] && ! dpkg-query -W cyberkde-dolphin >/dev/null 2>&1; then
+    item aviso "Dolphin e Konsole animados (cascata e texto animado) disponíveis:" "cyberkde animados (pacotes revisados; pede a senha)"
+  fi
+  if layout_tema && ! fc-list 2>/dev/null | grep -qi 'Andale Mono'; then
+    item aviso "Fonte Andale Mono (relógio da barra) não instalada: o relógio usa uma fonte parecida." \
+      "Ubuntu/Debian: sudo apt install ttf-mscorefonts-installer"
+  fi
+  local app
+  for app in dolphin konsole; do
+    tem "$app" || item aviso "$app não instalado: a parte do tema dele fica sem efeito (Ubuntu: sudo apt install $app)."
+  done
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) item aviso "$HOME/.local/bin não está no PATH: o comando 'cyberkde' só funciona depois de sair e entrar na sessão." \
+         "Neste terminal: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  esac
+
+  if (( impede )); then
+    echo "Resolva os itens marcados com ✗ e rode de novo."
+    return 1
+  elif (( corrigir )); then
+    echo "Corrija os itens marcados com ! antes de seguir (ou siga assim mesmo, sabendo o que fica diferente)."
+    return 2
+  fi
+  echo "Tudo certo."
+}
+
+# "cyberkde latte": instala o Latte Dock NG (a dock das capturas) do fork revisado
+# github.com/jrcn1991/latte-dock-ng (commit 285257f), SÓ por pacote pronto e SÓ nos ambientes
+# validados (latte_debs): o .deb da release do fork (gerado pelo CI a partir do commit revisado), com o
+# SHA-256 FIXO aqui no código (não o SHA256SUMS da release: o GitHub troca "~" por "." no nome do
+# arquivo). Nada é compilado na máquina de quem instala. Fora da lista, ou se o download, o hash ou o
+# apt falharem, o Latte fica de fora e a dock é o painel do Plasma.
+# Para atualizar: trocar latte_release e os hashes por outra versão revisada.
+latte_release="https://github.com/jrcn1991/latte-dock-ng/releases/download/v1.2.51%2Bcyberkde2"
+latte_pacote_versao="1.2.51+cyberkde2-1+ubuntu26.04"  # para atualizar quem tem um pacote anterior
+# Lista fechada: o Latte só entra em ambientes VALIDADOS de ponta a ponta numa VM limpa (instalação
+# pelo .deb, dock com os lançadores, autostart, off/on e uninstall). Fora dela o tema nem oferece.
+# Para entrar uma distribuição nova, ela passa pelo mesmo roteiro de validação.
+#   ambiente  arquivo-da-release  sha256
+latte_debs=(
+  "ubuntu26.04 latte-dock-ng_1.2.51%2Bcyberkde2-1%2Bubuntu26.04_amd64.deb 3064f5fdf53de02583daf831c3b6779fdecfe14e96426199eb5c5a40d0f5076d"
+)
+# Pacotes que existem na release mas NÃO foram validados (não são usados):
+#   debian13        latte-dock-ng_1.2.51%2Bcyberkde2-1%2Bdeb13u1_amd64.deb  a42efdd8be90eb283b24108cb2b0a4704c3e9c3d187636af6b1c6ca0ea7376c1
+#   debian-testing  latte-dock-ng_1.2.51%2Bcyberkde2-1_amd64.deb            faa2bb827f8d1a53b6f61a7ef84d336fce90f895e30e23a6711dc8d6d8f63058
+latte_fora_da_lista="Latte Dock: disponível só no Ubuntu 26.04 (validado); usando a dock do Plasma."
+
+# Pacote .deb validado para este sistema: "arquivo sha256", ou nada. Ubuntu 26.04 = ID ubuntu,
+# VERSION_ID 26.04, amd64, apt, Plasma 6.6 e libplasma7 (o que foi validado).
+latte_deb() {
+  command -v apt-get >/dev/null && [[ $(dpkg --print-architecture 2>/dev/null) == amd64 ]] || return 0
+  local id="" ver="" alvo="" linha plasma
+  # shellcheck disable=SC1091
+  id=$(. /etc/os-release 2>/dev/null; echo "${ID:-}")
+  ver=$(. /etc/os-release 2>/dev/null; echo "${VERSION_ID:-}")
+  plasma=$(plasmashell --version 2>/dev/null | awk '{print $2}')
+  if [[ $id:$ver == ubuntu:26.04 && $plasma == 6.6* ]] &&
+    dpkg-query -W -f='${Status}' libplasma7 2>/dev/null | grep -q 'ok installed'; then
+    alvo=ubuntu26.04
+  fi
+  [[ -n $alvo ]] || return 0
+  for linha in "${latte_debs[@]}"; do
+    if [[ ${linha%% *} == "$alvo" ]]; then echo "${linha#* }"; fi
+  done
+}
+
+# Baixa o .deb, confere o SHA-256 fixo e instala pelo apt (que resolve as dependências). 0 = instalado.
+# Baixa um .deb, confere o SHA-256 fixado no código e instala pelo apt (que resolve as dependências).
+# Nada é compilado. 0 = instalado.
+instalar_deb_conferido() {  # url sha256 descrição
+  local url=$1 sha=$2 desc=$3 tmp
+  tmp=$(mktemp -d)
+  chmod 755 "$tmp"  # o apt lê o arquivo como o usuário _apt
+  echo "Baixando o pacote $desc…"
+  if ! python3 -c '
+import hashlib, sys, urllib.request
+url, dst, sha = sys.argv[1:]
+with urllib.request.urlopen(url, timeout=120) as r:
+    data = r.read()
+if hashlib.sha256(data).hexdigest() != sha:
+    sys.exit("o pacote baixado não confere com o SHA-256 revisado; nada foi instalado")
+open(dst, "wb").write(data)
+' "$url" "$tmp/pacote.deb" "$sha"; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  chmod 644 "$tmp/pacote.deb"
+  echo "Instalando $desc (pede a senha)…"
+  if ! sem_travas sudo ${SUDO_ASKPASS:+-A} apt-get install -y "$tmp/pacote.deb"; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  rm -rf -- "$tmp"
+}
+
+latte_instalar_deb() {
+  local deb
+  deb=$(latte_deb)
+  [[ -n $deb ]] || return 1
+  instalar_deb_conferido "$latte_release/${deb%% *}" "${deb#* }" "do Latte" || return 1
+  mkdir -p -- "$project/latte/build"
+  # Sem configuração do Latte antes: a que surgir é do tema, e o uninstall a apaga.
+  if [[ ! -e $config/latte && ! -e $project/latte/build/.config-latte-preexistente ]]; then
+    : >"$project/latte/build/.config-latte-do-tema"
+  elif [[ ! -e $project/latte/build/.config-latte-do-tema ]]; then
+    : >"$project/latte/build/.config-latte-preexistente"
+  fi
+  echo deb >"$project/latte/build/.instalado-por"  # o uninstall remove o pacote
+  echo "Latte Dock NG instalado pelo pacote revisado."
+}
+
+# "cyberkde animados": Dolphin (cascata ao abrir pastas) e Konsole (texto e cursor animados) com o
+# patch do tema, por pacote pronto: gerados pelo workflow .github/workflows/apps.yml na imagem do
+# Ubuntu 26.04, a partir da mesma versão que o Ubuntu distribui, e conferidos pelo SHA-256 fixado aqui.
+# Só no Ubuntu 26.04 e só se a versão do app do sistema for a do pacote; senão, fica o app do sistema.
+# Para atualizar (patch novo ou Ubuntu com Dolphin/Konsole novos): rodar o workflow e trocar abaixo.
+#   app  versão-do-sistema  arquivo-da-release  sha256
+apps_release="https://github.com/jrcn1991/theme-cyberkde/releases/download/apps-25.12.3-1"
+apps_debs=(
+  "dolphin 25.12.3 cyberkde-dolphin_25.12.3-cyberkde1_amd64.deb f910d46d0bb216ecb10742eb7664b742e43f1a0f2b3dca5a69f324780fd91563"
+  "konsole 25.12.3 cyberkde-konsole_25.12.3-cyberkde1_amd64.deb 65ecb4ef2b7c92b1b665243ca04e48d67389c1158437c28f52d3ab3799eab663"
+)
+apps_pacotes="$state/pacotes-do-tema"  # pacotes que o tema instalou (o uninstall os remove)
+
+# Pacote validado para o app neste sistema: "arquivo sha256", ou nada.
+apps_deb() {  # app
+  command -v apt-get >/dev/null && [[ $(dpkg --print-architecture 2>/dev/null) == amd64 ]] || return 0
+  local id ver sistema linha a v f h
+  # shellcheck disable=SC1091
+  id=$(. /etc/os-release 2>/dev/null; echo "${ID:-}")
+  ver=$(. /etc/os-release 2>/dev/null; echo "${VERSION_ID:-}")
+  [[ $id:$ver == ubuntu:26.04 ]] || return 0
+  [[ -x /usr/bin/$1 ]] || return 0
+  sistema=$("/usr/bin/$1" --version 2>/dev/null | awk '{print $2}')
+  for linha in "${apps_debs[@]}"; do
+    read -r a v f h <<<"$linha"
+    if [[ $a == "$1" && $v == "$sistema" ]]; then echo "$f $h"; fi
+  done
+}
+
+cmd_animados() {
+  if [[ ${1:-} == --disponivel ]]; then [[ -n $(apps_deb dolphin)$(apps_deb konsole) ]]; return; fi
+  local app deb algum=0 fase
+  for app in dolphin konsole; do
+    if dpkg-query -W -f='${Status}' "cyberkde-$app" 2>/dev/null | grep -q 'ok installed'; then
+      echo "$app animado já instalado."
+      algum=1
+      continue
+    fi
+    deb=$(apps_deb "$app")
+    if [[ -z $deb ]]; then
+      echo "$app animado: disponível só no Ubuntu 26.04 com o $app $(apps_versoes "$app") (validado); fica o $app do sistema."
+      continue
+    fi
+    if instalar_deb_conferido "$apps_release/${deb%% *}" "${deb#* }" "do $app animado"; then
+      mkdir -p -- "$state"
+      grep -qx "cyberkde-$app" "$apps_pacotes" 2>/dev/null || echo "cyberkde-$app" >>"$apps_pacotes"
+      echo "$app animado instalado."
+      algum=1
+    else
+      echo "O $app animado não foi instalado; fica o $app do sistema." >&2
+    fi
+  done
+  (( algum )) || return 1
+  if tema_ligado; then
+    for fase in carregamento konsole-anim; do "$project/scripts/cyberkde" on "$fase" || true; done
+  fi
+}
+apps_versoes() {  # app -> versões com pacote
+  local linha a v r=()
+  for linha in "${apps_debs[@]}"; do read -r a v _ <<<"$linha"; [[ $a == "$1" ]] && r+=("$v"); done
+  local IFS=/
+  echo "${r[*]}"
+}
+
+# Remove os pacotes que o tema instalou (Dolphin/Konsole animados).
+apps_desinstalar() {
+  [[ -s $apps_pacotes ]] || return 0
+  local -a pk
+  mapfile -t pk <"$apps_pacotes"
+  echo "Removendo os pacotes que o tema instalou: ${pk[*]} (pede a senha)…"
+  sem_travas sudo ${SUDO_ASKPASS:+-A} apt-get remove -y "${pk[@]}" ||
+    echo "Não consegui remover; rode: sudo apt remove ${pk[*]}" >&2
+}
+
+cmd_latte() {
+  # --disponivel: só responde se há pacote revisado para este sistema (para o instalar.sh perguntar).
+  if [[ ${1:-} == --disponivel ]]; then [[ -n $(latte_deb) ]]; return; fi
+  local bin
+  bin=$(latte_instalado)
+  if [[ -n $bin ]]; then
+    # Pacote instalado pelo tema, de uma versão anterior: atualiza para a revisada atual.
+    if [[ $(cat "$project/latte/build/.instalado-por" 2>/dev/null) == deb && -n $(latte_deb) &&
+      $(dpkg-query -W -f='${Version}' latte-dock-ng 2>/dev/null) != "$latte_pacote_versao" ]]; then
+      echo "Atualizando o Latte Dock para $latte_pacote_versao."
+      latte_instalar_deb || { echo "Não consegui atualizar o Latte; fica a versão instalada." >&2; return 1; }
+    else
+      echo "Latte Dock já instalado: $bin."
+    fi
+    latte_aplicar_se_ligado
+    return 0
+  fi
+  if [[ ${XDG_SESSION_TYPE:-wayland} != wayland ]]; then
+    echo "O Latte Dock NG só funciona no Wayland; a dock fica o painel do Plasma."
+    return 1
+  fi
+  if [[ -z $(latte_deb) ]]; then
+    echo "$latte_fora_da_lista"
+    return 1
+  fi
+  if ! latte_instalar_deb; then
+    echo "O Latte não foi instalado; a dock fica o painel do Plasma." >&2
+    return 1
+  fi
+  latte_aplicar_se_ligado
+}
+
+# Remove o Latte que o "cyberkde latte" instalou (o pacote). Um Latte que não veio daqui fica.
+latte_desinstalar() {
+  [[ $(cat "$project/latte/build/.instalado-por" 2>/dev/null) == deb ]] || return 0
+  # Só o Latte do pacote (/usr/bin), e só porque foi o tema que o instalou.
+  local pid
+  for pid in $(pgrep -x latte-dock-ng || true); do
+    [[ $(readlink -f "/proc/$pid/exe" 2>/dev/null) == /usr/bin/latte-dock-ng ]] && kill "$pid" 2>/dev/null
+  done
+  echo "Removendo o pacote do Latte que o tema instalou (pede a senha)…"
+  sem_travas sudo ${SUDO_ASKPASS:+-A} apt-get remove -y latte-dock-ng ||
+    echo "Não consegui remover o pacote; rode: sudo apt remove latte-dock-ng" >&2
+  # O Latte cria esta pasta ao rodar (knscompat); não pertence ao pacote.
+  rm -rf -- "$data/latte-dock-ng"
+  if [[ -e $project/latte/build/.config-latte-do-tema ]]; then
+    rm -rf -- "$config/latte"  # não existia antes do tema instalar o Latte
+  elif [[ -d $config/latte ]]; then
+    echo "Os layouts do Latte ficaram em $config/latte (apague a pasta se não for mais usar o Latte)."
+  fi
+}
+
+# Tema ligado com o arranjo das capturas: troca a dock do Plasma pelo Latte na hora.
+latte_aplicar_se_ligado() {
+  if tema_ligado && layout_tema; then
+    "$project/scripts/cyberkde" on barra-e-dock
+  fi
+}
+
+# "cyberkde layout [tema|manter]": barra em cima + dock (como nas capturas) ou painéis como estão.
+cmd_layout() {
+  local v=${1:-}
+  if [[ -z $v ]]; then
+    if layout_tema; then echo "Layout: tema (barra em cima e dock, como nas capturas)."
+    else echo "Layout: manter (a barra e a dock ficam como estão)."; fi
+    return
+  fi
+  [[ $v == tema || $v == manter ]] || { echo "uso: cyberkde layout [tema|manter]" >&2; exit 2; }
+  mkdir -p -- "$(dirname -- "$layout_file")"
+  echo "$v" >"$layout_file"
+  echo "Layout: $v."
+  if tema_ligado; then
+    if [[ $v == tema ]]; then
+      echo "Para aplicar agora: cyberkde on"
+    else
+      echo "Para voltar aos painéis de antes: cyberkde off e depois cyberkde on"
+    fi
+  fi
+}
+
+cmd_uninstall() {
+  cmd_off || { echo "Reversão incompleta; não vou remover os arquivos instalados." >&2; exit 1; }
+  latte_desinstalar
+  apps_desinstalar
+  rm -rf "$config/Kvantum/CyberKDE" "$data/fonts/CyberKDE" \
+    "$data/aurorae/themes/CyberKDE" "$data/kwin/effects/cyberkde_scan" \
+    "$HOME/.local/opt/cyberkde-dolphin" "$HOME/.local/opt/cyberkde-konsole" \
+    "$data/icons/CyberKDE" "$data/konsole/CyberKDE.colorscheme" "$data/konsole/CyberKDE.profile" \
+    "$data/wallpapers/CyberKDE" "$data/cyberkde" "$data/plasma/look-and-feel/org.cyberkde.desktop" \
+    "$data/plasma/desktoptheme/CyberKDE" "$data/kwin/effects/cyberkde_popups" "$data/kwin/effects/cyberkde_barra"
+  rm -f "$data/color-schemes/CyberKDE.colors" "$data/kwin/effects/.cyberkde_"*
+  rm -f "${XDG_CACHE_HOME:-$HOME/.cache}"/plasma_theme_CyberKDE*.kcache
+  # Preferências (cor, papel de parede), cache dos ícones recoloridos e o estado (o registro já
+  # foi esvaziado pelo off; a trava pode sumir com o arquivo aberto).
+  rm -rf "$config/cyberkde" "${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde" "$state"
+  # Pastas que só existiam por causa do tema.
+  local d
+  for d in "$data/aurorae/themes" "$data/aurorae" "$data/kwin/effects" "$data/kwin" \
+    "$data/plasma/desktoptheme" "$data/plasma/look-and-feel" "$data/plasma/shells" "$data/plasma/plasmoids" "$data/plasma" "$data/wallpapers" \
+    "$data/icons" "$data/konsole" "$data/color-schemes" "$data/fonts" "$config/Kvantum"; do
+    rmdir -- "$d" 2>/dev/null || true
+  done
+  if [[ -d $data/fonts ]]; then fc-cache -f "$data/fonts" >/dev/null; fi
+  echo "Arquivos do tema removidos."
+  # Cópia feita pelo instalar.sh (tem a marca .instalado): remove também o programa e o comando.
+  # Numa pasta de desenvolvimento (sem a marca), o código fica.
+  if [[ -e $project/.instalado ]]; then
+    local link="$HOME/.local/bin/cyberkde"
+    if [[ -L $link && $(readlink -f "$link") == "$project/scripts/cyberkde" ]]; then rm -f -- "$link"; fi
+    rm -rf -- "$project"  # o bash já tem este script aberto: apagar o arquivo não interrompe a execução
+    echo "Programa removido de $project."
+  fi
+}
+
+case "${1:-status}" in
+  on) cmd_on "${@:2}" ;;  # trava por conta própria (precisa responder "ocupado" em JSON)
+  off) take_lock || busy; cmd_off ;;
+  # Saída fechada (ex.: "| head") com o SIGPIPE ignorado por quem chamou: sem "erro de escrita".
+  status) cmd_status "${@:2}" 2> >(grep -v -E 'erro de escrita|write error' >&2 || true) ;;
+  padrao) cmd_padrao "${@:2}" ;;
+  papel) cmd_papel "${@:2}" ;;
+  cor) shift; cmd_cor "$@" ;;  # trava por conta própria (a leitura da cor não trava)
+  dolphin-build) take_lock || busy; build_patched dolphin system/dolphin ;;
+  konsole-build) take_lock || busy; build_patched konsole utilities/konsole ;;
+  install) take_lock || busy; install_files ;;
+  checar) cmd_checar ;;
+  latte) cmd_latte "${@:2}" ;;
+  animados) cmd_animados "${@:2}" ;;
+  layout) cmd_layout "${@:2}" ;;
+  uninstall) take_lock || busy; cmd_uninstall ;;
+  *) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac
