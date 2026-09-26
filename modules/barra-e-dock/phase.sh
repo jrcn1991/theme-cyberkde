@@ -309,6 +309,8 @@ thickMargin=28
 appletOrder=2;3
 iconSize=48
 panelSize=0
+# Sem o fundo (moldura chanfrada) sob os ícones: só os ícones e as bolinhas das janelas abertas.
+useThemePanel=false
 shadowOpacity=60
 shadowSize=45
 shadows=All
