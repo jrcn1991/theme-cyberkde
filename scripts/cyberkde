@@ -171,6 +171,11 @@ cmd_cor() {
   fi
   [[ $value == padrao || $value =~ ^#?[0-9A-Fa-f]{6}$ ]] || cor_exit 2 "cor inválida: use #RRGGBB ou padrao"
   take_lock || cor_exit 3 "ocupado: outra execução do cyberkde está em andamento"
+  # Com o CyberKDE ligado a cor reaplica fases; os dois temas ligados ao mesmo tempo é estado
+  # inconsistente, e reaplicar gravaria por cima do AppleKDE.
+  if tema_ligado && applekde_ligado; then
+    cor_exit 1 "o AppleKDE também está ligado: rode 'cyberkde on' (ele desliga o AppleKDE antes) e depois a cor. Nada foi aplicado."
+  fi
   set -E
   trap 'cor_exit 1 "falha ao aplicar a cor (detalhes na saída de erro)"' ERR
   trap cor_interrupted TERM INT HUP
@@ -764,6 +769,95 @@ unset fases_ordenadas p
 #   cyberkde on [fase] [--sem-sudo] [--json] [--progresso]
 #   saída: 0 aplicado · 1 falha · 2 fase ou opção inválida · 3 ocupado · 4 aplicado, com pendências
 #          de sudo · 5 interrompido
+# ------------------------------------------------------------------ exclusão mútua com o AppleKDE
+# Os dois temas gravam as MESMAS chaves (kdeglobals, kwinrc, plasmarc…) e cada um registra, na
+# primeira gravação, o valor que encontra como "original". Aplicar um por cima do outro gravaria os
+# valores do outro tema como originais, e nenhum "off" voltaria ao padrão do KDE. Regra combinada
+# com o AppleKDE (lá: docs/tecnico/TRATADO_TEMAS.md): quem liga desliga o outro antes, CONFIRMA que
+# desligou e só então aplica; sem confirmação, não aplica nada e diz o que fazer.
+# Sem o AppleKDE instalado nada disto age: não há binário nem registro, e o "on" segue como sempre.
+# Travas: nenhum dos dois espera o outro. O "applekde off" toma a trava dele com flock -n (código 3
+# se ocupado), e o CYBERKDE_ON_EM_CURSO=1 diz a ele que a trava do cyberkde já é nossa — sem isso o
+# off deles a pediria e sairia 3 para sempre (ordem de travas, não concorrência).
+applekde_state="${XDG_STATE_HOME:-$HOME/.local/state}/applekde"
+
+applekde_bin() {
+  local b
+  if b=$(command -v applekde 2>/dev/null); then printf '%s\n' "$b"; return 0; fi
+  for b in "$HOME/.local/bin/applekde" "$HOME/.local/opt/applekde/scripts/applekde"; do
+    if [[ -x $b ]]; then printf '%s\n' "$b"; return 0; fi
+  done
+  return 1
+}
+
+# Registro do AppleKDE: ledger.tsv, files.tsv e os .tsv dos módulos dele (qualquer um não vazio).
+applekde_registro() {
+  local f
+  for f in "$applekde_state"/*.tsv; do
+    if [[ -s $f ]]; then return 0; fi
+  done
+  return 1
+}
+
+# Ligado? Pelo "applekde status --json" ANCORADO no começo: "ligado" é o primeiro campo (contrato
+# deles), e sem a âncora o campo "cyberkdeLigado" do mesmo JSON poderia confundir. Saída
+# inesperada ou sem binário: vale o registro em disco (o lado seguro).
+applekde_ligado() {
+  local bin
+  if bin=$(applekde_bin); then
+    case $("$bin" status --json 2>/dev/null) in
+      '{"ligado":true'*) return 0 ;;
+      '{"ligado":false'*) return 1 ;;
+    esac
+  fi
+  applekde_registro
+}
+
+# O "applekde off" vai precisar de root? (arquivos de /etc, /usr ou /opt que existem no disco ou
+# têm original guardado; os que nunca chegaram ao disco não contam, como no off deles)
+applekde_exige_root() {
+  local f="$applekde_state/files.tsv" dst backup
+  [[ -s $f ]] || return 1
+  while IFS=$'\t' read -r dst backup; do
+    case $dst in /etc/* | /usr/* | /opt/*) ;; *) continue ;; esac
+    if [[ ! -e $dst && ! -L $dst && $backup == - ]]; then continue; fi
+    return 0
+  done <"$f"
+  return 1
+}
+
+# Chamado pelo cmd_on com a NOSSA trava já tomada e antes de qualquer gravação. Volta só com o
+# AppleKDE desligado e confirmado; em qualquer outro caso sai (cor_exit) sem ter aplicado nada.
+#   applekde off: 0 ok · 1 falha · 3 ocupado · 4 tudo devolvido menos arquivos de sistema (root)
+applekde_desligar() {
+  applekde_ligado || return 0
+  local bin rc=0 e
+  if ! bin=$(applekde_bin); then
+    cor_exit 1 "o AppleKDE está ligado (registro em $applekde_state), mas o comando 'applekde' não foi encontrado: desligue-o com 'applekde off' (ou reinstale o AppleKDE) e rode 'cyberkde on' de novo. Nada foi aplicado."
+  fi
+  if applekde_exige_root && [[ ! -t 0 && -z ${SUDO_ASKPASS:-} ]]; then
+    cor_exit 1 "o AppleKDE está ligado e desligá-lo pede sudo (arquivos de sistema), mas não há terminal: rode 'applekde off' num terminal e depois 'cyberkde on'. Nada foi aplicado."
+  fi
+  echo "AppleKDE ligado: rodando 'applekde off' antes (os dois temas não se misturam)…" >&2
+  # Nunca repassar o modo sem sudo: o off deles deixaria arquivos de sistema para trás (código 4).
+  sem_travas env -u APPLEKDE_SEM_SUDO CYBERKDE_ON_EM_CURSO=1 "$bin" off >&2 || rc=$?
+  case $rc in
+    0) ;;
+    3) cor_exit 3 "o AppleKDE está ocupado (outra execução do applekde); tente de novo daqui a pouco. Nada foi aplicado." ;;
+    4) cor_exit 1 "o 'applekde off' devolveu tudo menos arquivos de sistema (precisa de root): rode 'applekde off' num terminal e depois 'cyberkde on'. Nada foi aplicado." ;;
+    *) cor_exit 1 "o 'applekde off' falhou (código $rc): veja as mensagens acima, rode 'applekde off' de novo e depois 'cyberkde on'. Nada foi aplicado." ;;
+  esac
+  # Confirmação: o próprio AppleKDE diz que desligou E o registro principal dele sumiu.
+  if applekde_ligado || [[ -s $applekde_state/ledger.tsv || -s $applekde_state/files.tsv ]]; then
+    cor_exit 1 "o 'applekde off' terminou, mas o AppleKDE continua ligado (registro em $applekde_state): rode 'applekde off' de novo e depois 'cyberkde on'. Nada foi aplicado."
+  fi
+  # O reconfigure do KWin não descarrega efeito cuja chave sumiu (rede de segurança).
+  for e in applekde_janelas applekde_popups applekde_glass; do
+    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect "$e" >/dev/null 2>&1 || true
+  done
+  echo "AppleKDE desligado." >&2
+}
+
 cmd_on() {
   local phase="" arg bad=0 p reiniciado=false painel=false
   for arg in "$@"; do
@@ -782,6 +876,7 @@ cmd_on() {
     cor_exit 2 "fase desconhecida: $phase"
   fi
   take_lock || cor_exit 3 "ocupado: outra execução do cyberkde está em andamento"
+  applekde_desligar  # exclusão mútua: nada é gravado com o AppleKDE ligado
   set -E
   trap 'cor_exit 1 "falha ao ligar o tema (detalhes na saída de erro)"' ERR
   trap cor_interrupted TERM INT HUP
@@ -995,6 +1090,7 @@ cmd_status() {
     return
   fi
   printf 'Kvantum: %s\n' "$(kvantum_ok && echo instalado || echo 'NÃO instalado')"
+  if applekde_ligado; then echo "AppleKDE ligado: o 'cyberkde on' roda 'applekde off' antes."; fi
   status_sessao
   if [[ ! -s $ledger ]]; then
     if [[ -s $files ]] || modulo_registro; then
@@ -1103,7 +1199,12 @@ cmd_checar() {
       "Ubuntu/Debian: sudo apt install python3 imagemagick qdbus-qt6 fontconfig util-linux kf6-breeze-icon-theme"
   fi
   local plasma
-  plasma=$(plasmashell --version 2>/dev/null | awk '{print $2}')
+  # Versão pelo pacote primeiro: fora de uma sessão gráfica (TTY, env -i) o "plasmashell --version"
+  # aborta por não achar tela (e gera core dump), o que com pipefail derrubava o checar inteiro.
+  plasma=$(dpkg-query -W -f='${Version}' plasma-workspace 2>/dev/null | sed 's/^[0-9]*://; s/[^0-9.].*//' || true)
+  if [[ -z $plasma && -n ${WAYLAND_DISPLAY:-${DISPLAY:-}} ]]; then
+    plasma=$( { plasmashell --version 2>/dev/null || true; } | awk '{print $2}')
+  fi
   if [[ -z $plasma ]]; then
     item impede "KDE Plasma não encontrado. O CyberKDE é um tema do Plasma 6." \
       "Ubuntu: sudo apt install kde-plasma-desktop (e escolha a sessão Plasma no login)"
@@ -1165,6 +1266,9 @@ cmd_checar() {
   for app in dolphin konsole; do
     tem "$app" || item aviso "$app não instalado: a parte do tema dele fica sem efeito (Ubuntu: sudo apt install $app)."
   done
+  if applekde_ligado; then
+    item aviso "AppleKDE ligado: o 'cyberkde on' roda 'applekde off' antes (os dois temas não se misturam)."
+  fi
   case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *) item aviso "$HOME/.local/bin não está no PATH: o comando 'cyberkde' só funciona depois de sair e entrar na sessão." \
@@ -1210,7 +1314,11 @@ latte_deb() {
   # shellcheck disable=SC1091
   id=$(. /etc/os-release 2>/dev/null; echo "${ID:-}")
   ver=$(. /etc/os-release 2>/dev/null; echo "${VERSION_ID:-}")
-  plasma=$(plasmashell --version 2>/dev/null | awk '{print $2}')
+  # Mesma leitura do cmd_checar (que chama esta função): sem tela, o plasmashell aborta.
+  plasma=$(dpkg-query -W -f='${Version}' plasma-workspace 2>/dev/null | sed 's/^[0-9]*://; s/[^0-9.].*//' || true)
+  if [[ -z $plasma && -n ${WAYLAND_DISPLAY:-${DISPLAY:-}} ]]; then
+    plasma=$( { plasmashell --version 2>/dev/null || true; } | awk '{print $2}')
+  fi
   if [[ $id:$ver == ubuntu:26.04 && $plasma == 6.6* ]] &&
     dpkg-query -W -f='${Status}' libplasma7 2>/dev/null | grep -q 'ok installed'; then
     alvo=ubuntu26.04

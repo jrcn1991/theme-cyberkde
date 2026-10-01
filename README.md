@@ -94,6 +94,10 @@ cyberkde animados        # the installer offers this on Ubuntu 26.04
 
 They are offered only on Ubuntu 26.04 and only while its Dolphin/Konsole version matches the package; after Ubuntu updates them, the system apps are used until new packages are published. `cyberkde on` simply skips them when they are not installed.
 
+### Alongside AppleKDE
+
+CyberKDE and [AppleKDE](https://github.com/jrcn1991/tema_apple_kde) never run mixed. If AppleKDE is on, `cyberkde on` first runs `applekde off`, checks that it really turned off, and only then applies; if it can't confirm (AppleKDE busy, a step needing root without a terminal), nothing is applied and it tells you what to run. `applekde on` does the same in the other direction. Without AppleKDE installed, nothing changes.
+
 ## Uninstall
 
 ```bash
