@@ -96,7 +96,7 @@ They are offered only on Ubuntu 26.04 and only while its Dolphin/Konsole version
 
 ### Alongside AppleKDE
 
-CyberKDE and [AppleKDE](https://github.com/jrcn1991/tema_apple_kde) never run mixed. If AppleKDE is on, `cyberkde on` first runs `applekde off`, checks that it really turned off, and only then applies; if it can't confirm (AppleKDE busy, a step needing root without a terminal), nothing is applied and it tells you what to run. `applekde on` does the same in the other direction. Without AppleKDE installed, nothing changes.
+CyberKDE and [AppleKDE](https://github.com/jrcn1991/theme_apple_kde) never run mixed. If AppleKDE is on, `cyberkde on` first runs `applekde off`, checks that it really turned off, and only then applies; if it can't confirm (AppleKDE busy, a step needing root without a terminal), nothing is applied and it tells you what to run. `applekde on` does the same in the other direction. Without AppleKDE installed, nothing changes.
 
 ## Uninstall
 

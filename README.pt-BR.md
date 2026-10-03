@@ -94,7 +94,7 @@ São oferecidos só no Ubuntu 26.04 e só enquanto a versão do Dolphin/Konsole 
 
 ### Junto com o AppleKDE
 
-O CyberKDE e o [AppleKDE](https://github.com/jrcn1991/tema_apple_kde) nunca ficam misturados. Se o AppleKDE estiver ligado, o `cyberkde on` roda antes o `applekde off`, confere que ele desligou de verdade e só então aplica; se não der para confirmar (AppleKDE ocupado, etapa que pede root sem terminal), nada é aplicado e ele diz o que rodar. O `applekde on` faz o mesmo no sentido contrário. Sem o AppleKDE instalado, nada muda.
+O CyberKDE e o [AppleKDE](https://github.com/jrcn1991/theme_apple_kde) nunca ficam misturados. Se o AppleKDE estiver ligado, o `cyberkde on` roda antes o `applekde off`, confere que ele desligou de verdade e só então aplica; se não der para confirmar (AppleKDE ocupado, etapa que pede root sem terminal), nada é aplicado e ele diz o que rodar. O `applekde on` faz o mesmo no sentido contrário. Sem o AppleKDE instalado, nada muda.
 
 ## Desinstalar
 
