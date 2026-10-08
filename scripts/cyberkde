@@ -206,7 +206,8 @@ cmd_cor() {
       "A cor pedida continua sendo a sua e é a que aparece em 'cyberkde cor'."
   fi
   for p in "${CYBERKDE_PHASES[@]}"; do
-    # O papel de parede fica como está: a cor não mexe nele.
+    # Qual papel de parede está na tela não muda. As imagens do tema são recoloridas pelo install_files
+    # (install_papeis-de-parede); um papel próprio do usuário fica como está.
     if [[ $p != papeis-de-parede ]]; then fases+=("$p"); fi
   done
   if [[ $ligado == true ]]; then
@@ -310,7 +311,11 @@ restart_plasmashell() {
   # plasmashell não voltava (tela preta, só o dock). Zerar o contador antes de cada partida.
   systemctl --user reset-failed plasma-plasmashell.service >/dev/null 2>&1 || true
   if systemctl --user is-active -q plasma-plasmashell.service; then
-    systemctl --user restart plasma-plasmashell.service || { plasmashell_sem_servico; return; }
+    # Não "systemctl restart": ele espera a saída graciosa, e um plasmashell de dias no ar (GBs, parte
+    # em swap) levava 26 s só para parar (29/09, metade da troca de cor). O plasmashell_parar pede para
+    # sair, espera até 5 s e encerra à força; a configuração dele já está em disco (grava ao mudar).
+    plasmashell_parar
+    systemctl --user start plasma-plasmashell.service || { plasmashell_sem_servico; return; }
   else
     kquitapp6 plasmashell >/dev/null 2>&1 || true
     for i in {1..50}; do pgrep -x plasmashell >/dev/null || break; sleep 0.2; done

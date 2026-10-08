@@ -223,7 +223,7 @@ def main():
 
     bg = BUILD / "background.png"
     if WALLPAPER.is_file():
-        shutil.copyfile(WALLPAPER, bg)
+        shutil.copyfile(accented(WALLPAPER), bg)  # brackets na cor de destaque ("cyberkde cor")
         origin = f"papel de parede {WALLPAPER.relative_to(ROOT)}"
     else:
         fallback_background(bg)

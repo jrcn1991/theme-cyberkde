@@ -22,7 +22,25 @@ install_papeis-de-parede() {
   for f in desktop lockscreen login; do
     [[ -f $src/$f.png ]] || { bash "$project/modules/papeis-de-parede/generator/gen_wallpapers.sh" >/dev/null; break; }
   done
-  install -Dm644 -t "$(wallpapers_dir)" "$src/desktop.png" "$src/lockscreen.png" "$src/login.png"
+  # Os detalhes vermelhos acompanham a cor de destaque ("cyberkde cor"): com outra cor, instala a cópia
+  # recolorida (cache em ~/.cache/cyberkde). O Plasma aponta sempre para o mesmo caminho instalado.
+  local -a imgs=()
+  mapfile -t imgs < <(python3 - "$project/generator" "$src"/{desktop,lockscreen,login}.png <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+from cyberlib import accented
+for f in sys.argv[2:]:
+    print(accented(f))
+PY
+  )
+  (( ${#imgs[@]} == 3 )) || return 1
+  local dir i names=(desktop lockscreen login)
+  dir=$(wallpapers_dir)
+  mkdir -p "$dir"
+  for i in 0 1 2; do
+    install -m644 "${imgs[i]}" "$dir/.${names[i]}.png.novo"
+    mv -f "$dir/.${names[i]}.png.novo" "$dir/${names[i]}.png"  # troca de uma vez: o Plasma nunca lê pela metade
+  done
 }
 
 # Texto seguro dentro de aspas duplas no JavaScript do Plasma.

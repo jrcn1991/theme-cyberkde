@@ -106,6 +106,74 @@ def P(color, a=1.0):
     return (color, a)
 
 
+# ---------------------------------------------------------------- recolorir imagens
+# Imagens desenhadas em vermelho (ícones da IA, papéis de parede) viram a cor de destaque. Cada pixel é
+# descrito como escuro + k·(vermelho − escuro) + w·(branco − vermelho): k é o quanto de vermelho ele tem,
+# w o quanto do vermelho foi clareado para o branco (realces, cantos brilhantes). O pixel é redesenhado
+# com os mesmos k e w sobre a cor nova. O que fica longe desse plano (trilho cinza, filete ciano, texto)
+# não muda. O clareado só vale por cima do vermelho (w <= k): sem isso, o ciano (quase todo "branco
+# − vermelho") viraria magenta.
+MASTER_DARK = "#11101B"   # escuro dos desenhos (painel dos ícones, fundo dos papéis de parede)
+CACHE = pathlib.Path(os.environ.get("XDG_CACHE_HOME") or pathlib.Path.home() / ".cache") / "cyberkde"
+
+
+def recolor(src, dst, color, master=None):
+    """Troca o vermelho `master` (padrão: o vermelho do documento) de `src` por `color` e grava `dst`.
+    Com numpy e Pillow, usa o plano escuro/vermelho/branco; sem eles, só a linha escuro→vermelho,
+    pelo ImageMagick (os realces clareados ficam avermelhados, mas o tema funciona do mesmo jeito)."""
+    master = master or TOK["reference"]["red"]
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        return _recolor_magick(src, dst, color, master)
+    D, R, T = (np.array(rgb(c), dtype=np.float32) / 255 for c in (MASTER_DARK, master, color))
+    W = np.ones(3, dtype=np.float32)
+    img = Image.open(src)
+    a = np.asarray(img.convert("RGBA")).astype(np.float32) / 255
+    p = (a[..., :3] - D).reshape(-1, 3).T
+    base = np.stack([R - D, W - R], 1)
+    (k, w), *_ = np.linalg.lstsq(base, p, rcond=None)
+    so_linha = (w < 0) | (w > k)
+    k = np.clip(np.where(so_linha, (R - D) @ p / ((R - D) @ (R - D)), k), 0, None)
+    w = np.where(so_linha, 0, w)
+    res = np.linalg.norm(p - base @ np.stack([k, w]), axis=0)
+    novo = np.clip(D[:, None] + k * (T - D)[:, None] + w * (W - T)[:, None], 0, 1)
+    # Peso: 1 no plano, cai a 0 com a distância (bordas suaves); pixel sem vermelho (k ~ 0) não muda.
+    m = np.clip(1 - (res - 0.16) / 0.08, 0, 1) * np.clip(k / 0.05, 0, 1)
+    rgb_novo = (p + D[:, None]) * (1 - m) + novo * m
+    a[..., :3] = rgb_novo.T.reshape(a.shape[:2] + (3,))
+    out = Image.fromarray((a * 255 + 0.5).astype(np.uint8), "RGBA")
+    (out if img.mode == "RGBA" or "transparency" in img.info else out.convert("RGB")).save(dst)
+
+
+def _recolor_magick(src, dst, color, master):
+    import shutil
+    import subprocess
+    (rr, rg, rb), (dr, dg, db), (tr, tg, tb) = ([v / 255 for v in rgb(c)] for c in (master, MASTER_DARK, color))
+    fx = (f"kk=max(0,min(1,(u.r-{dr:.4f})/{rr - dr:.4f})); "
+          f"qg={dg:.4f}+kk*{rg - dg:.4f}; qb={db:.4f}+kk*{rb - db:.4f}; "
+          f"(abs(u.g-qg)<0.09 && abs(u.b-qb)<0.09) ? "
+          f"channel({dr:.4f}+kk*{tr - dr:.4f}, {dg:.4f}+kk*{tg - dg:.4f}, {db:.4f}+kk*{tb - db:.4f}, 0) : u")
+    magick = ["magick"] if shutil.which("magick") else ["convert"]
+    subprocess.run([*magick, str(src), "-channel", "RGB", "-fx", fx, "+channel", str(dst)], check=True)
+
+
+def accented(src, master=None):
+    """`src` na cor de destaque atual: o próprio arquivo com a cor padrão; senão, uma cópia recolorida
+    em ~/.cache/cyberkde (por cor e por versão do arquivo, para a próxima troca não refazer)."""
+    src = pathlib.Path(src)
+    if RED.upper() == TOK["reference"]["red"].upper():
+        return src
+    out = CACHE / f"cor-{RED.lstrip('#')}" / f"{src.stem}-{int(src.stat().st_mtime)}{src.suffix}"
+    if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(f".{out.name}.{os.getpid()}{out.suffix}")  # outro processo não lê pela metade
+        recolor(src, tmp, RED, master)
+        tmp.replace(out)
+    return out
+
+
 # ---------------------------------------------------------------- geometria
 @dataclass
 class Look:

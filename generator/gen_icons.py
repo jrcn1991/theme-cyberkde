@@ -5,7 +5,7 @@
   ícones do Breeze Escuro, porque os emblemas da IA viram mancha nesses tamanhos.
 - Contextos: Places (pastas e locais), Devices, MimeTypes (tipos de arquivo). O nome no index.theme precisa
   ser exatamente esse; com "Mimetypes" o KDE ignora a pasta.
-- Variantes de cor da pasta (folder-green…): recoloridas do mestre "folder" com ImageMagick, sem IA.
+- Variantes de cor da pasta (folder-green…): recoloridas do mestre "folder" por recolor() do cyberlib, sem IA.
   Só o vermelho de identidade muda; contorno escuro, trilho cinza e filete ciano ficam intactos.
 - Tipos de arquivo: cada ícone base atende também os nomes específicos que o Breeze Escuro tem
   (image-png, application-zip…). Sem esses aliases o KDE acharia o ícone específico do Breeze antes de
@@ -18,8 +18,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import cyberlib  # noqa: E402
 from cyberlib import BASE, CYAN, GOLD, GREEN, RED, TOK, VISITED, mix  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -153,42 +155,19 @@ FOLDER_COLORS = {
     "brown": mix(TOK["secondary"]["orange"], BASE, 0.62),
     "magenta": mix(RED, TOK["secondary"]["violet"], 0.5),
 }
-# Cores medidas no mestre ai-final/folder.png (vermelho do corpo e escuro do painel).
-MASTER_RED = (240, 77, 68)
-MASTER_DARK = (17, 16, 27)
-
-
-def unit(c):
-    if isinstance(c, str):
-        c = tuple(int(c.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
-    return tuple(v / 255 for v in c)
+# Vermelho medido no mestre ai-final/folder.png (o escuro do painel é o MASTER_DARK do cyberlib).
+MASTER_RED = "#F04D44"
+DEFAULT_RED = TOK["reference"]["red"]
 
 
 def recolor(src, dst, color):
-    """Troca o vermelho do mestre por `color`, mantendo as nuances de borda.
-
-    Cada pixel na linha escuro→vermelho do mestre é descrito por k (0 = escuro, 1 = vermelho) e redesenhado
-    como escuro→cor nova com o mesmo k. Pixels fora dessa linha (trilho cinza, filete ciano) ficam como estão.
-    """
-    (rr, rg, rb), (dr, dg, db), (tr, tg, tb) = unit(MASTER_RED), unit(MASTER_DARK), unit(color)
-    fx = (f"kk=max(0,min(1,(u.r-{dr:.4f})/{rr - dr:.4f})); "
-          f"qg={dg:.4f}+kk*{rg - dg:.4f}; qb={db:.4f}+kk*{rb - db:.4f}; "
-          f"(abs(u.g-qg)<0.09 && abs(u.b-qb)<0.09) ? "
-          f"channel({dr:.4f}+kk*{tr - dr:.4f}, {dg:.4f}+kk*{tg - dg:.4f}, {db:.4f}+kk*{tb - db:.4f}, 0) : u")
-    subprocess.run([*MAGICK, str(src), "-channel", "RGB", "-fx", fx, "+channel", str(dst)], check=True)
-
-
-DEFAULT_RED = TOK["reference"]["red"]
-CACHE = pathlib.Path(os.environ.get("XDG_CACHE_HOME") or pathlib.Path.home() / ".cache") / "cyberkde"
+    """Troca o vermelho do mestre por `color` (ver recolor no cyberlib)."""
+    cyberlib.recolor(src, dst, color, MASTER_RED)
 
 
 def accented(src):
     """Ícone da IA recolorido para a cor de destaque atual (cache por cor e por versão do arquivo)."""
-    out = CACHE / f"icones-{RED.lstrip('#')}" / f"{src.stem}-{int(src.stat().st_mtime)}.png"
-    if not out.exists():
-        out.parent.mkdir(parents=True, exist_ok=True)
-        recolor(src, out, RED)
-    return out
+    return cyberlib.accented(src, MASTER_RED)
 
 
 def resize(src, dst, size):
@@ -259,37 +238,46 @@ def main():
         # Com outra cor de destaque ("cyberkde cor"), os ícones da IA são recoloridos; a pasta "vermelha"
         # do Dolphin continua sendo o mestre vermelho.
         changed = RED.upper() != DEFAULT_RED.upper()
-        source = (lambda base: accented(SRC / f"{base}.png")) if changed else (lambda base: SRC / f"{base}.png")
-        entries = []
-        for base, (ctx, names) in ICONS.items():
+        # Recolorir e redimensionar são processos/arrays independentes: rodam em paralelo, um por núcleo.
+        with ThreadPoolExecutor(os.cpu_count() or 4) as pool:
+            source = accented if changed else (lambda path: path)
+            pending = []
+            for base, (ctx, names) in ICONS.items():
+                if changed:
+                    names = [n for n in names if n != "folder-red"]
+                pending.append((pool.submit(source, SRC / f"{base}.png"), ctx, names))
+            pending += [(pool.submit(source, SRC / f"{base}.png"), ctx, [name]) for name, (ctx, base) in EXTRA.items()]
+            for color, value in FOLDER_COLORS.items():
+                src = tmp / f"folder-{color}.png"
+                pending.append((pool.submit(lambda s=src, v=value: (recolor(SRC / "folder.png", s, v), s)[1]),
+                                "places", [f"folder-{color}"]))
+            entries = [(fut.result(), ctx, names) for fut, ctx, names in pending]
             if changed:
-                names = [n for n in names if n != "folder-red"]
-            entries.append((source(base), ctx, names))
-        entries += [(source(base), ctx, [name]) for name, (ctx, base) in EXTRA.items()]
-        if changed:
-            entries.append((SRC / "folder.png", "places", ["folder-red"]))
-        for color, value in FOLDER_COLORS.items():
-            src = tmp / f"folder-{color}.png"
-            recolor(SRC / "folder.png", src, value)
-            entries.append((src, "places", [f"folder-{color}"]))
+                entries.append((SRC / "folder.png", "places", ["folder-red"]))
 
-        for src, ctx, names in entries:
-            for name in names:
-                if (ctx, name) in seen:
-                    raise SystemExit(f"nome repetido: {ctx}/{name} ({seen[(ctx, name)]} e {src.name})")
-                seen[(ctx, name)] = src.name
-            if not src.exists():
-                raise SystemExit(f"falta o ícone de origem: {src}")
+            for src, ctx, names in entries:
+                for name in names:
+                    if (ctx, name) in seen:
+                        raise SystemExit(f"nome repetido: {ctx}/{name} ({seen[(ctx, name)]} e {src.name})")
+                    seen[(ctx, name)] = src.name
+                if not src.exists():
+                    raise SystemExit(f"falta o ícone de origem: {src}")
+
+            jobs = []
+            for src, ctx, names in entries:
+                for size in LARGE:
+                    folder = OUT / ctx / str(size)
+                    folder.mkdir(parents=True, exist_ok=True)
+                    dirs.add((ctx, size))
+                    jobs.append(pool.submit(resize, src, folder / f"{names[0]}.png", size))
+            for job in jobs:
+                job.result()  # repassa o erro de qualquer redimensionamento
 
         for src, ctx, names in entries:
             for size in LARGE:
                 folder = OUT / ctx / str(size)
-                folder.mkdir(parents=True, exist_ok=True)
-                dirs.add((ctx, size))
-                first = folder / f"{names[0]}.png"
-                resize(src, first, size)
                 for alias in names[1:]:
-                    (folder / f"{alias}.png").symlink_to(first.name)
+                    (folder / f"{alias}.png").symlink_to(f"{names[0]}.png")
             for size in SMALL:
                 for name in names:
                     target = breeze_icon(ctx, size, name) or breeze_icon(ctx, size, names[0])
