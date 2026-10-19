@@ -3376,11 +3376,9 @@ latte_instalar_deb() {
 # A revisão do pacote (-cyberkdeN) vem de <app>/REVISAO (scripts/empacotar-apps.sh).
 apps_releases="https://github.com/jrcn1991/theme-cyberkde/releases/download"
 apps_debs=(
-  # >>> ATUALIZAR DEPOIS DO CI: rodar o workflow "apps" com a tag apps-25.12.3-2 e trocar PENDENTE-CI
-  # >>> pelo SHA-256 do cyberkde-konsole_25.12.3-cyberkde2_amd64.deb (SHA256SUMS da release). Se o CI
-  # >>> publicar outro Dolphin na mesma tag, ele só entra trocando a linha do Dolphin também.
-  "konsole 25.12.3 apps-25.12.3-2 cyberkde-konsole_25.12.3-cyberkde2_amd64.deb PENDENTE-CI"
-  # Pacotes atuais (release apps-25.12.3-1):
+  # Konsole -cyberkde2 (cascata e efeitos do terminal), release apps-25.12.3-2:
+  "konsole 25.12.3 apps-25.12.3-2 cyberkde-konsole_25.12.3-cyberkde2_amd64.deb 1ccbe77f4c438a8833c54f5c6c46f197072d332f59346d7e9be390ad1151f6fc"
+  # Release apps-25.12.3-1 (Dolphin atual; Konsole -cyberkde1 fica de reserva):
   "dolphin 25.12.3 apps-25.12.3-1 cyberkde-dolphin_25.12.3-cyberkde1_amd64.deb f910d46d0bb216ecb10742eb7664b742e43f1a0f2b3dca5a69f324780fd91563"
   "konsole 25.12.3 apps-25.12.3-1 cyberkde-konsole_25.12.3-cyberkde1_amd64.deb 65ecb4ef2b7c92b1b665243ca04e48d67389c1158437c28f52d3ab3799eab663"
 )
