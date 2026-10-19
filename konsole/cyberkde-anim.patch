@@ -1,13 +1,37 @@
+diff --git a/src/Vt102Emulation.cpp b/src/Vt102Emulation.cpp
+index 9c61a70..7b22afd 100644
+--- a/src/Vt102Emulation.cpp
++++ b/src/Vt102Emulation.cpp
+@@ -1153,6 +1153,10 @@ void Vt102Emulation::processSessionAttributeRequest(const int tokenSize, const u
+                 int exitCode = list.at(1).toInt();
+                 if (exitCode) {
+                     _currentScreen->setExitCode(exitCode);
++                    // CyberKDE: error glitch on the next prompt (konsolerc [CyberKDE] Erro)
++                    if (_currentScreen->currentTerminalDisplay() != nullptr) {
++                        _currentScreen->currentTerminalDisplay()->cyberCommandFailed();
++                    }
+                 }
+             } else if (eq > 0) {
+                 params[list.at(i).mid(0, eq)] = list.at(i).mid(eq + 1);
 diff --git a/src/terminalDisplay/TerminalDisplay.cpp b/src/terminalDisplay/TerminalDisplay.cpp
-index c80e571..3ea4f20 100644
+index c80e571..1a841ab 100644
 --- a/src/terminalDisplay/TerminalDisplay.cpp
 +++ b/src/terminalDisplay/TerminalDisplay.cpp
-@@ -34,6 +34,30 @@
+@@ -34,6 +34,348 @@
  #include <QTimer>
  #include <QVBoxLayout>
  
 +#include <KConfigGroup>
++#include <KDirWatch>
 +#include <KSharedConfig>
++#include <QFile>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QStandardPaths>
++#include <QVarLengthArray>
++
++#include <QPainterPath>
++#include <QTime>
 +
 +#include <cmath>
 +
@@ -28,12 +52,321 @@ index c80e571..3ea4f20 100644
 +{
 +    return (quint64(quint32(line)) << 16) | quint16(column);
 +}
++
++// CyberKDE data cascade tuning
++constexpr int CYBER_CASCADE_MAX = 5000; // grains alive at once
++constexpr int CYBER_CASCADE_ROWS = 3; // rows taken from one scroll (a big burst only feeds this much)
++constexpr int CYBER_CASCADE_GRAIN_PER_CELL = 5; // extra grains per glyph that leaves
++constexpr int CYBER_CASCADE_STEPS = 32; // gradient steps (rows of the atlas)
++constexpr int CYBER_CASCADE_CHIPS = 6; // fragment shapes after the glyphs in each atlas row
++constexpr float CYBER_CASCADE_BLEND = 0.45f; // seconds a leader takes to join its lane
++const QString CYBER_CASCADE_GLYPHS = QStringLiteral("{}()[]<>;:=+-*/%&|!?#$@_.,'\"~^0123456789abcdefghijklmnopqrstuvwxyzABCDEFXYZ");
++
++// Settings shared by every terminal of the process, re-read when the files change (no polling).
++struct CyberCascadeSettings {
++    bool on = false;
++    int lines = 5;
++    QList<QPair<qreal, QColor>> stops; // gradient from the inner edge (0) to the outer edge (1)
++    int generation = 0;
++};
++
++QColor cyberHex(const QString &text, const QColor &fallback)
++{
++    const QColor color = QColor::fromString(text.trimmed());
++    return color.isValid() ? color : fallback;
++}
++
++QColor cyberMix(const QColor &a, const QColor &b, qreal t)
++{
++    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * t, a.greenF() + (b.greenF() - a.greenF()) * t, a.blueF() + (b.blueF() - a.blueF()) * t);
++}
++
++QString cyberConfigPath(const QString &name)
++{
++    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QLatin1Char('/') + name;
++}
++
++void cyberCascadeRead(CyberCascadeSettings &s)
++{
++    // A fresh read of the file (not the app's shared konsolerc object, which may hold unsaved changes).
++    const KConfig config(QStringLiteral("konsolerc"), KConfig::SimpleConfig);
++    const KConfigGroup group(&config, QStringLiteral("CyberKDE"));
++    s.on = group.readEntry("Cascata", false);
++    s.lines = qBound(2, group.readEntry("CascataLinhas", 5), 20);
++    s.stops.clear();
++    if (group.readEntry("CascataCores", QStringLiteral("video")) == QLatin1String("tema")) {
++        // Theme colors: accent (cyberkde cor) on the inner edge, warning, then the secondary color.
++        QFile file(cyberConfigPath(QStringLiteral("cyberkde/cor")));
++        const QColor accent = cyberHex(file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString(), QColor(0xF7, 0x50, 0x49));
++        QFile paletteFile(cyberConfigPath(QStringLiteral("cyberkde/paleta")));
++        const QJsonObject palette = paletteFile.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(paletteFile.readAll()).object() : QJsonObject();
++        const QColor second = cyberHex(palette.value(QStringLiteral("secundaria")).toString(), QColor(0x5E, 0xF6, 0xFF));
++        const QColor warning = cyberHex(palette.value(QStringLiteral("alerta")).toString(), accent);
++        const QColor white(0xF4, 0xF0, 0xFC);
++        s.stops = {{0.00, accent.darker(260)},
++                   {0.06, accent.darker(150)},
++                   {0.14, accent},
++                   {0.30, warning},
++                   {0.46, cyberMix(warning, white, 0.5)},
++                   {0.58, cyberMix(second, white, 0.8)},
++                   {0.74, second},
++                   {1.00, second.darker(190)}};
++    } else {
++        // The reference video: dark olive fibres, red, orange, gold, white-lavender, violet.
++        s.stops = {{0.00, QColor(0x3A, 0x2C, 0x12)},
++                   {0.05, QColor(0x8C, 0x5C, 0x22)},
++                   {0.11, QColor(0xD8, 0x3E, 0x1C)},
++                   {0.20, QColor(0xEE, 0x6C, 0x28)},
++                   {0.31, QColor(0xE4, 0xA8, 0x30)},
++                   {0.45, QColor(0xF0, 0xD0, 0x5C)},
++                   {0.57, QColor(0xF4, 0xEE, 0xFC)},
++                   {0.71, QColor(0xC4, 0xB4, 0xF4)},
++                   {0.86, QColor(0x8C, 0x78, 0xDA)},
++                   {1.00, QColor(0x56, 0x44, 0xA8)}};
++    }
++}
++
++QColor cyberGradient(const QList<QPair<qreal, QColor>> &stops, qreal t)
++{
++    for (int i = 1; i < stops.size(); ++i) {
++        if (t <= stops[i].first) {
++            const qreal span = stops[i].first - stops[i - 1].first;
++            return cyberMix(stops[i - 1].second, stops[i].second, span > 0 ? (t - stops[i - 1].first) / span : 1.0);
++        }
++    }
++    return stops.last().second;
++}
++
++// The settings, and a timer every terminal connects to: it fires (debounced) after the files change.
++QTimer *cyberCascadeNotifier();
++
++CyberCascadeSettings &cyberCascadeSettings()
++{
++    static CyberCascadeSettings settings;
++    static bool loaded = false;
++    if (!loaded) {
++        loaded = true;
++        cyberCascadeRead(settings);
++        cyberCascadeNotifier();
++    }
++    return settings;
++}
++
++QTimer *cyberCascadeNotifier()
++{
++    static QTimer *timer = nullptr;
++    if (timer == nullptr) {
++        timer = new QTimer(qApp);
++        timer->setSingleShot(true);
++        timer->setInterval(150);
++        // Connected before any terminal, so the settings are fresh when the terminals hear the timeout.
++        QObject::connect(timer, &QTimer::timeout, [] {
++            CyberCascadeSettings &s = cyberCascadeSettings();
++            CyberCascadeSettings fresh;
++            cyberCascadeRead(fresh);
++            if (fresh.on != s.on || fresh.lines != s.lines || fresh.stops != s.stops) {
++                fresh.generation = s.generation + 1;
++                s = fresh;
++            }
++        });
++        auto *watch = new KDirWatch(timer);
++        for (const QString &name : {QStringLiteral("konsolerc"), QStringLiteral("cyberkde/cor"), QStringLiteral("cyberkde/paleta")}) {
++            watch->addFile(cyberConfigPath(name));
++        }
++        const auto changed = [] {
++            cyberCascadeNotifier()->start();
++        };
++        QObject::connect(watch, &KDirWatch::dirty, timer, changed);
++        QObject::connect(watch, &KDirWatch::created, timer, changed);
++        QObject::connect(watch, &KDirWatch::deleted, timer, changed);
++    }
++    return timer;
++}
++
++// Shape of the plume inside the cascade band: every lane is the same hyperbola-like curve, shifted
++// right. It runs along the horizon (the bottom of the band) from the left and turns up near the bend,
++// like the jet in the reference video. h is the height above the horizon.
++struct CyberPlume {
++    float left, right, width, top, horizon, height;
++    float bend; // x where the inner edge goes vertical
++    float spread; // horizontal width of the plume (all lanes) up high
++    float k, eps; // inner edge: x = bend - k / (h + eps)
++
++    CyberPlume(const QRect &band, int textLeft, int textRight)
++    {
++        left = textLeft;
++        right = textRight;
++        width = qMax(1.0f, right - left);
++        top = band.top();
++        horizon = band.bottom();
++        height = qMax(8.0f, horizon - top);
++        bend = left + 0.6f * width;
++        spread = qMin(0.24f * width, 3.6f * height);
++        eps = 0.05f * height;
++        k = (bend - (left + 0.18f * width)) * eps;
++    }
++    float widen(float h) const
++    {
++        return 0.55f + 0.45f * qMin(1.0f, h / height);
++    }
++    float x(float h, float lane) const
++    {
++        return bend + lane * spread * widen(h) - k / (h + eps);
++    }
++    float slope(float h, float lane) const // dx/dh
++    {
++        return k / ((h + eps) * (h + eps)) + (h < height ? lane * spread * 0.45f / height : 0.0f);
++    }
++    float heightAt(float px, float lane) const // where the lane passes over px; < 0 right of it
++    {
++        const float gap = bend + lane * spread * 0.55f - px;
++        return gap > 1.0f ? qMax(0.0f, k / gap - eps) : -1.0f;
++    }
++};
++
++int cyberGlyphIndex(char32_t c)
++{
++    const int index = c < 0x10000 ? CYBER_CASCADE_GLYPHS.indexOf(QChar(char16_t(c))) : -1;
++    return index >= 0 ? index : int(c % char32_t(CYBER_CASCADE_GLYPHS.size()));
++}
++
++// Cheap per-process random numbers for the cascade (xorshift).
++float cyberRandom()
++{
++    static quint32 state = 0x9E3779B9u;
++    state ^= state << 13;
++    state ^= state >> 17;
++    state ^= state << 5;
++    return float(state & 0xFFFFFF) / float(0x1000000);
++}
++
++// CyberKDE alternative effects (konsolerc [CyberKDE] <Efeito>=true, <Efeito>Intensidade 1-100,
++// <Efeito>Cores video|tema and a few extra keys), re-read with the cascade settings.
++constexpr int CYBER_FX_FRAME_MS = 33;
++constexpr int CYBER_RAIN_LINGER_MS = 20000; // the rain keeps falling this long after the last activity
++constexpr int CYBER_RAIN_STEPS = 12; // trail gradient steps (rows of the rain atlas)
++constexpr qreal CYBER_SWEEP_MS = 1800;
++constexpr qreal CYBER_FAIL_MS = 900;
++constexpr qreal CYBER_FAIL_TEAR_MS = 180; // the torn part of the error glitch, then only a fade
++constexpr qreal CYBER_BELL_MS = 800;
++constexpr int CYBER_BELL_WIDTH = 9; // pixels of the border glow
++constexpr int CYBER_SPARKS_MAX = 160;
++const QString CYBER_RAIN_GLYPHS = QStringLiteral("ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜ0123456789:.=*+-<>|");
++
++struct CyberFxPalette {
++    QColor head, mid, tail; // rain trail and sparks, from the bright tip to the end
++    QColor line, label; // grid, sweep and HUD lines; HUD text
++    QColor alert; // bell pulse
++};
++
++struct CyberFxSettings {
++    bool rain = false, crt = false, sweep = false, grid = false, hud = false, sparks = false, fail = false, bell = false;
++    qreal rainLevel = 0.35, crtLevel = 0.3, sweepLevel = 0.4, gridLevel = 0.3, hudLevel = 0.6, sparksLevel = 0.6, failLevel = 0.6, bellLevel = 0.6;
++    int rainDensity = 50; // percent
++    bool rainUp = false; // ChuvaDirecao=subir
++    bool crtVignette = true, crtCurve = true;
++    int sweepInterval = 20; // seconds
++    int gridSize = 3; // text lines per square
++    bool hudData = true;
++    CyberFxPalette rainColors, sweepColors, gridColors, hudColors, sparksColors, bellColors;
++    int generation = 0;
++};
++
++CyberFxPalette cyberFxPalette(bool theme, const QColor &accent, const QColor &second, const QColor &warning)
++{
++    if (theme) {
++        // Accent (cyberkde cor), secondary and warning from ~/.config/cyberkde/paleta.
++        return {cyberMix(second, Qt::white, 0.65), second, accent, second, accent, warning};
++    }
++    // The cascade video: white-lavender, gold, red-orange, violet lines.
++    return {QColor(0xF4, 0xEE, 0xFC),
++            QColor(0xF0, 0xD0, 0x5C),
++            QColor(0xD8, 0x3E, 0x1C),
++            QColor(0x8C, 0x78, 0xDA),
++            QColor(0xE4, 0xA8, 0x30),
++            QColor(0xEE, 0x6C, 0x28)};
++}
++
++void cyberFxRead(CyberFxSettings &s)
++{
++    const KConfig config(QStringLiteral("konsolerc"), KConfig::SimpleConfig);
++    const KConfigGroup group(&config, QStringLiteral("CyberKDE"));
++    QFile file(cyberConfigPath(QStringLiteral("cyberkde/cor")));
++    const QColor accent = cyberHex(file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString(), QColor(0xF7, 0x50, 0x49));
++    QFile paletteFile(cyberConfigPath(QStringLiteral("cyberkde/paleta")));
++    const QJsonObject palette = paletteFile.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(paletteFile.readAll()).object() : QJsonObject();
++    const QColor second = cyberHex(palette.value(QStringLiteral("secundaria")).toString(), QColor(0x5E, 0xF6, 0xFF));
++    const QColor warning = cyberHex(palette.value(QStringLiteral("alerta")).toString(), QColor(0xF0, 0xB5, 0x37));
++
++    const auto level = [&group](const char *key, int fallback) {
++        return qBound(1, group.readEntry(key, fallback), 100) / 100.0;
++    };
++    const auto colors = [&](const char *key) {
++        return cyberFxPalette(group.readEntry(key, QStringLiteral("tema")) != QLatin1String("video"), accent, second, warning);
++    };
++    s.rain = group.readEntry("Chuva", false);
++    s.rainLevel = level("ChuvaIntensidade", 35);
++    s.rainDensity = qBound(1, group.readEntry("ChuvaDensidade", 50), 100);
++    s.rainUp = group.readEntry("ChuvaDirecao", QStringLiteral("cair")) == QLatin1String("subir");
++    s.rainColors = colors("ChuvaCores");
++    s.crt = group.readEntry("Crt", false);
++    s.crtLevel = level("CrtIntensidade", 30);
++    s.crtVignette = group.readEntry("CrtVinheta", true);
++    s.crtCurve = group.readEntry("CrtCurvatura", true);
++    s.sweep = group.readEntry("Varredura", false);
++    s.sweepLevel = level("VarreduraIntensidade", 40);
++    s.sweepInterval = qBound(5, group.readEntry("VarreduraIntervalo", 20), 600);
++    s.sweepColors = colors("VarreduraCores");
++    s.grid = group.readEntry("Grade", false);
++    s.gridLevel = level("GradeIntensidade", 30);
++    s.gridSize = qBound(1, group.readEntry("GradeTamanho", 3), 20);
++    s.gridColors = colors("GradeCores");
++    s.hud = group.readEntry("Hud", false);
++    s.hudLevel = level("HudIntensidade", 60);
++    s.hudData = group.readEntry("HudDados", true);
++    s.hudColors = colors("HudCores");
++    s.sparks = group.readEntry("Faiscas", false);
++    s.sparksLevel = level("FaiscasIntensidade", 60);
++    s.sparksColors = colors("FaiscasCores");
++    s.fail = group.readEntry("Erro", false);
++    s.failLevel = level("ErroIntensidade", 60);
++    s.bell = group.readEntry("Campainha", false);
++    s.bellLevel = level("CampainhaIntensidade", 60);
++    s.bellColors = colors("CampainhaCores");
++}
++
++CyberFxSettings &cyberFxSettings()
++{
++    static CyberFxSettings settings;
++    static bool loaded = false;
++    if (!loaded) {
++        loaded = true;
++        cyberFxRead(settings);
++        // Same debounced file watch as the cascade; connected before the terminals that use it.
++        QObject::connect(cyberCascadeNotifier(), &QTimer::timeout, [] {
++            CyberFxSettings &s = cyberFxSettings();
++            cyberFxRead(s);
++            ++s.generation;
++        });
++    }
++    return settings;
++}
++
++quint32 cyberHash(quint32 x)
++{
++    x ^= x >> 16;
++    x *= 0x7FEB352Du;
++    x ^= x >> 15;
++    x *= 0x846CA68Bu;
++    x ^= x >> 16;
++    return x;
++}
 +}
 +
  // KDE
  #include <KColorScheme>
  #include <KCursor>
-@@ -250,6 +274,13 @@ TerminalDisplay::TerminalDisplay(QWidget *parent)
+@@ -250,6 +592,34 @@ TerminalDisplay::TerminalDisplay(QWidget *parent)
      _blinkCursorTimer->setInterval(QApplication::cursorFlashTime() / 2);
      connect(_blinkCursorTimer, &QTimer::timeout, this, &Konsole::TerminalDisplay::blinkCursorEvent);
  
@@ -43,20 +376,55 @@ index c80e571..3ea4f20 100644
 +    _cyberTimer = new QTimer(this);
 +    _cyberTimer->setInterval(16);
 +    connect(_cyberTimer, &QTimer::timeout, this, &Konsole::TerminalDisplay::cyberAnimationTick);
++    // CyberKDE: data cascade, switched on and off at run time (konsolerc [CyberKDE] Cascata)
++    _cyberCascadeOn = cyberCascadeSettings().on && _cyberFactor > 0.0;
++    _cyberCascadeLines = cyberCascadeSettings().lines;
++    _cyberCascadeGen = cyberCascadeSettings().generation;
++    connect(cyberCascadeNotifier(), &QTimer::timeout, this, &Konsole::TerminalDisplay::cyberCascadeReload);
++    // CyberKDE: alternative effects (konsolerc [CyberKDE] Chuva, Crt, Varredura, Grade, Hud, Faiscas, Erro, Campainha)
++    _cyberFxTimer = new QTimer(this);
++    _cyberFxTimer->setInterval(CYBER_FX_FRAME_MS);
++    connect(_cyberFxTimer, &QTimer::timeout, this, &Konsole::TerminalDisplay::cyberFxTick);
++    _cyberSweepTimer = new QTimer(this);
++    _cyberSweepTimer->setSingleShot(true);
++    connect(_cyberSweepTimer, &QTimer::timeout, this, &Konsole::TerminalDisplay::cyberSweepBegin);
++    _cyberHudClock = new QTimer(this);
++    _cyberHudClock->setSingleShot(true);
++    connect(_cyberHudClock, &QTimer::timeout, this, [this] {
++        update(); // the HUD clock turned a minute (the HUD lives in the margins: a cheap repaint)
++        _cyberHudClock->start(60000 - int(QTime::currentTime().msecsSinceStartOfDay() % 60000));
++    });
++    cyberFxSettings();
++    connect(cyberCascadeNotifier(), &QTimer::timeout, this, &Konsole::TerminalDisplay::cyberFxReload);
++    cyberFxReload();
 +
      // hide mouse cursor on keystroke or idle
      KCursor::setAutoHideCursor(this, true);
      setMouseTracking(true);
-@@ -460,6 +491,8 @@ void TerminalDisplay::updateImage()
+@@ -460,11 +830,21 @@ void TerminalDisplay::updateImage()
      // Better control over screen resizing visual glitches
      _screenWindow->updateCurrentLine();
  
 +    bool cyberImageScrolled = false; // CyberKDE: whether _image followed the scroll
 +
++    // CyberKDE: rows leaving the top of the screen (new output pushing them up) feed the data cascade.
++    if (_cyberCascadeOn && _image != nullptr && _screenWindow->scrollCount() > 0 && _screenWindow->scrollRegion().top() == 0
++        && _screenWindow->atEndOfOutput()) {
++        cyberCascadeEmit(_image, qMin(qMin(_screenWindow->scrollCount(), CYBER_CASCADE_ROWS), _lines), _columns);
++    }
++
      // optimization - scroll the existing image where possible and
      // avoid expensive text drawing for parts of the image that
      // can simply be moved up or down
-@@ -476,6 +509,7 @@ void TerminalDisplay::updateImage()
+     // disable this shortcut for transparent konsole with scaled pixels, otherwise we get rendering artifacts, see BUG 350651
+-    if (!(WindowSystemInfo::HAVE_TRANSPARENCY && (qApp->devicePixelRatio() > 1.0)) && _wallpaper->isNull() && !_searchBar->isVisible()) {
++    // CyberKDE: nor with a layer fixed to the window under the text (it would scroll with the text).
++    if (!(WindowSystemInfo::HAVE_TRANSPARENCY && (qApp->devicePixelRatio() > 1.0)) && _wallpaper->isNull() && !_searchBar->isVisible()
++        && !cyberFxFixedBackdrop()) {
+         // if the flow control warning is enabled this will interfere with the
+         // scrolling optimizations and cause artifacts.  the simple solution here
+         // is to just disable the optimization whilst it is visible
+@@ -476,6 +856,7 @@ void TerminalDisplay::updateImage()
                  _resizeWidget->hide();
              }
              _scrollBar->scrollImage(_screenWindow->scrollCount(), _screenWindow->scrollRegion(), _image, _imageSize);
@@ -64,7 +432,7 @@ index c80e571..3ea4f20 100644
              if (viewResizeWidget) {
                  _resizeWidget->show();
              }
-@@ -515,6 +549,12 @@ void TerminalDisplay::updateImage()
+@@ -515,6 +896,16 @@ void TerminalDisplay::updateImage()
      auto dirtyMask = new char[columnsToUpdate + 2];
      QRegion dirtyRegion;
  
@@ -73,11 +441,15 @@ index c80e571..3ea4f20 100644
 +    QRegion cyberFreshRegion;
 +    const int cyberTopLine = _screenWindow->currentLine();
 +    const int cyberShift = cyberDetectShift(newimg, linesToUpdate, columnsToUpdate, columns);
++    if (_cyberCascadeOn && cyberShift > 0) {
++        // A full-screen app pushed its text up by redrawing: its top rows left the screen.
++        cyberCascadeEmit(_image, qMin(cyberShift, CYBER_CASCADE_ROWS), _columns);
++    }
 +
      for (y = 0; y < linesToUpdate; ++y) {
          const Character *currentLine = &_image[y * _columns];
          const Character *const newLine = &newimg[y * columns];
-@@ -526,11 +566,25 @@ void TerminalDisplay::updateImage()
+@@ -526,11 +917,25 @@ void TerminalDisplay::updateImage()
          // its cell boundaries
          memset(dirtyMask, 0, columnsToUpdate + 2);
  
@@ -103,7 +475,7 @@ index c80e571..3ea4f20 100644
  
          if (!_resizing) { // not while _resizing, we're expecting a paintEvent
              for (x = 0; x < columnsToUpdate; ++x) {
-@@ -593,6 +647,7 @@ void TerminalDisplay::updateImage()
+@@ -593,6 +998,7 @@ void TerminalDisplay::updateImage()
          memcpy((void *)currentLine, (const void *)newLine, columnsToUpdate * sizeof(Character));
      }
      _lineProperties = newLineProperties;
@@ -111,16 +483,39 @@ index c80e571..3ea4f20 100644
  
      // if the new _image is smaller than the previous _image, then ensure that the area
      // outside the new _image is cleared
-@@ -746,6 +801,8 @@ void TerminalDisplay::paintEvent(QPaintEvent *pe)
+@@ -695,15 +1101,19 @@ void TerminalDisplay::paintEvent(QPaintEvent *pe)
+     // Determine which characters should be repainted (1 region unit = 1 character)
+     QRegion dirtyImageRegion;
+     const QRegion region = pe->region() & contentsRect();
++    const QRect cyberCascade = cyberCascadeRect(); // CyberKDE: band of the data cascade (no text there)
+ 
+     for (const QRect &rect : region) {
+-        dirtyImageRegion += widgetToImage(rect);
++        if (!cyberCascade.contains(rect)) {
++            dirtyImageRegion += widgetToImage(rect);
++        }
+         // We can use the opacity settings only if we are in a top level window which actually supports opacity.
+         // Many apps that use a konsole part such as kate or dolphin don't for performance reasons.
+         // This will result in repaint glitches iin wayland due to missing damage information
+         const bool useOpacity = window() && window()->testAttribute(Qt::WA_TranslucentBackground);
+         _terminalPainter->drawBackground(paint, rect, _terminalColor->backgroundColor(), useOpacity);
+     }
++    cyberPaintBackdrop(paint, region); // CyberKDE: grid, rain and sweep, under the text
+ 
+     if (_displayVerticalLine) {
+         const int fontWidth = _terminalFont->fontWidth();
+@@ -746,6 +1156,10 @@ void TerminalDisplay::paintEvent(QPaintEvent *pe)
          paint.drawRect(x, y, width() - sb - 1, height() - y - 1);
      }
  
++    cyberPaintCascade(paint, region);
 +    cyberPaintCursorEffects(paint);
++    cyberPaintOverlay(paint, region);
 +
      const bool drawDimmed = _dimWhenInactive && !hasFocus();
      if (drawDimmed) {
          const QColor dimColor(0, 0, 0, _dimValue);
-@@ -889,6 +946,8 @@ void TerminalDisplay::focusOutEvent(QFocusEvent *)
+@@ -889,6 +1303,8 @@ void TerminalDisplay::focusOutEvent(QFocusEvent *)
  
      // If waiting for a triple click - losing focus cancels that (do the pending copy)
      copyToX11Selection(true);
@@ -129,17 +524,18 @@ index c80e571..3ea4f20 100644
  }
  
  void TerminalDisplay::focusInEvent(QFocusEvent *)
-@@ -902,6 +961,9 @@ void TerminalDisplay::focusInEvent(QFocusEvent *)
+@@ -902,6 +1318,10 @@ void TerminalDisplay::focusInEvent(QFocusEvent *)
      if (_allowBlinkingText && _hasTextBlinker) {
          _blinkTextTimer->start();
      }
 +
 +    update(); // CyberKDE: draw the cursor halo
 +    _cyberTimer->start(); // CyberKDE: halo breathing
++    cyberFxActivity(); // CyberKDE: the rain wakes up with the terminal
  }
  
  void TerminalDisplay::blinkTextEvent()
-@@ -937,6 +999,180 @@ void TerminalDisplay::updateCursor()
+@@ -937,6 +1357,1344 @@ void TerminalDisplay::updateCursor()
      update(cursorRect);
  }
  
@@ -211,6 +607,7 @@ index c80e571..3ea4f20 100644
 +        }
 +        _cyberRevealRegion |= region;
 +        _cyberRevealUntil = now + qint64(CYBER_REVEAL_MS * _cyberFactor);
++        cyberFxActivity();
 +    }
 +
 +    // Cursor trail: a translucent block that follows short cursor moves.
@@ -220,9 +617,18 @@ index c80e571..3ea4f20 100644
 +        const QRect newRect = imageToWidget(highdpi_adjust_rect(QRect(cursor, QSize(1, 1))));
 +        const QPoint delta = cursor - _cyberCursorLast;
 +        if (calm && _cyberCursorLast.x() >= 0 && qAbs(delta.x()) + qAbs(delta.y()) <= CYBER_TRAIL_MAX_CELLS && hasFocus()) {
++            if (_cyberTrailStart != 0) {
++                // A trail still running is replaced: erase where it was, or it stays on screen.
++                update(_cyberTrailFrom.united(_cyberTrailTo).adjusted(-CYBER_HALO, -CYBER_HALO, CYBER_HALO, CYBER_HALO));
++            }
 +            _cyberTrailFrom = oldRect;
 +            _cyberTrailTo = newRect;
 +            _cyberTrailStart = now;
++        }
++        // Sparks: only for the characters echoed by typing, not for output.
++        if (calm && delta.y() == 0 && delta.x() > 0 && delta.x() <= 4 && !fresh.isEmpty() && fresh.size() <= 8 && now - _cyberLastKey < 250
++            && _cyberCursorLast.x() >= 0 && hasFocus()) {
++            cyberSparksSpawn(newRect);
 +        }
 +        update(oldRect.adjusted(-CYBER_HALO, -CYBER_HALO, CYBER_HALO, CYBER_HALO));
 +        update(newRect.adjusted(-CYBER_HALO, -CYBER_HALO, CYBER_HALO, CYBER_HALO));
@@ -257,6 +663,15 @@ index c80e571..3ea4f20 100644
 +        } else {
 +            running = true;
 +        }
++    }
++
++    // Data cascade: move the grains and repaint its band only.
++    if (_cyberCascadeOn && (!_cyberGrains.isEmpty() || _cyberEnergy > 0.02f)) {
++        const float dt = qBound(0.001f, float(now - _cyberCascadeLast) / 1000.0f, 0.05f);
++        _cyberCascadeLast = now;
++        cyberCascadeStep(dt);
++        update(cyberCascadeRect());
++        running = true;
 +    }
 +
 +    // Breathing halo: keep repainting the cursor surroundings while the terminal has focus.
@@ -317,10 +732,1175 @@ index c80e571..3ea4f20 100644
 +    paint.restore();
 +}
 +
++QRect TerminalDisplay::cyberCascadeRect() const
++{
++    if (!_cyberCascadeOn) {
++        return {};
++    }
++    const int top = contentsRect().top() + (_headerBar->isVisible() ? _headerBar->height() : 0);
++    return QRect(QPoint(_contentRect.left() - _margin, top), QPoint(_contentRect.right() + _margin, _contentRect.top() - 1));
++}
++
++void TerminalDisplay::cyberCascadeReload()
++{
++    const CyberCascadeSettings &settings = cyberCascadeSettings();
++    if (settings.generation == _cyberCascadeGen) {
++        return;
++    }
++    _cyberCascadeGen = settings.generation;
++    _cyberAtlasKey.clear(); // the gradient may have changed
++    const bool on = settings.on && _cyberFactor > 0.0;
++    if (on != _cyberCascadeOn || settings.lines != _cyberCascadeLines) {
++        _cyberCascadeOn = on;
++        _cyberCascadeLines = settings.lines;
++        _cyberGrains.clear();
++        _cyberGrains.squeeze();
++        _cyberPool.clear();
++        _cyberEnergy = 0;
++        if (!on) {
++            _cyberAtlas = QPixmap();
++            _cyberLeaderAtlas = QPixmap();
++        }
++        // The text area shrinks or grows by the band; the program in the terminal gets the new size.
++        if (_image != nullptr) {
++            updateImageSize();
++        }
++        update();
++    }
++}
++
++void TerminalDisplay::cyberCascadeBuildAtlas()
++{
++    // Rebuilt only when the font, the terminal colors or the gradient change.
++    const QFont font = _terminalFont->getVTFont();
++    const QColor *table = _terminalColor->colorTable();
++    QList<QColor> leaderColors = {table[ColorFgIndex]};
++    for (int i = 0; i < 8; ++i) {
++        leaderColors << table[Color0Index + i] << table[Color0Index + BASE_COLORS + i];
++    }
++    QString key = font.key() + QString::number(_terminalFont->fontHeight()) + QString::number(_cyberCascadeGen);
++    for (const QColor &color : std::as_const(leaderColors)) {
++        key += color.name();
++    }
++    if (key == _cyberAtlasKey && !_cyberAtlas.isNull()) {
++        return;
++    }
++    _cyberAtlasKey = key;
++    _cyberLeaderColors = leaderColors;
++
++    const int glyphs = CYBER_CASCADE_GLYPHS.size();
++    const QList<QPair<qreal, QColor>> &stops = cyberCascadeSettings().stops;
++
++    // Tiny glyphs and fragments, one row per gradient step.
++    QFont small = font;
++    small.setPixelSize(qMax(6, qRound(_terminalFont->fontHeight() * 0.34)));
++    small.setWeight(QFont::DemiBold);
++    const QFontMetrics metrics(small);
++    // Each cell is a glyph with two fading copies above it: a streak along the flow (the fibres of the video).
++    const int glyphHeight = qMax(5, metrics.ascent() + 1);
++    _cyberCell = QSize(qMax(4, metrics.horizontalAdvance(QLatin1Char('M')) + 1), glyphHeight * 2);
++    QImage image((glyphs + CYBER_CASCADE_CHIPS) * _cyberCell.width(), CYBER_CASCADE_STEPS * _cyberCell.height(), QImage::Format_ARGB32_Premultiplied);
++    image.fill(Qt::transparent);
++    {
++        QPainter painter(&image);
++        painter.setFont(small);
++        painter.setRenderHint(QPainter::Antialiasing);
++        const qreal w = _cyberCell.width();
++        const qreal h = _cyberCell.height();
++        // Fragment shapes (in cell units): shards, a chip, a sliver, a diamond, a dot.
++        const QList<QPolygonF> chips = {QPolygonF({{0.2, 0.3}, {0.8, 0.2}, {0.5, 0.8}}),
++                                        QPolygonF({{0.15, 0.4}, {0.6, 0.15}, {0.85, 0.55}, {0.4, 0.85}}),
++                                        QPolygonF({{0.3, 0.2}, {0.75, 0.35}, {0.6, 0.8}, {0.25, 0.65}}),
++                                        QPolygonF({{0.1, 0.55}, {0.85, 0.35}, {0.9, 0.5}, {0.15, 0.7}}),
++                                        QPolygonF({{0.5, 0.15}, {0.8, 0.5}, {0.5, 0.85}, {0.2, 0.5}}),
++                                        QPolygonF({{0.35, 0.35}, {0.65, 0.35}, {0.65, 0.65}, {0.35, 0.65}})};
++        for (int row = 0; row < CYBER_CASCADE_STEPS; ++row) {
++            const QColor color = cyberGradient(stops, qreal(row) / (CYBER_CASCADE_STEPS - 1));
++            for (int i = 0; i < glyphs; ++i) {
++                const qreal gx = i * w + (w - metrics.horizontalAdvance(CYBER_CASCADE_GLYPHS[i])) / 2;
++                const qreal baseline = (row + 1) * h - 2;
++                const QString text(CYBER_CASCADE_GLYPHS[i]);
++                const QString other(CYBER_CASCADE_GLYPHS[(i * 7 + 3) % glyphs]);
++                painter.setOpacity(0.22);
++                painter.setPen(color.darker(130));
++                painter.drawText(QPointF(gx + 1, baseline - glyphHeight), other);
++                painter.setOpacity(0.5);
++                painter.drawText(QPointF(gx, baseline - glyphHeight * 0.5), text);
++                painter.setOpacity(1.0);
++                painter.setPen(color);
++                painter.drawText(QPointF(gx, baseline), text);
++            }
++            painter.setPen(Qt::NoPen);
++            painter.setBrush(color.lighter(115));
++            for (int c = 0; c < CYBER_CASCADE_CHIPS; ++c) {
++                QPolygonF shape;
++                for (const QPointF &point : chips[c]) {
++                    shape << QPointF((glyphs + c + point.x()) * w, (row + 0.5 + 0.5 * point.y()) * h);
++                }
++                painter.drawPolygon(shape);
++            }
++        }
++    }
++    _cyberAtlas = QPixmap::fromImage(image);
++
++    // Full size glyphs in the terminal colors, for the text that is just leaving.
++    _cyberLeaderCell = QSize(_terminalFont->fontWidth(), _terminalFont->fontHeight());
++    QImage leaders(glyphs * _cyberLeaderCell.width(), leaderColors.size() * _cyberLeaderCell.height(), QImage::Format_ARGB32_Premultiplied);
++    leaders.fill(Qt::transparent);
++    {
++        QPainter painter(&leaders);
++        painter.setFont(font);
++        const QFontMetrics fm(font);
++        for (int row = 0; row < leaderColors.size(); ++row) {
++            painter.setPen(leaderColors[row]);
++            for (int i = 0; i < glyphs; ++i) {
++                painter.drawText(QPointF(i * _cyberLeaderCell.width(), row * _cyberLeaderCell.height() + fm.ascent()), QString(CYBER_CASCADE_GLYPHS[i]));
++            }
++        }
++    }
++    _cyberLeaderAtlas = QPixmap::fromImage(leaders);
++}
++
++void TerminalDisplay::cyberCascadeSpawn(int glyph, float x, float delay, int leaderColor, float lane)
++{
++    if (_cyberGrains.size() >= CYBER_CASCADE_MAX) {
++        return;
++    }
++    const CyberPlume plume(cyberCascadeRect(), _contentRect.left(), _contentRect.right());
++    CyberGrain g{};
++    g.glyph = qint16(glyph);
++    g.leaderColor = qint8(leaderColor);
++    g.lane = lane;
++    g.seed = cyberRandom();
++    g.age = -delay;
++    g.speed = plume.height * (0.8f + 0.7f * cyberRandom());
++    g.bx = x;
++    g.by = plume.horizon + (leaderColor >= 0 ? _terminalFont->fontHeight() * 0.45f : 0.0f);
++    float h = plume.heightAt(x, lane);
++    if (leaderColor < 0) {
++        // Plain grain fills the plume where it shows (the bend and the wall), not the long tail.
++        const float r = cyberRandom();
++        h = plume.height * 0.4f * r * std::sqrt(r);
++    } else if (h < 0.0f) {
++        {
++            // The glyph itself rises from where it was and crumbles away.
++            g.broken = 0.0001f;
++            g.vx = 10.0f + 40.0f * cyberRandom();
++            g.vy = -(0.6f + 0.8f * cyberRandom()) * plume.height;
++            g.age = 0.0f;
++        }
++    }
++    g.h = qMax(0.0f, h);
++    g.x = g.bx;
++    g.y = g.by;
++    _cyberGrains.append(g);
++}
++
++void TerminalDisplay::cyberCascadeEmit(const Character *rows, int rowCount, int columns)
++{
++    const qint64 now = _cyberClock.elapsed();
++    // Never while the wheel is scrolling (same calm as the text reveal), nor in a hidden tab.
++    if (rowCount <= 0 || now < _cyberQuietUntil || !isVisible() || cyberCascadeRect().height() < 8) {
++        return;
++    }
++    cyberCascadeBuildAtlas();
++    const QColor *table = _terminalColor->colorTable();
++    const float fontWidth = _terminalFont->fontWidth();
++    if (_cyberPool.size() < 256) {
++        _cyberPool.reserve(256);
++    }
++    int cells = 0;
++    for (int y = 0; y < rowCount; ++y) {
++        const Character *row = &rows[y * columns];
++        for (int x = 0; x < columns; ++x) {
++            const Character &cell = row[x];
++            if (cell.isSpace() || cell.isRightHalfOfDoubleWide() || cell.character < 0x21) {
++                continue;
++            }
++            const int glyph = cyberGlyphIndex(cell.character);
++            const float px = _contentRect.left() + (x + 0.5f) * fontWidth;
++            // Nearest terminal color for the leaving glyph (true color text is approximated).
++            const QColor color = cell.foregroundColor.color(table);
++            int best = 0;
++            int bestDistance = INT_MAX;
++            for (int i = 0; i < _cyberLeaderColors.size(); ++i) {
++                const QColor &c = _cyberLeaderColors[i];
++                const int d = (c.red() - color.red()) * (c.red() - color.red()) + (c.green() - color.green()) * (c.green() - color.green())
++                    + (c.blue() - color.blue()) * (c.blue() - color.blue());
++                if (d < bestDistance) {
++                    bestDistance = d;
++                    best = i;
++                }
++            }
++            cyberCascadeSpawn(glyph, px, 0.0f, best, cyberRandom());
++            for (int k = 0; k < CYBER_CASCADE_GRAIN_PER_CELL; ++k) {
++                cyberCascadeSpawn(glyph, px + (cyberRandom() - 0.5f) * 4.0f * fontWidth, cyberRandom() * 0.9f, -1, cyberRandom());
++            }
++            const QPair<qint16, float> entry(qint16(glyph), px);
++            if (_cyberPool.size() < 256) {
++                _cyberPool.append(entry);
++            } else {
++                _cyberPool[_cyberPoolNext] = entry;
++                _cyberPoolNext = (_cyberPoolNext + 1) % 256;
++            }
++            ++cells;
++        }
++    }
++    if (cells == 0) {
++        return;
++    }
++    _cyberEnergy = qMin(_cyberEnergy + cells, 600.0f);
++    if (!_cyberTimer->isActive()) {
++        _cyberTimer->start();
++    }
++    if (_cyberGrains.size() <= cells * (CYBER_CASCADE_GRAIN_PER_CELL + 1)) {
++        _cyberCascadeLast = now; // first grains: no stale time step
++    }
++}
++
++void TerminalDisplay::cyberCascadeStep(float dt)
++{
++    if (!isVisible()) {
++        _cyberGrains.clear();
++        _cyberEnergy = 0;
++        return;
++    }
++    const QRect band = cyberCascadeRect();
++    const CyberPlume plume(band, _contentRect.left(), _contentRect.right());
++
++    // Continuous flow: recent glyphs keep feeding the plume while text is leaving, fading after it stops.
++    if (_cyberEnergy > 0.02f && !_cyberPool.isEmpty()) {
++        _cyberSpawnCarry += _cyberEnergy * dt * 3.0f;
++        const float fontWidth = _terminalFont->fontWidth();
++        while (_cyberSpawnCarry >= 1.0f) {
++            _cyberSpawnCarry -= 1.0f;
++            const auto &entry = _cyberPool[int(cyberRandom() * _cyberPool.size())];
++            cyberCascadeSpawn(entry.first, entry.second + (cyberRandom() - 0.5f) * 6.0f * fontWidth, 0.0f, -1, cyberRandom());
++        }
++        _cyberEnergy *= std::exp(-dt / 1.2f);
++    } else {
++        _cyberEnergy = 0;
++        _cyberSpawnCarry = 0;
++    }
++
++    for (int i = 0; i < _cyberGrains.size();) {
++        CyberGrain &g = _cyberGrains[i];
++        g.age += dt;
++        if (g.age < 0.0f) {
++            ++i;
++            continue;
++        }
++        bool dead;
++        if (g.broken > 0.0f) {
++            // Broken off: drifts outwards and up, fading (see cyberPaintCascade).
++            g.broken += dt;
++            g.vx += (40.0f + 60.0f * g.seed) * dt;
++            g.x += g.vx * dt;
++            g.y += g.vy * dt;
++            dead = g.broken > 0.55f + 0.7f * g.seed || g.y < plume.top - 12;
++        } else {
++            const float slope = plume.slope(g.h, g.lane);
++            // Fast along the horizon, slower as it rises.
++            const float speed = g.speed * (1.0f + 4.0f * qBound(0.0f, (plume.bend - g.x) / plume.width, 1.0f));
++            const float rise = speed * dt / std::sqrt(1.0f + slope * slope);
++            g.h += rise;
++            const float laneX = plume.x(g.h, g.lane);
++            const float laneY = plume.horizon - g.h;
++            if (g.leaderColor >= 0 && g.age < CYBER_CASCADE_BLEND) {
++                const float t = g.age / CYBER_CASCADE_BLEND;
++                const float eased = 1.0f - (1.0f - t) * (1.0f - t);
++                g.x = g.bx + (laneX - g.bx) * eased;
++                g.y = g.by + (laneY - g.by) * eased;
++            } else {
++                g.x = laneX;
++                g.y = laneY;
++            }
++            // The outer lanes disintegrate: grains break off into fragments that drift away.
++            if (g.lane > 0.55f && g.age > CYBER_CASCADE_BLEND && g.h > plume.height * (1.3f - g.lane) * (0.3f + g.seed)) {
++                const float norm = 1.0f / std::sqrt(1.0f + slope * slope);
++                g.broken = 0.0001f;
++                g.vx = speed * slope * norm * 0.5f + (20.0f + 90.0f * cyberRandom()) * g.lane;
++                g.vy = -speed * norm * 0.6f;
++            }
++            dead = g.y < plume.top - 12 || g.x > plume.right + 12;
++        }
++        if (dead) {
++            g = _cyberGrains.last();
++            _cyberGrains.removeLast();
++        } else {
++            ++i;
++        }
++    }
++}
++
++void TerminalDisplay::cyberPaintCascade(QPainter &paint, const QRegion &region)
++{
++    const QRect band = cyberCascadeRect();
++    if (band.height() < 8 || !region.intersects(band)) {
++        return;
++    }
++    const CyberPlume plume(band, _contentRect.left(), _contentRect.right());
++    const QList<QPair<qreal, QColor>> &stops = cyberCascadeSettings().stops;
++    paint.save();
++    paint.setClipRect(band);
++
++    // Horizon: a thin glowing line along the top of the text, brighter while the plume flows.
++    const qreal glow = 0.3 + 0.7 * qMin(1.0f, _cyberEnergy / 150.0f + (_cyberGrains.isEmpty() ? 0.0f : 0.3f));
++    QLinearGradient line(plume.left, 0, plume.right, 0);
++    const qreal bendAt = (plume.bend - plume.left) / plume.width;
++    QColor faint = cyberGradient(stops, 0.72);
++    faint.setAlphaF(0.0);
++    line.setColorAt(0.0, faint);
++    faint.setAlphaF(0.35 * glow);
++    line.setColorAt(bendAt * 0.4, faint);
++    QColor hot = cyberGradient(stops, 0.57);
++    hot.setAlphaF(0.95 * glow);
++    line.setColorAt(bendAt, hot);
++    QColor outer = cyberGradient(stops, 0.9);
++    outer.setAlphaF(0.0);
++    line.setColorAt(qMin(1.0, bendAt + 0.3), outer);
++    paint.fillRect(QRectF(plume.left, plume.horizon - 1, plume.width, 2), line);
++
++    if (_cyberGrains.isEmpty() || _cyberAtlas.isNull()) {
++        paint.restore();
++        return;
++    }
++
++    // Body: translucent strips along the inner lanes, the solid bands of the video under the grain.
++    // They brighten with the amount of grain in flight and vanish with it.
++    const qreal body = 0.3 * qMin(1.0, _cyberGrains.size() / 2500.0);
++    if (body > 0.01) {
++        constexpr int strips = 12;
++        constexpr int points = 24;
++        constexpr float solid = 0.62f; // lanes past this only crumble (fragments)
++        paint.setPen(Qt::NoPen);
++        paint.setCompositionMode(QPainter::CompositionMode_Plus);
++        for (int i = 0; i < strips; ++i) {
++            const float inner = solid * i / strips;
++            const float outer = solid * (i + 1) / strips;
++            QPolygonF strip;
++            for (int j = 0; j < points; ++j) {
++                const float h = 1.1f * plume.height * float(j * j) / float((points - 1) * (points - 1));
++                strip << QPointF(plume.x(h, inner), plume.horizon - h);
++            }
++            for (int j = points - 1; j >= 0; --j) {
++                const float h = 1.1f * plume.height * float(j * j) / float((points - 1) * (points - 1));
++                strip << QPointF(plume.x(h, outer), plume.horizon - h);
++            }
++            QColor color = cyberGradient(stops, (inner + outer) / 2);
++            // The innermost strip is the faint fibre edge; the last ones thin out into the fragments.
++            color.setAlphaF(body * (i == 0 ? 0.5 : i >= strips - 2 ? 0.6 : 1.0));
++            paint.setBrush(color);
++            paint.drawPolygon(strip);
++        }
++        paint.setCompositionMode(QPainter::CompositionMode_SourceOver);
++    }
++
++    QVarLengthArray<QPainter::PixmapFragment, 1024> grains;
++    QVarLengthArray<QPainter::PixmapFragment, 512> chips;
++    QVarLengthArray<QPainter::PixmapFragment, 256> leaders;
++    const qreal cw = _cyberCell.width();
++    const qreal ch = _cyberCell.height();
++    const int glyphs = CYBER_CASCADE_GLYPHS.size();
++    const quint32 frame = quint32(_cyberClock.elapsed() / 70); // flicker changes ~14 times a second
++    for (const CyberGrain &g : std::as_const(_cyberGrains)) {
++        if (g.age < 0.0f) {
++            continue;
++        }
++        const quint32 hash = (quint32(g.seed * 16777216.0f) ^ (frame * 2654435761u)) * 2246822519u;
++        const float noise = float(hash >> 8) / 16777216.0f; // 0..1, per grain and frame
++        const float flicker = 0.72f + 0.28f * noise;
++        int step = qBound(0, int(g.lane * (CYBER_CASCADE_STEPS - 1) + (g.seed - 0.5f) * 3.0f), CYBER_CASCADE_STEPS - 1);
++        if (g.broken > 0.0f) {
++            const float life = 0.55f + 0.7f * g.seed;
++            const float left = 1.0f - g.broken / life;
++            // Fragments are white-lavender to violet, the farther the darker.
++            step = qBound(CYBER_CASCADE_STEPS / 2, int((0.55f + 0.45f * (1.0f - left) + 0.1f * g.seed) * (CYBER_CASCADE_STEPS - 1)), CYBER_CASCADE_STEPS - 1);
++            const int shape = g.seed < 0.7f ? int(g.glyph) % CYBER_CASCADE_CHIPS : -1; // some stay glyphs while crumbling
++            const qreal scale = shape >= 0 ? 0.9 + 2.4 * g.seed * left : 1.0;
++            const QPainter::PixmapFragment f = QPainter::PixmapFragment::create(QPointF(g.x, g.y),
++                                                                                QRectF((shape >= 0 ? glyphs + shape : g.glyph) * cw, step * ch, cw, ch),
++                                                                                scale,
++                                                                                scale,
++                                                                                0,
++                                                                                qBound(0.0f, left * flicker, 1.0f));
++            if (shape >= 0) {
++                chips.append(f);
++            } else {
++                grains.append(f);
++            }
++            continue;
++        }
++        const float fadeIn = qMin(1.0f, g.age / 0.15f);
++        float opacity = fadeIn * flicker;
++        if (g.leaderColor >= 0 && g.age < CYBER_CASCADE_BLEND) {
++            const float t = g.age / CYBER_CASCADE_BLEND;
++            const qreal scale = 1.0 - 0.55 * t;
++            leaders.append(QPainter::PixmapFragment::create(QPointF(g.x, g.y),
++                                                            QRectF(g.glyph * _cyberLeaderCell.width(),
++                                                                   g.leaderColor * _cyberLeaderCell.height(),
++                                                                   _cyberLeaderCell.width(),
++                                                                   _cyberLeaderCell.height()),
++                                                            scale,
++                                                            scale,
++                                                            0,
++                                                            1.0 - t));
++            opacity = t * flicker;
++        }
++        grains.append(QPainter::PixmapFragment::create(QPointF(g.x, g.y), QRectF(g.glyph * cw, step * ch, cw, ch), 1, 1, 0, opacity));
++    }
++    paint.setRenderHint(QPainter::SmoothPixmapTransform, false);
++    paint.setCompositionMode(QPainter::CompositionMode_Plus); // dense grain glows, like the video
++    paint.drawPixmapFragments(grains.constData(), grains.size(), _cyberAtlas);
++    paint.setCompositionMode(QPainter::CompositionMode_SourceOver);
++    paint.setRenderHint(QPainter::SmoothPixmapTransform, true);
++    paint.drawPixmapFragments(chips.constData(), chips.size(), _cyberAtlas);
++    paint.drawPixmapFragments(leaders.constData(), leaders.size(), _cyberLeaderAtlas);
++    paint.restore();
++}
++
++/* CyberKDE alternative effects ------------------------------------------------------------------ */
++
++void TerminalDisplay::cyberCommandFailed()
++{
++    if (!cyberFxSettings().fail || _cyberFactor <= 0.0 || _screenWindow.isNull() || !isVisible()) {
++        return;
++    }
++    // The shell reports the exit code right before its next prompt: the prompt goes on the cursor line.
++    const Screen *screen = _screenWindow->screen();
++    _cyberFailLine = screen->getHistLines() + screen->getCursorY();
++    _cyberFailStart = _cyberClock.elapsed();
++    cyberFxWake();
++}
++
++void TerminalDisplay::cyberFxWake()
++{
++    if (!_cyberFxTimer->isActive()) {
++        _cyberFxLast = _cyberClock.elapsed();
++        _cyberFxTimer->start();
++    }
++}
++
++void TerminalDisplay::cyberFxActivity()
++{
++    // Output and typing keep new drops coming for a while; an idle terminal lets the rain run out and stop.
++    if (cyberFxSettings().rain && _cyberFactor > 0.0) {
++        _cyberRainUntil = _cyberClock.elapsed() + CYBER_RAIN_LINGER_MS;
++        cyberFxWake();
++    }
++}
++
++void TerminalDisplay::cyberFxReload()
++{
++    const CyberFxSettings &fx = cyberFxSettings();
++    if (fx.generation == _cyberFxGen) {
++        return;
++    }
++    _cyberFxGen = fx.generation;
++    const bool animate = _cyberFactor > 0.0;
++    _cyberStaticKey.clear();
++    _cyberScanTile = QPixmap();
++    _cyberRainKey.clear();
++    if (fx.rain && animate) {
++        cyberFxActivity(); // shows at once when switched on
++    } else {
++        _cyberDrops.clear();
++        _cyberRainUntil = 0;
++        _cyberRainAtlas = QPixmap();
++    }
++    if (!fx.sparks) {
++        _cyberSparks.clear();
++    }
++    if (!fx.fail) {
++        _cyberFailStart = 0;
++    }
++    if (!fx.bell) {
++        _cyberBellStart = 0;
++    }
++    if (fx.sweep && animate) {
++        if (!_cyberSweepTimer->isActive() && _cyberSweepStart == 0) {
++            _cyberSweepTimer->start(qMin(fx.sweepInterval, 2) * 1000); // the first pass soon after switching on
++        }
++    } else {
++        _cyberSweepTimer->stop();
++        _cyberSweepStart = 0;
++    }
++    if (fx.hud && fx.hudData) {
++        if (!_cyberHudClock->isActive()) {
++            _cyberHudClock->start(60000 - int(QTime::currentTime().msecsSinceStartOfDay() % 60000));
++        }
++    } else {
++        _cyberHudClock->stop();
++    }
++    update();
++}
++
++bool TerminalDisplay::cyberFxFixedBackdrop() const
++{
++    // Layers fixed to the window, and short accents over the text: the scroll shortcut (moving the
++    // pixels with the text) would drag them along and leave copies behind.
++    const CyberFxSettings &fx = cyberFxSettings();
++    return fx.grid || fx.crt || !_cyberDrops.isEmpty() || _cyberSweepStart != 0 || !_cyberSparks.isEmpty() || _cyberFailStart != 0;
++}
++
++QRect TerminalDisplay::cyberFxArea(bool belowCascade) const
++{
++    // The terminal surface: inside the frame, below the header bar, beside the scroll bar.
++    QRect area = contentsRect();
++    area.setTop(area.top() + (_headerBar->isVisible() ? _headerBar->height() : 0));
++    if (!_scrollBar->isHidden()) {
++        if (_scrollBar->scrollBarPosition() == Enum::ScrollBarLeft) {
++            area.setLeft(area.left() + _scrollBar->width());
++        } else if (_scrollBar->scrollBarPosition() == Enum::ScrollBarRight) {
++            area.setRight(area.right() - _scrollBar->width());
++        }
++    }
++    if (belowCascade && _cyberCascadeOn) {
++        area.setTop(_contentRect.top()); // the band above belongs to the data cascade
++    }
++    return area;
++}
++
++QRect TerminalDisplay::cyberSweepRect(qint64 now) const
++{
++    const QRect area = cyberFxArea(true);
++    const int band = 3 * _terminalFont->fontHeight();
++    const qreal t = qBound(0.0, (now - _cyberSweepStart) / (CYBER_SWEEP_MS * _cyberFactor), 1.0);
++    return QRect(area.left(), area.top() - band + qRound(t * (area.height() + band)), area.width(), band);
++}
++
++void TerminalDisplay::cyberSweepBegin()
++{
++    const CyberFxSettings &fx = cyberFxSettings();
++    if (!fx.sweep || _cyberFactor <= 0.0) {
++        return;
++    }
++    // Only in the window in use: a hidden tab, a window in the background or the wheel scrolling skip this pass.
++    if (isVisible() && (hasFocus() || window()->isActiveWindow()) && _cyberClock.elapsed() >= _cyberQuietUntil) {
++        _cyberSweepStart = _cyberClock.elapsed();
++        _cyberSweepLast = QRect();
++        cyberFxWake();
++    } else {
++        _cyberSweepTimer->start(fx.sweepInterval * 1000);
++    }
++}
++
++void TerminalDisplay::cyberBellPulse()
++{
++    // One pulse at a time, and a pause after it: a burst of bells never turns into flashing.
++    if (!cyberFxSettings().bell || _cyberFactor <= 0.0 || !isVisible() || _cyberBellStart != 0) {
++        return;
++    }
++    _cyberBellStart = _cyberClock.elapsed();
++    cyberFxWake();
++}
++
++void TerminalDisplay::cyberSparksSpawn(const QRect &cursorRect)
++{
++    const CyberFxSettings &fx = cyberFxSettings();
++    if (!fx.sparks || _cyberFactor <= 0.0) {
++        return;
++    }
++    // A few sparks from the foot of the character just typed (left of the cursor), fanning upwards.
++    const int count = 3 + qRound(6 * fx.sparksLevel);
++    const float x = cursorRect.left();
++    const float y = cursorRect.bottom() - cursorRect.height() * 0.2f;
++    for (int i = 0; i < count && _cyberSparks.size() < CYBER_SPARKS_MAX; ++i) {
++        const float angle = 3.14159265f * (1.12f + 0.76f * cyberRandom());
++        const float speed = 70.0f + 110.0f * cyberRandom();
++        CyberSpark spark;
++        spark.x = x + (cyberRandom() - 0.7f) * cursorRect.width();
++        spark.y = y;
++        spark.vx = std::cos(angle) * speed;
++        spark.vy = std::sin(angle) * speed;
++        spark.age = 0.0f;
++        spark.life = float((0.28 + 0.26 * cyberRandom()) * _cyberFactor);
++        _cyberSparks.append(spark);
++    }
++    cyberFxWake();
++}
++
++void TerminalDisplay::cyberRainStep(float dt)
++{
++    const CyberFxSettings &fx = cyberFxSettings();
++    const qint64 now = _cyberClock.elapsed();
++    const int fw = _terminalFont->fontWidth();
++    const int fh = _terminalFont->fontHeight();
++    const QRect area = cyberFxArea(true);
++
++    // New drops only while the terminal is in use (focus and recent activity).
++    if (fx.rain && now < _cyberRainUntil && hasFocus() && _columns > 0) {
++        const float target = qMax(1.0f, _columns * fx.rainDensity / 100.0f * 0.5f);
++        if (_cyberDrops.size() < target && cyberRandom() < dt * target * 1.5f) {
++            CyberDrop drop;
++            drop.column = int(cyberRandom() * _columns);
++            drop.length = 5.0f + 12.0f * cyberRandom();
++            drop.speed = 3.0f + 6.0f * cyberRandom(); // slow: an ambient flow, not a downpour
++            drop.seed = cyberHash(quint32(now) * 7919u + quint32(drop.column));
++            drop.head = fx.rainUp ? _lines + 2.0f * cyberRandom() : -2.0f * cyberRandom();
++            _cyberDrops.append(drop);
++        }
++    }
++
++    for (int i = 0; i < _cyberDrops.size();) {
++        CyberDrop &drop = _cyberDrops[i];
++        const int before = int(std::floor(drop.head));
++        drop.head += (fx.rainUp ? -drop.speed : drop.speed) * dt;
++        const int after = int(std::floor(drop.head));
++        const int length = int(std::ceil(drop.length));
++        if (before != after) {
++            // The whole trail changes when the head steps: repaint the column from the tail to the head.
++            const int first = fx.rainUp ? after : after - length - 1;
++            const int last = fx.rainUp ? after + length + 1 : after;
++            update(QRect(_contentRect.left() + int(drop.column) * fw, _contentRect.top() + first * fh, fw, (last - first + 1) * fh) & area);
++        }
++        const bool gone = fx.rainUp ? drop.head + drop.length < -1.0f : drop.head - drop.length > _lines + 1.0f;
++        if (gone) {
++            drop = _cyberDrops.last();
++            _cyberDrops.removeLast();
++        } else {
++            ++i;
++        }
++    }
++}
++
++void TerminalDisplay::cyberRainBuildAtlas()
++{
++    const QFont font = _terminalFont->getVTFont();
++    const int fw = _terminalFont->fontWidth();
++    const int fh = _terminalFont->fontHeight();
++    const QString key = font.key() + QString::number(fw) + QLatin1Char('x') + QString::number(fh) + QLatin1Char('/') + QString::number(_cyberFxGen);
++    if (key == _cyberRainKey && !_cyberRainAtlas.isNull()) {
++        return;
++    }
++    _cyberRainKey = key;
++    const CyberFxPalette &colors = cyberFxSettings().rainColors;
++    const int glyphs = CYBER_RAIN_GLYPHS.size();
++    QImage image(glyphs * fw, CYBER_RAIN_STEPS * fh, QImage::Format_ARGB32_Premultiplied);
++    image.fill(Qt::transparent);
++    {
++        QPainter painter(&image);
++        painter.setFont(font);
++        for (int row = 0; row < CYBER_RAIN_STEPS; ++row) {
++            // Bright tip, then the middle color, ending in the tail color.
++            const qreal t = qreal(row) / (CYBER_RAIN_STEPS - 1);
++            painter.setPen(t < 0.2 ? cyberMix(colors.head, colors.mid, t / 0.2) : cyberMix(colors.mid, colors.tail, (t - 0.2) / 0.8));
++            for (int i = 0; i < glyphs; ++i) {
++                const QRect cell(i * fw, row * fh, fw, fh);
++                painter.setClipRect(cell); // fallback fonts may draw wider than a cell
++                painter.drawText(cell, Qt::AlignCenter, QString(CYBER_RAIN_GLYPHS[i]));
++            }
++        }
++    }
++    _cyberRainAtlas = QPixmap::fromImage(image);
++}
++
++void TerminalDisplay::cyberFxTick()
++{
++    const CyberFxSettings &fx = cyberFxSettings();
++    const qint64 now = _cyberClock.elapsed();
++    const float dt = qBound(0.001f, float(now - _cyberFxLast) / 1000.0f, 0.1f);
++    _cyberFxLast = now;
++    const bool frozen = now < _cyberQuietUntil || !isVisible(); // the wheel is scrolling, or a hidden tab
++    const QRect area = cyberFxArea();
++    bool running = false;
++
++    if (!_cyberDrops.isEmpty() || (fx.rain && now < _cyberRainUntil && hasFocus())) {
++        if (!frozen) {
++            cyberRainStep(dt);
++        }
++        running = true;
++    }
++
++    if (_cyberSweepStart != 0) {
++        const QRect band = cyberSweepRect(now).adjusted(0, -1, 0, 1);
++        update(band.united(_cyberSweepLast));
++        _cyberSweepLast = band;
++        if (now - _cyberSweepStart >= CYBER_SWEEP_MS * _cyberFactor) {
++            _cyberSweepStart = 0;
++            _cyberSweepTimer->start(fx.sweepInterval * 1000);
++        } else {
++            running = true;
++        }
++    }
++
++    if (!_cyberSparks.isEmpty()) {
++        QRectF bounds;
++        for (int i = 0; i < _cyberSparks.size();) {
++            CyberSpark &spark = _cyberSparks[i];
++            spark.age += dt;
++            if (spark.age >= spark.life) {
++                spark = _cyberSparks.last();
++                _cyberSparks.removeLast();
++                continue;
++            }
++            spark.vy += 420.0f * dt; // gravity
++            spark.vx *= 1.0f - 2.0f * dt;
++            spark.x += spark.vx * dt;
++            spark.y += spark.vy * dt;
++            bounds |= QRectF(spark.x - 1, spark.y - 1, 2, 2);
++            ++i;
++        }
++        const QRect now = bounds.toAlignedRect().adjusted(-8, -8, 8, 8);
++        update(now.united(_cyberSparksLast));
++        _cyberSparksLast = _cyberSparks.isEmpty() ? QRect() : now;
++        running |= !_cyberSparks.isEmpty();
++    } else if (!_cyberSparksLast.isNull()) {
++        update(_cyberSparksLast);
++        _cyberSparksLast = QRect();
++    }
++
++    if (_cyberFailStart != 0 && !_screenWindow.isNull()) {
++        const int row = _cyberFailLine - _screenWindow->currentLine();
++        const int fh = _terminalFont->fontHeight();
++        update(QRect(area.left(), _contentRect.top() + row * fh - 1, area.width(), fh + 2));
++        if (now - _cyberFailStart >= CYBER_FAIL_MS * _cyberFactor) {
++            _cyberFailStart = 0;
++        } else {
++            running = true;
++        }
++    }
++
++    if (_cyberBellStart != 0) {
++        const qint64 elapsed = now - _cyberBellStart;
++        if (elapsed <= CYBER_BELL_MS * _cyberFactor + CYBER_FX_FRAME_MS) {
++            const int w = CYBER_BELL_WIDTH;
++            update(QRect(area.left(), area.top(), area.width(), w));
++            update(QRect(area.left(), area.bottom() - w + 1, area.width(), w));
++            update(QRect(area.left(), area.top(), w, area.height()));
++            update(QRect(area.right() - w + 1, area.top(), w, area.height()));
++        }
++        if (elapsed >= CYBER_BELL_MS * _cyberFactor + 700) {
++            _cyberBellStart = 0; // pause over: the next bell may pulse again
++        } else {
++            running = true;
++        }
++    }
++
++    if (!running) {
++        _cyberFxTimer->stop();
++    }
++}
++
++void TerminalDisplay::cyberPaintBackdrop(QPainter &paint, const QRegion &region)
++{
++    const CyberFxSettings &fx = cyberFxSettings();
++    if (!fx.grid && !fx.crt && _cyberDrops.isEmpty() && _cyberSweepStart == 0) {
++        return;
++    }
++    const QRect full = cyberFxArea();
++    const QRect area = cyberFxArea(true);
++    const int fw = _terminalFont->fontWidth();
++    const int fh = _terminalFont->fontHeight();
++
++    // Static layers (grid, CRT) are drawn once per size, font and settings.
++    const QString key = QStringLiteral("%1x%2+%3+%4 %5x%6 %7 %8")
++                            .arg(full.width())
++                            .arg(full.height())
++                            .arg(_contentRect.left())
++                            .arg(_contentRect.top())
++                            .arg(fw)
++                            .arg(fh)
++                            .arg(_cyberFxGen)
++                            .arg(_cyberCascadeOn);
++    if (key != _cyberStaticKey) {
++        _cyberStaticKey = key;
++        _cyberGridPixmap = QPixmap();
++        _cyberCrtPixmap = QPixmap();
++    }
++
++    const QRegion clip = region & area;
++    if (clip.isEmpty()) {
++        return;
++    }
++    paint.save();
++    paint.setClipRegion(clip);
++
++    if (fx.grid) {
++        if (_cyberGridPixmap.isNull() && !area.isEmpty()) {
++            QImage image(area.size(), QImage::Format_ARGB32_Premultiplied);
++            image.fill(Qt::transparent);
++            QPainter painter(&image);
++            // Squares on the text cells, brighter towards the bottom like a holographic floor.
++            const int stepY = qMax(8, fx.gridSize * fh);
++            const int stepX = qMax(8, qRound(qreal(stepY) / fw) * fw);
++            const int x0 = ((_contentRect.left() - area.left()) % stepX + stepX) % stepX;
++            const int y0 = ((_contentRect.top() - area.top()) % stepY + stepY) % stepY;
++            const qreal alpha = 0.22 * fx.gridLevel;
++            QColor near = fx.gridColors.line;
++            QColor far = near;
++            near.setAlphaF(alpha);
++            far.setAlphaF(alpha * 0.4);
++            QLinearGradient fade(0, 0, 0, area.height());
++            fade.setColorAt(0, far);
++            fade.setColorAt(1, near);
++            painter.setPen(QPen(QBrush(fade), 1));
++            for (int x = x0; x < area.width(); x += stepX) {
++                painter.drawLine(x, 0, x, area.height());
++            }
++            for (int y = y0; y < area.height(); y += stepY) {
++                painter.drawLine(0, y, area.width(), y);
++            }
++            // Brighter nodes on the crossings.
++            near.setAlphaF(qMin(1.0, alpha * 2.4));
++            far.setAlphaF(qMin(1.0, alpha * 0.9));
++            fade.setColorAt(0, far);
++            fade.setColorAt(1, near);
++            painter.setPen(QPen(QBrush(fade), 1));
++            for (int y = y0; y < area.height(); y += stepY) {
++                for (int x = x0; x < area.width(); x += stepX) {
++                    painter.drawLine(x - 2, y, x + 2, y);
++                    painter.drawLine(x, y - 2, x, y + 2);
++                }
++            }
++            painter.end();
++            _cyberGridPixmap = QPixmap::fromImage(image);
++        }
++        for (const QRect &rect : clip) {
++            paint.drawPixmap(rect, _cyberGridPixmap, rect.translated(-area.topLeft()));
++        }
++    }
++
++    if (!_cyberDrops.isEmpty()) {
++        cyberRainBuildAtlas();
++        QVarLengthArray<QPainter::PixmapFragment, 512> glyphs;
++        const int glyphCount = CYBER_RAIN_GLYPHS.size();
++        const quint32 tick = quint32(_cyberClock.elapsed() / 150);
++        const qreal base = 0.7 * fx.rainLevel;
++        for (const CyberDrop &drop : std::as_const(_cyberDrops)) {
++            const int head = int(std::floor(drop.head));
++            const int length = int(std::ceil(drop.length));
++            const int left = _contentRect.left() + int(drop.column) * fw;
++            const int first = fx.rainUp ? head : head - length;
++            if (!clip.intersects(QRect(left, _contentRect.top() + first * fh, fw, (length + 1) * fh))) {
++                continue;
++            }
++            for (int k = 0; k <= length; ++k) {
++                const int row = fx.rainUp ? head + k : head - k;
++                if (row < 0 || row >= _lines) {
++                    continue;
++                }
++                const qreal t = qreal(k) / (length + 1);
++                const qreal alpha = base * (k == 0 ? 1.0 : 0.8 * std::pow(1.0 - t, 1.2));
++                const int step = qMin(CYBER_RAIN_STEPS - 1, int(t * CYBER_RAIN_STEPS));
++                // Each cell keeps its glyph for a while; the tip changes faster.
++                const quint32 change = k == 0 ? tick : (tick + (drop.seed >> (k % 8))) / 6;
++                const int glyph = int(cyberHash(drop.seed ^ (quint32(row) * 2654435761u) ^ (change * 40503u)) % quint32(glyphCount));
++                glyphs.append(QPainter::PixmapFragment::create(QPointF(left + fw / 2.0, _contentRect.top() + (row + 0.5) * fh),
++                                                               QRectF(glyph * fw, step * fh, fw, fh),
++                                                               1,
++                                                               1,
++                                                               0,
++                                                               alpha));
++            }
++        }
++        paint.drawPixmapFragments(glyphs.constData(), glyphs.size(), _cyberRainAtlas);
++    }
++
++    if (_cyberSweepStart != 0) {
++        // A soft band with a brighter leading edge, lighting the background only (the text is drawn after).
++        const QRect band = cyberSweepRect(_cyberClock.elapsed());
++        const qreal alpha = 0.5 * fx.sweepLevel;
++        QColor color = fx.sweepColors.line;
++        QLinearGradient glow(0, band.top(), 0, band.bottom());
++        color.setAlphaF(0.0);
++        glow.setColorAt(0.0, color);
++        color.setAlphaF(alpha * 0.35);
++        glow.setColorAt(0.8, color);
++        color.setAlphaF(alpha);
++        glow.setColorAt(1.0, color);
++        paint.setCompositionMode(QPainter::CompositionMode_Plus);
++        paint.fillRect(band, glow);
++        color.setAlphaF(qMin(1.0, alpha * 1.8));
++        paint.fillRect(QRect(band.left(), band.bottom(), band.width(), 1), color);
++    }
++
++    paint.restore();
++}
++
++void TerminalDisplay::cyberPaintOverlay(QPainter &paint, const QRegion &region)
++{
++    const CyberFxSettings &fx = cyberFxSettings();
++    if (!fx.crt && !fx.hud && _cyberSparks.isEmpty() && _cyberFailStart == 0 && _cyberBellStart == 0) {
++        return;
++    }
++    const QRect area = cyberFxArea();
++    const QRegion clip = region & area;
++    if (clip.isEmpty()) {
++        return;
++    }
++    const qint64 now = _cyberClock.elapsed();
++    const int fw = _terminalFont->fontWidth();
++    const int fh = _terminalFont->fontHeight();
++    paint.save();
++    paint.setClipRegion(clip);
++
++    // Sparks: short glowing streaks, from the bright tip color to the tail color as they die.
++    if (!_cyberSparks.isEmpty()) {
++        paint.setRenderHint(QPainter::Antialiasing, true);
++        paint.setCompositionMode(QPainter::CompositionMode_Plus);
++        for (const CyberSpark &spark : std::as_const(_cyberSparks)) {
++            const qreal t = spark.age / spark.life;
++            QColor color = t < 0.3 ? fx.sparksColors.head : t < 0.65 ? fx.sparksColors.mid : fx.sparksColors.tail;
++            color.setAlphaF(qBound(0.0, fx.sparksLevel * (1.0 - t * t), 1.0));
++            paint.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap));
++            paint.drawLine(QPointF(spark.x, spark.y), QPointF(spark.x - spark.vx * 0.045, spark.y - spark.vy * 0.045));
++        }
++        paint.setCompositionMode(QPainter::CompositionMode_SourceOver);
++        paint.setRenderHint(QPainter::Antialiasing, false);
++    }
++
++    // Error glitch: the prompt after a failed command is torn for a moment, then keeps a fading red mark.
++    if (_cyberFailStart != 0 && !_screenWindow.isNull()) {
++        const int row = _cyberFailLine - _screenWindow->currentLine();
++        if (row >= 0 && row < _lines) {
++            const QRect line(_contentRect.left(), _contentRect.top() + row * fh, _columns * fw, fh);
++            const qreal elapsed = now - _cyberFailStart;
++            const qreal t = qBound(0.0, elapsed / (CYBER_FAIL_MS * _cyberFactor), 1.0);
++            const QColor red = _terminalColor->colorTable()[3]; // ANSI red (table: 0 fg, 1 bg, 2..9 colors 0-7)
++            QColor cyan = _terminalColor->cursorColor();
++            if (!cyan.isValid()) {
++                cyan = fx.sparksColors.mid;
++            }
++            if (elapsed < CYBER_FAIL_TEAR_MS * _cyberFactor) {
++                // Two quick states of translucent red and cyan slices; the text underneath never moves.
++                const quint32 phase = elapsed < CYBER_FAIL_TEAR_MS * _cyberFactor / 2 ? 1 : 2;
++                paint.setCompositionMode(QPainter::CompositionMode_Plus);
++                for (quint32 i = 0; i < 7; ++i) {
++                    const quint32 h = cyberHash(quint32(_cyberFailStart) * 31u + phase * 977u + i * 7u);
++                    const int cells = 2 + int(h % 16);
++                    const int x = line.left() + int((h >> 8) % quint32(qMax(1, _columns))) * fw - fw;
++                    const int y = line.top() + int((h >> 16) % quint32(qMax(1, fh - 3)));
++                    QColor color = i % 3 == 2 ? cyan : red;
++                    color.setAlphaF(0.45 * fx.failLevel);
++                    paint.fillRect(QRect(x, y, cells * fw, 2 + int(h >> 28) % 4), color);
++                }
++                paint.setCompositionMode(QPainter::CompositionMode_SourceOver);
++            }
++            const qreal fade = (1.0 - t) * (1.0 - t);
++            QColor mark = red;
++            mark.setAlphaF(qMin(1.0, 0.95 * fx.failLevel * fade));
++            paint.fillRect(QRect(qMax(area.left() + 1, line.left() - qMin(_margin, 7)), line.top() + 1, 3, fh - 2), mark);
++            const qreal reach = 1.0 - std::pow(1.0 - qMin(1.0, t * 2.5), 3.0);
++            mark.setAlphaF(0.75 * fx.failLevel * fade);
++            paint.fillRect(QRectF(line.left(), line.bottom(), line.width() * reach, 1), mark);
++        }
++    }
++
++    // CRT: fine scanlines over everything, a vignette and curved dark corners.
++    if (fx.crt) {
++        if (_cyberScanTile.isNull()) {
++            QImage tile(64, 48, QImage::Format_ARGB32_Premultiplied);
++            tile.fill(Qt::transparent);
++            QPainter painter(&tile);
++            for (int y = 2; y < tile.height(); y += 3) {
++                painter.fillRect(0, y, tile.width(), 1, QColor(0, 0, 0, qRound(255 * qMin(1.0, 0.5 * fx.crtLevel))));
++            }
++            painter.end();
++            _cyberScanTile = QPixmap::fromImage(tile);
++        }
++        for (const QRect &rect : clip) {
++            paint.drawTiledPixmap(rect, _cyberScanTile, QPoint((rect.x() - area.x()) % 64, (rect.y() - area.y()) % 48));
++        }
++        if ((fx.crtVignette || fx.crtCurve) && _cyberCrtPixmap.isNull() && !area.isEmpty()) {
++            QImage image(area.size(), QImage::Format_ARGB32_Premultiplied);
++            image.fill(Qt::transparent);
++            QPainter painter(&image);
++            painter.setRenderHint(QPainter::Antialiasing);
++            const QRectF local(0, 0, area.width(), area.height());
++            if (fx.crtVignette) {
++                // Elliptic: untouched in the middle, darker towards the corners.
++                QRadialGradient vignette(QPointF(0, 0), 1.0);
++                vignette.setColorAt(0.0, Qt::transparent);
++                vignette.setColorAt(0.62, Qt::transparent);
++                vignette.setColorAt(1.0, QColor(0, 0, 0, qRound(255 * qMin(1.0, 0.85 * fx.crtLevel))));
++                QBrush brush(vignette);
++                brush.setTransform(QTransform::fromScale(local.width() / 2 * 1.4142, local.height() / 2 * 1.4142)
++                                   * QTransform::fromTranslate(local.width() / 2, local.height() / 2));
++                painter.fillRect(local, brush);
++            }
++            if (fx.crtCurve) {
++                // Rounded glass: dark corners and a faint highlight along the edge of the tube.
++                const qreal radius = qBound(10.0, qMin(local.width(), local.height()) / 22.0, 28.0);
++                QPainterPath outside;
++                outside.addRect(local);
++                QPainterPath glass;
++                glass.addRoundedRect(local.adjusted(1, 1, -1, -1), radius, radius);
++                painter.fillPath(outside.subtracted(glass), QColor(0, 0, 0, 235));
++                painter.setPen(QPen(QColor(255, 255, 255, qRound(40 * fx.crtLevel)), 1));
++                painter.setBrush(Qt::NoBrush);
++                painter.drawRoundedRect(local.adjusted(1.5, 1.5, -1.5, -1.5), radius, radius);
++            }
++            painter.end();
++            _cyberCrtPixmap = QPixmap::fromImage(image);
++        }
++        if (!_cyberCrtPixmap.isNull()) {
++            for (const QRect &rect : clip) {
++                paint.drawPixmap(rect, _cyberCrtPixmap, rect.translated(-area.topLeft()));
++            }
++        }
++    }
++
++    if (fx.hud && !area.isEmpty()) {
++        const QString key = QStringLiteral("%1x%2+%3+%4 %5x%6 %7 %8x%9 ")
++                                .arg(area.width())
++                                .arg(area.height())
++                                .arg(_contentRect.left() - area.left())
++                                .arg(_contentRect.top() - area.top())
++                                .arg(fw)
++                                .arg(fh)
++                                .arg(_cyberFxGen)
++                                .arg(_columns)
++                                .arg(_lines)
++            + QTime::currentTime().toString(QStringLiteral("HH:mm"));
++        if (key != _cyberHudKey || _cyberHudPixmap.isNull()) {
++            _cyberHudKey = key;
++            QImage image(area.size(), QImage::Format_ARGB32_Premultiplied);
++            image.fill(Qt::transparent);
++            QPainter painter(&image);
++            painter.translate(-area.topLeft());
++            cyberPaintHud(painter, area);
++            painter.end();
++            _cyberHudPixmap = QPixmap::fromImage(image);
++        }
++        // It lives in the margins: skip the text area, where most repaints happen.
++        const QRegion margins = clip - QRect(_contentRect.left(), _contentRect.top(), _columns * fw, _lines * fh);
++        for (const QRect &rect : margins) {
++            paint.drawPixmap(rect, _cyberHudPixmap, rect.translated(-area.topLeft()));
++        }
++    }
++
++    // Bell: one soft glow along the border in the alert color, rising fast and fading out.
++    if (_cyberBellStart != 0) {
++        const qreal t = (now - _cyberBellStart) / (CYBER_BELL_MS * _cyberFactor);
++        if (t < 1.0) {
++            const qreal rise = qMin(1.0, t / 0.12);
++            const qreal envelope = t < 0.12 ? rise * rise * (3 - 2 * rise) : std::pow(1.0 - (t - 0.12) / 0.88, 2.0);
++            paint.setBrush(Qt::NoBrush);
++            for (int i = 0; i < CYBER_BELL_WIDTH; ++i) {
++                QColor color = fx.bellColors.alert;
++                color.setAlphaF(qBound(0.0, 0.8 * fx.bellLevel * envelope * std::pow(1.0 - qreal(i) / CYBER_BELL_WIDTH, 2.0), 1.0));
++                paint.setPen(QPen(color, 1));
++                paint.drawRect(area.adjusted(i, i, -i - 1, -i - 1));
++            }
++        }
++    }
++
++    paint.restore();
++}
++
++void TerminalDisplay::cyberPaintHud(QPainter &paint, const QRect &area)
++{
++    // Corner brackets, rulers and a few data labels, all in the margins around the text.
++    const CyberFxSettings &fx = cyberFxSettings();
++    const int fw = _terminalFont->fontWidth();
++    const int fh = _terminalFont->fontHeight();
++    QColor line = fx.hudColors.line;
++    line.setAlphaF(qMin(1.0, 0.2 + 0.6 * fx.hudLevel));
++    QColor faint = line;
++    faint.setAlphaF(line.alphaF() * 0.4);
++    QColor label = fx.hudColors.label;
++    label.setAlphaF(qMin(1.0, 0.25 + 0.65 * fx.hudLevel));
++
++    const QRect box = area.adjusted(2, 2, -3, -3);
++    const int arm = qBound(8, qMin(box.width(), box.height()) / 10, 28);
++    paint.setRenderHint(QPainter::Antialiasing, false);
++    paint.setPen(QPen(line, 1));
++    paint.drawLine(box.topLeft(), box.topLeft() + QPoint(arm, 0));
++    paint.drawLine(box.topLeft(), box.topLeft() + QPoint(0, arm));
++    paint.drawLine(box.topRight(), box.topRight() - QPoint(arm, 0));
++    paint.drawLine(box.topRight(), box.topRight() + QPoint(0, arm));
++    paint.drawLine(box.bottomLeft(), box.bottomLeft() + QPoint(arm, 0));
++    paint.drawLine(box.bottomLeft(), box.bottomLeft() - QPoint(0, arm));
++    paint.drawLine(box.bottomRight(), box.bottomRight() - QPoint(arm, 0));
++    paint.drawLine(box.bottomRight(), box.bottomRight() - QPoint(0, arm));
++    for (const QPoint &corner : {box.topLeft(), box.topRight() - QPoint(1, 0), box.bottomLeft() - QPoint(0, 1), box.bottomRight() - QPoint(1, 1)}) {
++        paint.fillRect(QRect(corner, QSize(2, 2)), label);
++    }
++
++    const int topRoom = _contentRect.top() - area.top();
++    const int leftRoom = _contentRect.left() - area.left();
++    const int textBottom = _contentRect.top() + _lines * fh;
++    const int bottomRoom = area.bottom() + 1 - textBottom;
++    // Rulers: a tick every 10 columns on the top edge and every 5 lines on the left one.
++    paint.setPen(QPen(faint, 1));
++    if (topRoom >= 6) {
++        for (int c = 10; c < _columns; c += 10) {
++            const int x = _contentRect.left() + c * fw;
++            if (x > box.left() + arm && x < box.right() - arm) {
++                paint.drawLine(x, box.top(), x, box.top() + (c % 50 == 0 ? 3 : 1));
++            }
++        }
++    }
++    if (leftRoom >= 6) {
++        for (int l = 5; l < _lines; l += 5) {
++            const int y = _contentRect.top() + l * fh;
++            if (y > box.top() + arm && y < box.bottom() - arm) {
++                paint.drawLine(box.left(), y, box.left() + (l % 25 == 0 ? 3 : 1), y);
++            }
++        }
++    }
++
++    if (!fx.hudData) {
++        return;
++    }
++    QFont small = _terminalFont->getVTFont();
++    // With the data cascade on, the top margin is its band: the labels stay along its upper edge.
++    const int labelRoom = qMin(_cyberCascadeOn ? qMax(_margin, 10) : topRoom, bottomRoom);
++    small.setPixelSize(qBound(6, labelRoom - 3, 9));
++    small.setCapitalization(QFont::AllUppercase);
++    small.setLetterSpacing(QFont::PercentageSpacing, 112);
++    small.setWeight(QFont::DemiBold);
++    paint.setFont(small);
++    const QFontMetrics metrics(small);
++    const auto row = [&](int top, int room, const QString &left, const QString &right) {
++        if (room < 8) {
++            return;
++        }
++        const int baseline = top + (room + metrics.capHeight()) / 2;
++        const int leftX = box.left() + arm + 6;
++        const int rightX = box.right() - arm - 6 - metrics.horizontalAdvance(right);
++        const int leftEnd = leftX + metrics.horizontalAdvance(left);
++        paint.setPen(label);
++        paint.drawText(leftX, baseline, left);
++        paint.drawText(rightX, baseline, right);
++        // A thin line joining the labels, like the frames of the reference HUD.
++        if (rightX - leftEnd > 40) {
++            paint.fillRect(QRect(leftEnd + 8, baseline - metrics.capHeight() / 2, rightX - leftEnd - 16, 1), faint);
++        }
++    };
++    row(area.top(),
++        _cyberCascadeOn ? qMin(topRoom, qMax(_margin, 10)) : topRoom,
++        QStringLiteral("CyberKDE//tty"),
++        QStringLiteral("%1×%2").arg(_columns).arg(_lines));
++    const QString sessionLabel = session() ? QStringLiteral("ses %1 // link").arg(session()->sessionId(), 2, 10, QLatin1Char('0')) : QStringLiteral("link");
++    row(textBottom, bottomRoom, sessionLabel, QTime::currentTime().toString(QStringLiteral("HH:mm")));
++}
++
  /* ------------------------------------------------------------------------- */
  /*                                                                           */
  /*                          Geometry & Resizing                              */
-@@ -1677,6 +1913,7 @@ void TerminalDisplay::wheelEvent(QWheelEvent *ev)
+@@ -1056,6 +2814,10 @@ void TerminalDisplay::calcGeometry()
+     }
+ 
+     _contentRect.setTop(_contentRect.top() + headerHeight);
++    // CyberKDE: the data cascade gets a band of its own above the text, so it never covers it.
++    if (_cyberCascadeOn) {
++        _contentRect.setTop(_contentRect.top() + qMin(_cyberCascadeLines * _terminalFont->fontHeight(), _contentRect.height() / 3));
++    }
+ 
+     int fontWidth = _terminalFont->fontWidth();
+ 
+@@ -1079,7 +2841,7 @@ void TerminalDisplay::setSize(int columns, int lines)
+ {
+     const int scrollBarWidth = _scrollBar->isHidden() ? 0 : _scrollBar->sizeHint().width();
+     const int horizontalMargin = _margin * 2;
+-    const int verticalMargin = _margin * 2;
++    const int verticalMargin = _margin * 2 + (_cyberCascadeOn ? _cyberCascadeLines * _terminalFont->fontHeight() : 0);
+ 
+     QSize newSize = QSize(horizontalMargin + scrollBarWidth + (columns * _terminalFont->fontWidth()), verticalMargin + (lines * _terminalFont->fontHeight()));
+ 
+@@ -1677,6 +3439,7 @@ void TerminalDisplay::wheelEvent(QWheelEvent *ev)
  {
      static QElapsedTimer enable_zoom_timer;
      static bool enable_zoom = true;
@@ -328,21 +1908,39 @@ index c80e571..3ea4f20 100644
      // Only vertical scrolling is supported
      if (qAbs(ev->angleDelta().y()) < qAbs(ev->angleDelta().x())) {
          return;
+@@ -2630,6 +4393,7 @@ void TerminalDisplay::updateReadOnlyState(bool readonly)
+ 
+ void TerminalDisplay::keyPressEvent(QKeyEvent *event)
+ {
++    _cyberLastKey = _cyberClock.elapsed(); // CyberKDE: sparks follow typing only
+     Screen *screen = screenWindow()->screen();
+     int histLines = screen->getHistLines();
+     bool moved = true;
+@@ -2944,6 +4708,7 @@ void TerminalDisplay::contextMenuEvent(QContextMenuEvent *event)
+ void TerminalDisplay::bell(const QString &message)
+ {
+     _bell.bell(this, message, hasFocus());
++    cyberBellPulse();
+ }
+ 
+ /* --------------------------------------------------------------------- */
 diff --git a/src/terminalDisplay/TerminalDisplay.h b/src/terminalDisplay/TerminalDisplay.h
-index 4725730..3e0a37c 100644
+index 4725730..05dedd3 100644
 --- a/src/terminalDisplay/TerminalDisplay.h
 +++ b/src/terminalDisplay/TerminalDisplay.h
-@@ -30,6 +30,9 @@ class QDrag;
+@@ -30,6 +30,11 @@ class QDrag;
  class QDragEnterEvent;
  class QDropEvent;
  class QLabel;
 +#include <QElapsedTimer>
 +#include <QHash>
++#include <QPixmap>
++#include <QVector>
 +
  class QTimer;
  class QEvent;
  class QVBoxLayout;
-@@ -329,6 +332,12 @@ public:
+@@ -329,6 +334,18 @@ public:
          return _cursorBlinking;
      }
  
@@ -352,10 +1950,16 @@ index 4725730..3e0a37c 100644
 +     */
 +    qreal cyberRevealProgress(int x, int y) const;
 +
++    /**
++     * CyberKDE: the shell reported a failed command (OSC 133;D;<non-zero exit code>).
++     * Plays the error glitch on the prompt line that follows (konsolerc [CyberKDE] Erro=true).
++     */
++    void cyberCommandFailed();
++
      bool textBlinking() const
      {
          return _textBlinking;
-@@ -827,6 +836,25 @@ private:
+@@ -827,6 +844,119 @@ private:
      UBiDi *ubidi = nullptr;
      QPoint _visualCursorPosition = {0, 0};
  
@@ -377,6 +1981,100 @@ index 4725730..3e0a37c 100644
 +    QRect _cyberTrailFrom;
 +    QRect _cyberTrailTo;
 +    qint64 _cyberTrailStart = 0;
++
++    // CyberKDE: data cascade. Text leaving the top of the screen dissolves into a plume of tiny
++    // glyphs drawn in a band reserved above the text (konsolerc [CyberKDE] Cascata=true).
++    struct CyberGrain {
++        float x, y; // current position (widget pixels, glyph center)
++        float bx, by; // birth position: leaders blend from here into their lane
++        float h; // height above the horizon along the lane
++        float lane; // 0 inner edge .. 1 outer edge
++        float speed; // pixels per second along the lane
++        float age; // seconds; negative while waiting to be born
++        float broken; // seconds since it broke off the plume (0 = still in it)
++        float seed; // 0..1, fixed per grain
++        float vx, vy; // velocity once broken off
++        qint16 glyph;
++        qint8 leaderColor; // row in the leader atlas; -1 for plain grain
++    };
++    void cyberCascadeReload();
++    void cyberCascadeEmit(const Character *rows, int rowCount, int columns);
++    void cyberCascadeSpawn(int glyph, float x, float delay, int leaderColor, float lane);
++    void cyberCascadeStep(float dt);
++    void cyberCascadeBuildAtlas();
++    void cyberPaintCascade(QPainter &paint, const QRegion &region);
++    QRect cyberCascadeRect() const;
++    bool _cyberCascadeOn = false;
++    int _cyberCascadeLines = 5; // band height in text lines
++    int _cyberCascadeGen = -1; // settings generation already applied
++    QVector<CyberGrain> _cyberGrains;
++    QVector<QPair<qint16, float>> _cyberPool; // recent glyphs that left (glyph, x) feeding the flow
++    int _cyberPoolNext = 0;
++    float _cyberEnergy = 0; // flow strength, decays while no text leaves
++    qint64 _cyberCascadeLast = 0; // clock of the last cascade step
++    QPixmap _cyberAtlas; // tiny glyphs and fragments, one row per gradient step
++    QPixmap _cyberLeaderAtlas; // full size glyphs in the terminal colors
++    QSize _cyberCell; // cell of _cyberAtlas
++    QSize _cyberLeaderCell; // cell of _cyberLeaderAtlas
++    QVector<QColor> _cyberLeaderColors;
++    QString _cyberAtlasKey; // font, colors and gradient the atlases were drawn with
++    float _cyberSpawnCarry = 0; // fraction of a grain left from the last step
++
++    // CyberKDE: alternative effects, each switched on by its own key in konsolerc [CyberKDE]:
++    // Chuva (data rain behind the text), Crt (scanlines, vignette, curved corners), Varredura (scan
++    // line passing now and then), Grade (holographic grid), Hud (corner brackets and data in the
++    // margins), Faiscas (sparks when typing), Erro (glitch on the prompt after a failed command) and
++    // Campainha (border pulse on the bell). Background effects are painted under the text, the
++    // others in the margins or as short accents; nothing runs while the terminal is idle.
++    struct CyberDrop {
++        float column; // text column
++        float head; // row of the head (fractional)
++        float speed; // rows per second
++        float length; // trail length in rows
++        quint32 seed;
++    };
++    struct CyberSpark {
++        float x, y, vx, vy; // widget pixels, pixels per second
++        float age, life; // seconds
++    };
++    void cyberFxReload();
++    void cyberFxTick();
++    void cyberFxWake();
++    void cyberFxActivity();
++    void cyberSweepBegin();
++    void cyberBellPulse();
++    void cyberSparksSpawn(const QRect &cursorRect);
++    void cyberRainStep(float dt);
++    void cyberRainBuildAtlas();
++    bool cyberFxFixedBackdrop() const;
++    QRect cyberFxArea(bool belowCascade = false) const;
++    QRect cyberSweepRect(qint64 now) const;
++    void cyberPaintBackdrop(QPainter &paint, const QRegion &region);
++    void cyberPaintOverlay(QPainter &paint, const QRegion &region);
++    void cyberPaintHud(QPainter &paint, const QRect &area);
++    QTimer *_cyberFxTimer = nullptr; // frames of the rain, sweep, sparks, glitch and bell pulse
++    QTimer *_cyberSweepTimer = nullptr; // single shot: the next sweep
++    QTimer *_cyberHudClock = nullptr; // single shot: the next minute of the HUD clock
++    int _cyberFxGen = -1; // settings generation already applied
++    qint64 _cyberFxLast = 0; // clock of the last effect step
++    qint64 _cyberLastKey = -100000; // last key press (sparks only follow typing)
++    QVector<CyberDrop> _cyberDrops;
++    qint64 _cyberRainUntil = 0; // new drops keep coming until then (activity in the terminal)
++    QPixmap _cyberRainAtlas; // rain glyphs, one row per step of the trail gradient
++    QString _cyberRainKey;
++    qint64 _cyberSweepStart = 0; // 0 = no sweep passing
++    QRect _cyberSweepLast;
++    QVector<CyberSpark> _cyberSparks;
++    QRect _cyberSparksLast;
++    qint64 _cyberFailStart = 0; // 0 = no error glitch
++    int _cyberFailLine = -1; // absolute line of the prompt after the failed command
++    qint64 _cyberBellStart = 0; // 0 = no bell pulse
++    QPixmap _cyberGridPixmap; // static layers, rebuilt on resize or settings change
++    QPixmap _cyberCrtPixmap;
++    QPixmap _cyberScanTile;
++    QString _cyberStaticKey; // size, font and settings the static layers were drawn for
++    QPixmap _cyberHudPixmap; // the HUD, redrawn when its data (size, minute) changes
++    QString _cyberHudKey;
 +
      int _selModeModifiers;
      bool _selModeByModifiers; // Selection started by Shift+Arrow

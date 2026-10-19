@@ -31,6 +31,7 @@ Item {
             case "left": return leftC
             case "right": return rightC
             case "warn": return warnC
+            case "check": return checkC
             case "lock": return lockC
             case "user": return userC
             case "session": return sessionC
@@ -166,6 +167,19 @@ Item {
         }
     }
 
+    Component {
+        id: checkC
+        Shape {
+            antialiasing: true
+            ShapePath {
+                strokeColor: root.color; strokeWidth: root.lineWidth * 1.15; fillColor: "transparent"
+                joinStyle: ShapePath.MiterJoin; capStyle: ShapePath.FlatCap
+                startX: root.p(2.5); startY: root.p(9.5)
+                PathLine { x: root.p(7); y: root.p(14) }
+                PathLine { x: root.p(15.5); y: root.p(4) }
+            }
+        }
+    }
     Component {
         id: warnC
         Shape {

@@ -24,6 +24,14 @@ Item {
     readonly property var sessions: sessionModel
     readonly property var kbd: typeof keyboard !== "undefined" ? keyboard : null
 
+    // Opções do efeito "login" (cyberkde efeito login): vêm do Opcoes.qml que a fase grava no tema;
+    // são propriedades para as prévias poderem trocar.
+    property string entrada: Opcoes.entrada     // completa | curta | fatias | nenhuma
+    property string painel: Opcoes.painel       // centro | esquerda
+    property bool sucesso: Opcoes.sucesso       // "ACESSO CONCEDIDO" antes de sair
+    readonly property bool esquerda: painel === "esquerda"
+    readonly property bool fatias: entrada === "fatias" && montagem.ativa  // sem GPU: entrada completa
+
     property real t: 0
     property bool leaving: false
 
@@ -40,8 +48,12 @@ Item {
 
     Component.onCompleted: {
         CK.factor = factor
-        if (previewT < 0)
-            intro.start()
+        if (previewT < 0) {
+            if (entrada === "nenhuma" || factor <= 0)
+                t = CK.introTotal
+            else
+                intro.start()
+        }
         panel.focusInput()
     }
     onPreviewTChanged: {
@@ -57,8 +69,15 @@ Item {
         property: "t"
         from: 0
         to: CK.introTotal
-        duration: CK.introTotal * root.factor
+        duration: CK.introTotal * root.factor * (root.entrada === "curta" ? 0.5 : 1)
         onFinished: panel.focusInput()
+    }
+
+    // Sucesso: a confirmação aparece (≤200 ms) e só então a tela começa a sair.
+    Timer {
+        id: leaveTimer
+        interval: 200
+        onTriggered: root.leaving = true
     }
 
     // O SDDM às vezes só ativa a janela depois de mostrada; reforça o foco (mesmo truque do Breeze).
@@ -137,11 +156,15 @@ Item {
         // da borda direita até caber, com 40 px de folga na borda da tela.
         ClockBlock {
             id: clock
-            anchors.right: divider.left
+            anchors.right: root.esquerda ? undefined : divider.left
+            anchors.left: root.esquerda ? divider.right : undefined
             anchors.rightMargin: 56
-            anchors.verticalCenter: panel.verticalCenter
-            transformOrigin: Item.Right
-            scale: Math.min(1, Math.max(0, divider.x - 56 - 40) / Math.max(1, implicitWidth))
+            anchors.leftMargin: 56
+            anchors.verticalCenter: painelBox.verticalCenter
+            transformOrigin: root.esquerda ? Item.Left : Item.Right
+            scale: root.esquerda
+                   ? Math.min(1, Math.max(0, stage.width - (divider.x + divider.width) - 56 - 40) / Math.max(1, implicitWidth))
+                   : Math.min(1, Math.max(0, divider.x - 56 - 40) / Math.max(1, implicitWidth))
             t: root.t
             fixedDate: root.previewDate
             visible: String(config.showClock) !== "false"
@@ -149,11 +172,13 @@ Item {
 
             Item {
                 id: divider
-                anchors.right: panel.left
-                anchors.rightMargin: 56
+                anchors.right: root.esquerda ? undefined : painelBox.left
+                anchors.left: root.esquerda ? painelBox.right : undefined
+                anchors.rightMargin: 56 - painelBox.folga
+                anchors.leftMargin: 56 - painelBox.folga
                 width: 9
                 height: panel.height + 120
-                anchors.verticalCenter: panel.verticalCenter
+                anchors.verticalCenter: painelBox.verticalCenter
                 opacity: CK.ramp(root.t, 40, 200)
                 Rectangle { x: 4; width: 1; height: parent.height * CK.ramp(root.t, 40, 280); color: CK.line }
                 Rectangle { width: 9; height: 1; color: CK.red }
@@ -170,13 +195,28 @@ Item {
                 }
             }
 
-            LoginPanel {
-                id: panel
-                anchors.centerIn: parent
+            // Caixa com folga em volta do painel (a aba e o halo saem dele): é o que a Montagem fatia.
+            Item {
+                id: painelBox
+                readonly property int folga: 30
+                width: panel.width + 2 * folga
+                height: panel.height + 2 * folga
+                // centro exato, ou à esquerda (lista e detalhe: painel à esquerda, relógio à direita)
+                anchors.horizontalCenter: root.esquerda ? undefined : parent.horizontalCenter
+                anchors.left: root.esquerda ? parent.left : undefined
+                anchors.leftMargin: Math.round(parent.width * 0.11) - folga
+                anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -8
                 focus: true
+
+            LoginPanel {
+                id: panel
+                x: painelBox.folga
+                y: painelBox.folga
+                focus: true
                 mode: "login"
-                t: root.t
+                // na entrada "fatias" o painel já está pronto e quem o apresenta é a Montagem
+                t: root.fatias ? 100000 : root.t
                 userModel: root.users
                 userIndex: root.users && root.users.lastIndex >= 0 ? root.users.lastIndex : 0
                 sessionModel: root.sessions
@@ -184,6 +224,13 @@ Item {
                 capsLock: root.kbd ? !!root.kbd.capsLock : false
                 onSubmit: (user, password, session) => sddm.login(user, password, session)
             }
+            }
+
+        Montagem {
+            id: montagem
+            alvo: painelBox
+            t: root.fatias ? root.t / CK.introTotal : 1
+        }
 
         // ajuda e teclado
         Reveal {
@@ -247,7 +294,12 @@ Item {
         }
         function onLoginSucceeded() {
             // O SDDM encerra a tela a qualquer momento depois disso; a saída é só um fade curto.
-            root.leaving = true
+            if (root.sucesso) {
+                panel.concedido()
+                leaveTimer.start()
+            } else {
+                root.leaving = true
+            }
         }
         function onInformationMessage(message) {
             panel.info(message)

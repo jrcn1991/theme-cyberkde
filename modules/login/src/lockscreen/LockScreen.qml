@@ -39,11 +39,22 @@ Item {
     property bool noPassword: false
     property real t: 0
 
+    // Opções do efeito "login" (valem também aqui): Opcoes.qml gravado pela fase login-bloqueio.
+    property string entrada: Opcoes.entrada     // completa | curta | fatias | nenhuma
+    property string painel: Opcoes.painel       // centro | esquerda
+    property bool sucesso: Opcoes.sucesso
+    readonly property bool esquerda: painel === "esquerda"
+    readonly property bool fatias: entrada === "fatias" && montagem.ativa  // sem GPU: entrada completa
+
     Component.onCompleted: {
         CK.factor = factor
         panel.password = Qt.binding(() => PasswordSync.password)
-        if (previewT < 0)
-            intro.start()
+        if (previewT < 0) {
+            if (entrada === "nenhuma" || factor <= 0)
+                t = CK.introTotal
+            else
+                intro.start()
+        }
         panel.focusInput()
         Qt.callLater(() => authenticator.startAuthenticating())
     }
@@ -66,8 +77,15 @@ Item {
         property: "t"
         from: 0
         to: CK.introTotal
-        duration: CK.introTotal * 0.75 * root.factor
+        duration: CK.introTotal * 0.75 * root.factor * (root.entrada === "curta" ? 0.5 : 1)
         onFinished: panel.focusInput()
+    }
+
+    // Sucesso: mostra "ACESSO CONCEDIDO" por 200 ms e só então desbloqueia.
+    Timer {
+        id: quitTimer
+        interval: 200
+        onTriggered: Qt.quit()
     }
 
     Binding {
@@ -86,7 +104,12 @@ Item {
         }
         function onSucceeded() {
             if (authenticator.hadPrompt) {
-                Qt.quit()
+                if (root.sucesso) {
+                    panel.concedido()
+                    quitTimer.start()
+                } else {
+                    Qt.quit()
+                }
             } else {
                 root.noPassword = true
                 panel.busy = false
@@ -173,12 +196,16 @@ Item {
 
     // Painel no centro exato; divisor e relógio ancorados à esquerda dele (mesma composição do login).
     ClockBlock {
-        anchors.right: divider.left
+        anchors.right: root.esquerda ? undefined : divider.left
+        anchors.left: root.esquerda ? divider.right : undefined
         anchors.rightMargin: 56
-        anchors.verticalCenter: panel.verticalCenter
-        // telas estreitas: encolhe até caber à esquerda do painel (40 px de folga na borda)
-        transformOrigin: Item.Right
-        scale: Math.min(1, Math.max(0, divider.x - 56 - 40) / Math.max(1, implicitWidth))
+        anchors.leftMargin: 56
+        anchors.verticalCenter: painelBox.verticalCenter
+        // telas estreitas: encolhe até caber ao lado do painel (40 px de folga na borda)
+        transformOrigin: root.esquerda ? Item.Left : Item.Right
+        scale: root.esquerda
+               ? Math.min(1, Math.max(0, root.width - (divider.x + divider.width) - 56 - 40) / Math.max(1, implicitWidth))
+               : Math.min(1, Math.max(0, divider.x - 56 - 40) / Math.max(1, implicitWidth))
         t: root.t
         fixedDate: root.previewDate
         visible: root.showClock
@@ -186,11 +213,13 @@ Item {
 
         Item {
             id: divider
-            anchors.right: panel.left
-            anchors.rightMargin: 56
+            anchors.right: root.esquerda ? undefined : painelBox.left
+            anchors.left: root.esquerda ? painelBox.right : undefined
+            anchors.rightMargin: 56 - painelBox.folga
+            anchors.leftMargin: 56 - painelBox.folga
             width: 9
             height: panel.height + 120
-            anchors.verticalCenter: panel.verticalCenter
+            anchors.verticalCenter: painelBox.verticalCenter
             visible: root.showClock
             opacity: CK.ramp(root.t, 40, 200)
             Rectangle { x: 4; width: 1; height: parent.height * CK.ramp(root.t, 40, 280); color: CK.line }
@@ -208,13 +237,26 @@ Item {
             }
         }
 
-        LoginPanel {
-            id: panel
-            anchors.centerIn: parent
+        // Caixa com folga em volta do painel (a aba e o halo saem dele): é o que a Montagem fatia.
+        Item {
+            id: painelBox
+            readonly property int folga: 30
+            width: panel.width + 2 * folga
+            height: panel.height + 2 * folga
+            anchors.horizontalCenter: root.esquerda ? undefined : parent.horizontalCenter
+            anchors.left: root.esquerda ? parent.left : undefined
+            anchors.leftMargin: Math.round(parent.width * 0.11) - folga
+            anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: -8
             focus: true
+
+        LoginPanel {
+            id: panel
+            x: painelBox.folga
+            y: painelBox.folga
+            focus: true
             mode: "lock"
-            t: root.t
+            t: root.fatias ? 100000 : root.t
             lockUserName: kscreenlocker_userName
             lockAvatar: kscreenlocker_userImage
                         ? "file://" + kscreenlocker_userImage.split("/").map(encodeURIComponent).join("/") : ""
@@ -226,6 +268,13 @@ Item {
                     authenticator.respond(password)
             }
         }
+        }
+
+    Montagem {
+        id: montagem
+        alvo: painelBox
+        t: root.fatias ? root.t / CK.introTotal : 1
+    }
 
     Reveal {
         t: root.t; start: 500

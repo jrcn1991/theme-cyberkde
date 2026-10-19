@@ -7,7 +7,9 @@
 # fixada por digest). Compila a MESMA versão do app que o Ubuntu distribui, com o patch de <app>/*.patch,
 # em /opt/cyberkde-<app>, e empacota como "cyberkde-<app>" (não substitui o app do sistema: o tema troca
 # só o atalho e o comando, e o "off" devolve os originais). Assim ninguém compila nada no próprio PC.
-# Saída: cyberkde-<app>_<versão>-cyberkde1_amd64.deb e o .sha256 ao lado.
+# Saída: cyberkde-<app>_<versão>-cyberkde<N>_amd64.deb e o .sha256 ao lado. N vem de <app>/REVISAO:
+# suba esse número quando o patch do app mudar (efeito novo), para o "cyberkde animados" atualizar quem
+# tem o pacote anterior. Depois do CI: SHA-256 no "apps_debs" de scripts/cyberkde (marcador lá).
 
 set -euo pipefail
 
@@ -42,7 +44,8 @@ cmake --build "$work/build"
 DESTDIR="$work/pkg" cmake --install "$work/build" >/dev/null
 echo "$version" >"$work/pkg$prefix/.cyberkde-version"
 
-pkgver="$version-cyberkde1"
+revisao=$(tr -cd '0-9' <"$project/$app/REVISAO" 2>/dev/null || true)
+pkgver="$version-cyberkde${revisao:-1}"
 mkdir -p "$work/pkg/DEBIAN"
 # Só o app do sistema como dependência: ele traz as bibliotecas de que o binário precisa. Sem versão
 # exata, para não travar as atualizações do Ubuntu; o tema confere a versão antes de usar o pacote.

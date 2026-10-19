@@ -28,3 +28,5 @@ modules/plasma/generator/preview.py
 # cópias das configurações originais e histórico do antigo repositório privado
 backups/
 latte/
+# análises internas do design_cyberpunk (privado)
+docs/interno/

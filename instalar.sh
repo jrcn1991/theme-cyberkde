@@ -7,6 +7,8 @@
 #   ./instalar.sh --sem-latte  não instala o Latte Dock (a dock fica um painel do Plasma)
 #   ./instalar.sh --sem-animados  não instala o Dolphin e o Konsole animados
 #
+# Põe também o "Painel do CyberKDE" no menu de aplicativos (fica lá com o tema desligado).
+#
 # Antes de tudo, confere os pré-requisitos e os problemas conhecidos ("cyberkde checar") e diz como
 # corrigir cada um. O programa vai para ~/.local/opt/cyberkde e o comando para ~/.local/bin/cyberkde.
 # Depois disso esta pasta pode ser apagada. Para remover tudo: ./desinstalar.sh (ou "cyberkde uninstall").
@@ -143,6 +145,28 @@ if (( animados )) && "$dest/scripts/cyberkde" animados --disponivel; then
   esac
 fi
 
+# --- Lançador do painel ---------------------------------------------------------------------------
+# "Painel do CyberKDE" no menu de aplicativos. Fica FORA do registro do tema (ledger/files.tsv): o
+# "cyberkde off" não o tira, porque o painel tem de continuar no menu com o tema desligado — é por ele
+# que se liga o tema. Quem remove é o "cyberkde uninstall". O modelo vem do painel (app/): @APP@ vira
+# a pasta app/ instalada. O nome do arquivo tem de ser cyberkde-painel.desktop: é o desktopFileName do
+# painel, e sem ele o Wayland não acha o ícone nem o nome da janela.
+modelo="$dest/app/cyberkde-painel.desktop"
+lancador="${XDG_DATA_HOME:-$HOME/.local/share}/applications/cyberkde-painel.desktop"
+if [[ -f $modelo ]]; then
+  mkdir -p -- "$(dirname -- "$lancador")"
+  # Sem as linhas de comentário do modelo (instruções para quem instala) e com @APP@ trocado.
+  sed -e '/^#/d' -e "s|@APP@|$dest/app|g" "$modelo" >"$lancador.novo"
+  mv -f -- "$lancador.novo" "$lancador"
+  # O painel precisa do PyQt6 e de módulos QML do Qt 6; o tema funciona sem ele. Só avisa, com a linha
+  # do apt (o "cyberkde checar" acima já mostrou o mesmo).
+  if ! falta_painel=$("$dest/scripts/cyberkde" painel --checar 2>/dev/null); then
+    avisos+=("O painel gráfico precisa de pacotes que faltam. Para usar o painel: $falta_painel")
+  fi
+else
+  avisos+=("Esta versão não traz o painel gráfico (app/cyberkde-painel.desktop); use os comandos.")
+fi
+
 # --- Arquivos do tema -----------------------------------------------------------------------------
 echo "Gerando e instalando os arquivos do tema (pode levar um minuto)…"
 "$dest/scripts/cyberkde" install
@@ -150,7 +174,7 @@ echo "Gerando e instalando os arquivos do tema (pode levar um minuto)…"
 echo
 if (( atualizacao )); then echo "CyberKDE atualizado em $dest."; else echo "CyberKDE instalado em $dest."; fi
 for a in "${avisos[@]}"; do echo "Aviso: $a"; done
-ligado=$("$dest/scripts/cyberkde" status --json | grep -q '"ligado":true' && echo 1 || echo 0)
+ligado=$("$dest/scripts/cyberkde" status --json | grep -q '^{"ligado":true' && echo 1 || echo 0)
 # Sem ~/.local/bin no PATH ainda, as instruções usam o caminho completo.
 cmd=cyberkde
 case ":$PATH:" in *":$bin_dir:"*) ;; *) cmd=$link ;; esac

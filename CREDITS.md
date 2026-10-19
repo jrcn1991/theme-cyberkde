@@ -42,3 +42,11 @@ The CyberKDE icon theme inherits **Breeze Dark** (© KDE, LGPL-3.0) for every ic
 The app icons for Konsole, Microsoft Edge and Obsidian are original reinterpretations in the CyberKDE style, made so the panel matches the theme. *Microsoft Edge* is a trademark of Microsoft Corporation and *Obsidian* is a trademark of Dynalist Inc.; they are used only to name the apps these icons stand in for, with no affiliation or endorsement.
 
 *Cyberpunk 2077* is a trademark of CD PROJEKT S.A. This is an independent fan project, not affiliated with or endorsed by CD PROJEKT. KDE and Plasma are trademarks of KDE e.V.
+
+## Corporation logos — trademarks, not licensed
+
+The corporation logos in `assets/corporacoes/` (Arasaka, Biotechnica, Delamain, Dynalar, Kang Tao, Kiroshi, Militech, NetWatch, Night Corp, Petrochem, Segotari, Trauma Team and Zetatech) are trademarks of CD PROJEKT RED (*Cyberpunk 2077*) and/or R. Talsorian Games (*Cyberpunk RED*, *Cyberpunk 2020*). They are included as a non-profit fan tribute, so that `cyberkde corp` can show each corporation's mark, and are **not** covered by the GPL or CC BY-SA licenses of this project. The source of each file and how it was vectorized are listed in [assets/corporacoes/FONTES.md](assets/corporacoes/FONTES.md). Moore Tech has no logo in the theme and uses the theme's own blocks. The older provisional emblems are kept in `assets/corporacoes/genericos/`.
+
+## README media
+
+The animations in `assets/readme/` are recordings of the theme itself: the desktop captures come from a virtual KWin session (`kwin_wayland --virtual`) with the theme applied by `cyberkde corp`, the panel was recorded offscreen with its own QML, and the grids are made from the previews in `assets/previas/`. The transitions between desktop captures are composited in the style of the panel's glitch transition.

@@ -2,6 +2,8 @@
 # dicas, notificações) + efeito KWin "cyberkde_popups" (popups, menus e notificações animados).
 # Carregado com `source` pelo scripts/cyberkde: só define funções e registra nomes.
 CYBERKDE_PHASES+=(plasma)
+descreve_fase plasma "Plasma" sistema nao "Painel, menus, dicas e notificações do tema, com popups animados." \
+  "Plasma" "Theme panel, menus, tooltips and notifications, with animated popups."
 CYBERKDE_INSTALLS+=(install_plasma)
 CYBERKDE_OFF_HOOKS+=(off_plasma)
 
@@ -66,10 +68,10 @@ plasma_restart_latte() {
     pkill -9 -x latte-dock-ng 2>/dev/null || true
     # 9>&-: por garantia. Quem cria o processo aqui é o systemd, que não herda os nossos
     # descritores, mas se algum dia isto virar um spawn direto a trava vazaria (ver sem_travas).
-    if [[ $unit == *.service ]] && systemd-run --user --quiet --unit="${unit%.service}" "$bin" >/dev/null 2>&1 9>&-; then
+    if [[ $unit == *.service ]] && systemd-run --user --quiet --unit="${unit%.service}" "$bin" >/dev/null 2>&1 3>&- 4>&- 9>&-; then
       :
     elif ! systemctl --user start "$autostart" 2>/dev/null; then
-      systemd-run --user --quiet --collect --unit="latte-dock-ng-$(date +%s)" "$bin" >/dev/null 2>&1 9>&- || true
+      systemd-run --user --quiet --collect --unit="latte-dock-ng-$(date +%s)" "$bin" >/dev/null 2>&1 3>&- 4>&- 9>&- || true
     fi
   fi
   # Dois reinícios cruzados deixariam dois docks: fica só o mais novo.

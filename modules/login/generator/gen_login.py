@@ -10,6 +10,13 @@ Saídas (em modules/login/build/, sempre recriadas):
 
 O código-fonte são os QML de modules/login/src/. Aqui só se gera o singleton CK.qml (cores, medidas e
 tempos vindos dos tokens), o fundo de reserva e os metadados, e se monta cada pacote.
+
+Uso: gen_login.py [--fundo IMAGEM]
+  --fundo  fundo do login, bloqueio e splash. A fase login passa o papel de parede em uso (efeito login
+           --fundo papel), na versão de login da opção escolhida, inclusive a da corporação
+           (login-corp.png). Essa imagem já sai do módulo papeis-de-parede na cor e na paleta certas, e é
+           usada como está. Sem a opção: assets/wallpapers/login.png recolorido pelo destaque, ou o fundo
+           de reserva gerado.
 """
 import json
 import os
@@ -79,7 +86,7 @@ def ck_qml():
         "red": RED, "cyan": CYAN, "base": BASE, "panel": PANEL, "raised": RAISED, "input": INPUT,
         "txt1": TXT1, "txt2": TXT2, "txtd": TXTD, "textOnRed": ONRED, "line": LINE,  # "onX" seria sinal no QML
         "controlLine": CONTROL_LINE, "gold": GOLD, "green": GREEN,
-        "danger": DANGER,  # erro de senha: sempre vermelho, qualquer que seja a cor de destaque
+        "danger": ALERTA,  # erro de senha: a cor de alerta da paleta (vermelho, se nada foi escolhido)
     }
     ints = {
         "chamferSmall": g["chamferSmall"],
@@ -105,7 +112,7 @@ def ck_qml():
     lines += [f"    readonly property int {k}: {v}" for k, v in ints.items()]
     lines += [f"    readonly property real {k}: {v}" for k, v in reals.items()]
     lines += [f'    readonly property string {k}: "{v}"' for k, v in strings.items()]
-    marks = "false" if WALLPAPER.is_file() else "true"
+    marks = "false" if (WALLPAPER.is_file() or FUNDO is not None) else "true"
     lines += [
         "    // Brackets e réguas desenhados por cima do fundo: só no fundo de reserva (o papel de parede já os tem).",
         f"    readonly property bool backdropMarks: {marks}",
@@ -198,6 +205,30 @@ def fallback_background(dst, w=1920, h=1080):
     img.convert("RGB").save(dst, optimize=True)
 
 
+# Opções dos efeitos "splash" e "login" (cyberkde efeito ...). Aqui só os padrões; a fase login (e o
+# install, para o splash) regrava o Opcoes.qml de cada cópia com a escolha (login_opcoes_qml no phase.sh).
+OPCOES_PADRAO = {"splash": "curto", "entrada": "completa", "painel": "centro", "sucesso": True,
+                 "logoNoFundo": False}
+
+
+def opcoes_qml(o=OPCOES_PADRAO):
+    return "\n".join([
+        "// Opções dos efeitos splash e login. Padrões do gen_login.py; a fase login regrava esta cópia.",
+        "pragma Singleton",
+        "import QtQuick",
+        "",
+        "QtObject {",
+        f'    readonly property string splash: "{o["splash"]}"',
+        f'    readonly property string entrada: "{o["entrada"]}"',
+        f'    readonly property string painel: "{o["painel"]}"',
+        f'    readonly property bool sucesso: {"true" if o["sucesso"] else "false"}',
+        "    // o fundo já traz o logo (papel da corporação): o splash não desenha o dele",
+        f'    readonly property bool logoNoFundo: {"true" if o["logoNoFundo"] else "false"}',
+        "}",
+        "",
+    ])
+
+
 def components_into(dst):
     dst.mkdir(parents=True, exist_ok=True)
     names = []
@@ -205,7 +236,9 @@ def components_into(dst):
         shutil.copyfile(f, dst / f.name)
         names.append(f.stem)
     (dst / "CK.qml").write_text(ck_qml())
-    qmldir = ["# GERADO por modules/login/generator/gen_login.py", "singleton CK 1.0 CK.qml"]
+    (dst / "Opcoes.qml").write_text(opcoes_qml())
+    qmldir = ["# GERADO por modules/login/generator/gen_login.py", "singleton CK 1.0 CK.qml",
+              "singleton Opcoes 1.0 Opcoes.qml"]
     qmldir += [f"{n} 1.0 {n}.qml" for n in names]
     (dst / "qmldir").write_text("\n".join(qmldir) + "\n")
 
@@ -216,13 +249,28 @@ def publish_modes(top):
         os.chmod(p, 0o755 if p.is_dir() else 0o644)
 
 
+FUNDO = None  # --fundo (ver o topo do arquivo)
+
+
 def main():
+    global FUNDO
+    args = sys.argv[1:]
+    if "--fundo" in args:
+        i = args.index("--fundo")
+        caminho = pathlib.Path(args[i + 1]) if i + 1 < len(args) else None
+        if caminho is not None and caminho.is_file():
+            FUNDO = caminho
+        else:
+            print(f"login: --fundo sem imagem válida ({caminho}); fica o fundo do login", file=sys.stderr)
     if BUILD.exists():
         shutil.rmtree(BUILD)
     BUILD.mkdir(parents=True)
 
     bg = BUILD / "background.png"
-    if WALLPAPER.is_file():
+    if FUNDO is not None:
+        shutil.copyfile(FUNDO, bg)  # papel em uso, já na cor/paleta certa (módulo papeis-de-parede)
+        origin = f"papel de parede em uso {FUNDO}"
+    elif WALLPAPER.is_file():
         shutil.copyfile(accented(WALLPAPER), bg)  # brackets na cor de destaque ("cyberkde cor")
         origin = f"papel de parede {WALLPAPER.relative_to(ROOT)}"
     else:

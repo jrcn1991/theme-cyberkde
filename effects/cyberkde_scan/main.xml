@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Chaves que o efeito lê de kwinrc [Effect-cyberkde_scan] (o KWin só entrega ao readConfig o que
+     está declarado aqui). Instalado em contents/config/main.xml. -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="">
+    <!-- id de variantes.json, ou "nenhuma" -->
+    <entry name="AbrirVariante" type="String">
+      <default>scan</default>
+    </entry>
+    <!-- vazio = a mesma de abrir -->
+    <entry name="FecharVariante" type="String">
+      <default></default>
+    </entry>
+    <!-- ms; -1 = a duração da variante no catálogo -->
+    <entry name="OpenDuration" type="Int">
+      <default>-1</default>
+    </entry>
+    <entry name="CloseDuration" type="Int">
+      <default>-1</default>
+    </entry>
+    <!-- "primeira vez": id de variantes.json (ou "nenhuma") usado só na primeira janela de cada app
+         (windowClass) desde que o efeito foi carregado, isto é, a cada sessão -->
+    <entry name="PrimeiraVezVariante" type="String">
+      <default>nenhuma</default>
+    </entry>
+    <!-- ms; -1 = 1,6 × a duração de abrir da variante, no máximo 700 -->
+    <entry name="PrimeiraVezDuration" type="Int">
+      <default>-1</default>
+    </entry>
+    <!-- 0 a 100: força dos acentos (glitch, brilho, deslocamentos) -->
+    <entry name="Intensidade" type="Int">
+      <default>60</default>
+    </entry>
+  </group>
+</kcfg>

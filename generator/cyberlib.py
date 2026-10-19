@@ -24,17 +24,45 @@ def mix(fg, bg, a):
     return hexc([b[i] + (f[i] - b[i]) * a for i in range(3)])
 
 
+PREFS = pathlib.Path(os.environ.get("XDG_CONFIG_HOME") or pathlib.Path.home() / ".config") / "cyberkde"
+
+
+def _hex(value):
+    """"#RRGGBB" em maiúsculas, ou "" se o valor não for uma cor."""
+    value = str(value or "").strip().lstrip("#")
+    if len(value) == 6 and all(c in "0123456789abcdefABCDEF" for c in value):
+        return "#" + value.upper()
+    return ""
+
+
 def _accent():
     """Cor de destaque: CYBERKDE_COR, ou ~/.config/cyberkde/cor (gravado por "cyberkde cor"), ou o
     vermelho do documento. Valor inválido cai no padrão."""
     value = os.environ.get("CYBERKDE_COR", "")
     if not value:
-        saved = pathlib.Path(os.environ.get("XDG_CONFIG_HOME") or pathlib.Path.home() / ".config") / "cyberkde" / "cor"
+        saved = PREFS / "cor"
         value = saved.read_text() if saved.is_file() else ""
-    value = value.strip().lstrip("#")
-    if len(value) == 6 and all(c in "0123456789abcdefABCDEF" for c in value):
-        return "#" + value.upper()
-    return TOK["reference"]["red"]
+    return _hex(value) or TOK["reference"]["red"]
+
+
+def _paleta():
+    """Secundária, alerta e fundo da corporação ("cyberkde corp", tokens/corporacoes.json):
+    CYBERKDE_COR2, CYBERKDE_ALERTA e CYBERKDE_FUNDO, ou ~/.config/cyberkde/paleta (JSON com as chaves
+    "secundaria", "alerta" e "fundo"), ou os do documento. Valor ausente ou inválido cai no padrão,
+    então sem nada configurado o tema sai igual ao de sempre."""
+    saved = {}
+    try:
+        saved = json.loads((PREFS / "paleta").read_text())
+    except (OSError, ValueError):
+        pass
+    if not isinstance(saved, dict):
+        saved = {}
+
+    def pega(env, chave, padrao):
+        return _hex(os.environ.get(env, "")) or _hex(saved.get(chave)) or padrao
+    ref = TOK["reference"]
+    return (pega("CYBERKDE_COR2", "secundaria", ref["cyan"]), pega("CYBERKDE_ALERTA", "alerta", ref["red"]),
+            pega("CYBERKDE_FUNDO", "fundo", ref["darkestBlue"]))
 
 
 MIN_CONTRASTE = 4.5  # WCAG AA para texto normal
@@ -68,16 +96,53 @@ def _legivel(cor):
     return ajustada  # branco passa nos dois
 
 
+def _tingir(fundo):
+    """Leva as superfícies escuras (e o que é desenhado nelas: filete neutro, texto sobre o destaque,
+    contorno de controle) para o matiz do fundo da corporação. Desloca cada uma pela diferença entre o
+    fundo pedido e o #0E0E17 do documento: é um matiz sutil, a luminosidade quase não muda. Se o
+    texto secundário perdesse contraste sobre a superfície mais clara, o deslocamento cai pela metade
+    até voltar (o fundo é só um tom; a leitura vem antes). Grava em TOK, para quem lê os tokens direto.
+    Devolve a função que desloca uma cor (a identidade com o fundo padrão: aí nada muda)."""
+    ref = TOK["reference"]["darkestBlue"]
+    if fundo.upper() == ref.upper():
+        return lambda c: c
+    delta = [f - b for f, b in zip(rgb(fundo), rgb(ref))]
+    alvo = contraste(TOK["text"]["secondary"], TOK["surface"]["raised"])
+    for _ in range(6):
+        if contraste(TOK["text"]["secondary"], hexc([v + d for v, d in zip(rgb(TOK["surface"]["raised"]), delta)])) >= alvo * 0.95:
+            break
+        delta = [d / 2 for d in delta]
+
+    def mover(c):
+        return hexc([v + d for v, d in zip(rgb(c), delta)])
+    for k, v in TOK["surface"].items():
+        TOK["surface"][k] = mover(v)
+    TOK["line"]["neutral"] = mover(TOK["line"]["neutral"])
+    TOK["text"]["onRed"] = mover(TOK["text"]["onRed"])
+    TOK["reference"]["darkestBlue"] = mover(ref)
+    return mover
+
+
+# Paleta da corporação: aplicada nos tokens ANTES de derivar as cores abaixo (o _legivel mede contra a
+# superfície já tingida). Com a paleta padrão nada aqui muda.
+SECUNDARIA_PEDIDA, ALERTA_PEDIDO, FUNDO = _paleta()
+_no_fundo = _tingir(FUNDO)
+
 # Metadados comuns a todos os pacotes do tema (loja do KDE, SDDM, Aurorae, Kvantum, efeitos…).
 AUTHOR = "Rafael Neves"
 LICENSE = "GPL-3.0-or-later"
 WEBSITE = "https://github.com/jrcn1991/theme-cyberkde"
 VERSION = "1.0"
 
-DANGER = TOK["reference"]["red"]  # erros e vermelho ANSI: sempre vermelho, qualquer que seja o destaque
+DANGER = TOK["reference"]["red"]  # vermelho ANSI do terminal: sempre vermelho, qualquer que seja a paleta
 RED_PEDIDO = _accent()            # o que foi pedido em "cyberkde cor"
 RED = _legivel(RED_PEDIDO)        # o mesmo tom, clareado se não lesse sobre o tema
-CYAN = TOK["reference"]["cyan"]
+# Alerta (erros na interface: fechar janela, senha errada, texto "negativo"): o da corporação. Na
+# Arasaka o destaque já é vermelho, e o alerta laranja não se confunde com ele.
+ALERTA = _legivel(ALERTA_PEDIDO)
+# Secundária: o ciano do tema inteiro (foco, dados, links, cursor), trocado pela da corporação.
+CYAN = _legivel(SECUNDARIA_PEDIDA)
+TOK["reference"]["cyan"] = TOK["focus"]["ring"] = CYAN
 WHITE = TOK["reference"]["white"]
 BASE = TOK["surface"]["base"]
 PANEL = TOK["surface"]["panel"]
@@ -88,7 +153,10 @@ TXT1 = TOK["text"]["primary"]
 TXT2 = TOK["text"]["secondary"]
 TXTD = TOK["text"]["disabled"]
 ONRED = TOK["text"]["onRed"]
-ONSEL = TOK["text"]["onSelection"]
+# Texto sobre a seleção (fundo = destaque). Branco, como no documento, enquanto ler (3:1, o mínimo
+# para controles; o vermelho padrão dá 3,4:1); com destaque claro (amarelo, verde, prata: 1,1 a 1,6:1)
+# o branco some, e vale o texto escuro, o mesmo que já vai sobre o destaque nos botões.
+ONSEL = TOK["text"]["onSelection"] if contraste(TOK["text"]["onSelection"], RED) >= 3 else ONRED
 LINE = TOK["line"]["neutral"]
 BRAND = TOK["line"]["brandOpacity"]
 HOV = TOK["fill"]["hoverOpacity"]
@@ -97,7 +165,7 @@ PRS = TOK["fill"]["pressedOpacity"]
 GOLD = TOK["secondary"]["gold"]
 GREEN = TOK["secondary"]["green"]
 VISITED = "#B46CFA"  # violeta publicado clareado para ler sobre fundo escuro
-CONTROL_LINE = "#6B6B7B"  # contorno de controle com contraste >= 3:1 sobre panel
+CONTROL_LINE = _no_fundo("#6B6B7B")  # contorno de controle com contraste >= 3:1 sobre panel
 RED_LIGHT = mix(WHITE, RED, 0.18)
 CH = TOK["geometry"]
 
@@ -320,3 +388,91 @@ def chamfered(w, h, c, fill, border, bw=1.0, x=0, y=0):
     outer, labels = outline(x, y, x + w, y + h, {"br": c})
     inner = offset_polygon(outer, labels, lambda _: bw) if border else outer
     return lambda ox, oy: "".join(shape_svg(outer, inner, fill, border, ox, oy))
+
+
+# ---------------------------------------------------------------- estilo de interface
+# Opções de forma dos geradores (docs/interno/catalogo-interface.md), escolhidas com "cyberkde efeito
+# estilo-*" (modules/estilo). Ficam em ~/.config/cyberkde/estilo (JSON plano: {"selecao": "bloco", ...});
+# CYBERKDE_ESTILO_<CHAVE> (ex.: CYBERKDE_ESTILO_SELECAO=bloco) vale por cima, para testes. Chave ausente
+# ou valor inválido = o primeiro valor da lista, que é o desenho de sempre: sem nada configurado, a
+# saída dos geradores é idêntica à de antes das opções.
+ESTILO_VALORES = {
+    "selecao": ("marcador", "bloco", "colchetes", "sublinhado"),  # V17 seleção em listas e menus
+    "brilho": ("off", "suave", "neon"),                            # V4 sombra da janela ativa e dos popups
+    "corte": ("canto", "oposto", "topo", "octogono", "reto"),       # V1 cantos chanfrados
+    "tamanho": ("padrao", "pequeno", "largo"),                     # V1 tamanho dos chanfros
+    "densidade": ("padrao", "compacto", "espacoso"),               # V32 margens e espaçamentos
+    "abas": ("moldura", "sublinhada", "bloco", "cartao"),          # V10
+    "progresso": ("segmentada", "hachurada", "pontos", "lisa"),    # V24 (Kvantum e Plasma)
+    "marcador": ("cheio", "parcial", "topo", "nenhum"),            # V3 faixa de identidade
+    "moldura": ("contorno", "cantoneira", "misto"),                # V2 popups, dicas e grupos
+    "foco": ("anel", "cantoneira", "grosso"),                      # V34 anel de foco
+    "pecas": ("breeze", "cyberkde"),                               # chave, slider, marcas e ocupado do Plasma
+    "textura": ("lisa", "grade", "scanline"),                      # V30 fundo do Konsole e dos popups
+    "textura_onde": ("ambos", "konsole", "popups"),
+    "konsole_abas": ("padrao", "tecnico"),                         # V21 título das abas do Konsole
+    "dica": ("chanfro", "faixa", "marcador", "cantoneira"),        # V28
+    "campos": ("caixa", "sublinhado", "bloco"),                    # V15 campos de texto
+    "atencao": ("dourado", "laranja"),                             # V33 cores de estado
+    "sucesso": ("verde", "ciano"),
+    "perigo": ("alerta", "magenta", "vermelho"),
+}
+
+
+def _estilo():
+    """(valores resolvidos, chaves definidas pela pessoa)."""
+    salvo = {}
+    try:
+        salvo = json.loads((PREFS / "estilo").read_text())
+    except (OSError, ValueError):
+        pass
+    if not isinstance(salvo, dict):
+        salvo = {}
+    valores, definidas = {}, set()
+    for chave, opcoes in ESTILO_VALORES.items():
+        v = os.environ.get("CYBERKDE_ESTILO_" + chave.upper()) or salvo.get(chave)
+        if v in opcoes:
+            valores[chave] = v
+            definidas.add(chave)
+        else:
+            valores[chave] = opcoes[0]
+    return valores, definidas
+
+
+ESTILO, ESTILO_DEFINIDO = _estilo()
+
+# V1: tamanho dos chanfros. Os três do documento (4, 6, 12) viram 3/4/8 ou 6/8/16.
+_TAMANHOS = {"pequeno": {4: 3, 6: 4, 12: 8}, "largo": {4: 6, 6: 8, 12: 16}}
+
+
+def tam(c):
+    """Chanfro c no tamanho escolhido (o próprio c no padrão)."""
+    t = _TAMANHOS.get(ESTILO["tamanho"])
+    if not t:
+        return c
+    return t.get(c, round(c * (0.67 if ESTILO["tamanho"] == "pequeno" else 1.33)))
+
+
+def corte(c, so=None):
+    """Cantos chanfrados de uma peça, conforme o corte escolhido, com o chanfro c já no tamanho final.
+    `so`: só os cantos desse conjunto (ex.: "tl tr" para um cabeçalho que encosta no alto)."""
+    cantos = {"canto": ("br",), "oposto": ("tl", "br"), "topo": ("tr",),
+              "octogono": ("tl", "tr", "bl", "br"), "reto": ()}[ESTILO["corte"]]
+    return {k: c for k in cantos if so is None or k in so.split()}
+
+
+def dens(v):
+    """Medida de espaçamento na densidade escolhida (a própria no padrão)."""
+    f = {"compacto": 0.67, "espacoso": 1.5}.get(ESTILO["densidade"])
+    return v if f is None else max(0, round(v * f))
+
+
+# V33: cores de estado (negativo = erro/perigo, neutro = atenção, positivo = sucesso). O padrão é o de
+# sempre: alerta da corporação, dourado e verde.
+NEGATIVO = {"alerta": ALERTA, "magenta": _legivel("#FF3EA5"), "vermelho": _legivel("#FF4040")}[ESTILO["perigo"]]
+NEUTRO = {"dourado": GOLD, "laranja": TOK["secondary"]["orange"]}[ESTILO["atencao"]]
+POSITIVO = {"verde": GREEN, "ciano": CYAN}[ESTILO["sucesso"]]
+
+# V4: cor e força da sombra da moldura ativa: (cor, força, núcleo claro de 1 px).
+BRILHO = {"off": ("#000000", None, None), "suave": (RED, 0.20, None),
+          "neon": (RED, 0.42, mix(WHITE, RED, 0.25))}[ESTILO["brilho"]]
