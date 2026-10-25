@@ -42,6 +42,10 @@ FRAME_POS = {"topleft": (0, 0), "top": (1, 0), "topright": (2, 0),
              "bottomleft": (0, 2), "bottom": (1, 2), "bottomright": (2, 2)}
 
 CW, CS, CSM = CH["chamferWide"], CH["chamferStandard"], CH["chamferSmall"]  # 12, 6, 4
+# Opções de estilo (cyberlib.ESTILO; modules/estilo): sem nenhuma escolhida, tudo sai como sempre.
+EST = ESTILO
+CW, CS, CSM = tam(CW), tam(CS), tam(CSM)
+CORNERS = ("topleft", "topright", "bottomleft", "bottomright")
 MARK = CH["markerWidth"]                                                    # 3
 EMPH = CH["lineEmphasis"]                                                   # 2
 FOCUS = TOK["focus"]["width"]                                               # 2
@@ -102,11 +106,14 @@ def edge_inset(outer, labels, sides, d):
     return offset_polygon(outer, labels, lambda s: d if any(c in sides for c in s) else 0)
 
 
-def surface(fill=None, line=None, sides="tblr", bw=1.0, chamfer=None, bands=()):
+def surface(fill=None, line=None, sides="tblr", bw=1.0, chamfer=None, bands=(), bracket=None, texture=None):
     """Descreve uma superfície; devolve f(W, H) -> (contorno externo, camadas).
 
-    Camada = (polígono externo, polígono interno ou None, tinta). `bands` são faixas por lado
-    (marcador lateral, filete, separador) desenhadas por cima: (lados, largura, tinta).
+    Camada = (polígono externo, polígono interno ou None, tinta[, peças]). `bands` são faixas por lado
+    (marcador lateral, filete, separador) desenhadas por cima: (lados, largura, tinta[, peças]); com
+    `peças`, a faixa só aparece nessas peças (ex.: marcador parcial só no canto de cima). `bracket` =
+    (tinta, largura[, peças]): contorno só nas peças de canto (cantoneiras, opção V2/V34). `texture` =
+    função (x0, y0, x1, y1) -> camadas extras do centro (textura V30, com hint-tile-center).
     """
     def build(W, H):
         outer, labels = outline(0, 0, W, H, chamfer or {})
@@ -114,17 +121,24 @@ def surface(fill=None, line=None, sides="tblr", bw=1.0, chamfer=None, bands=()):
         inner = edge_inset(outer, labels, sides, bw) if line else outer
         if fill:
             layers.append((inner, None, fill))
+        if texture:
+            layers += texture(W, H)
         if line:
             layers.append((outer, inner, line))
-        for band_sides, width, pnt in bands:
-            layers.append((outer, edge_inset(outer, labels, band_sides, width), pnt))
+        if bracket:
+            pnt, width, *where = bracket
+            layers.append((outer, edge_inset(outer, labels, "tblr", width), pnt, where[0] if where else CORNERS))
+        for band_sides, width, pnt, *where in bands:
+            layers.append((outer, edge_inset(outer, labels, band_sides, width), pnt, *where))
         return outer, layers
     return build
 
 
-def draw(layers, box, tx, ty):
+def draw(layers, box, tx, ty, pos=None):
     out = []
-    for outer, inner, pnt in layers:
+    for outer, inner, pnt, *where in layers:
+        if where and pos not in where[0]:
+            continue
         o = clip(outer, *box)
         if area(o) <= 1e-6:
             continue
@@ -141,14 +155,15 @@ def draw(layers, box, tx, ty):
 
 def pieces(sheet, prefix, b, layers, M):
     t, r, bo, l = b
-    W, H = l + M + r, t + M + bo
+    Mw, Mh = M if isinstance(M, tuple) else (M, M)  # miolo retangular: centro em ladrilhos
+    W, H = l + Mw + r, t + Mh + bo
     ox, oy = sheet.block(W + 4, H + 4)
-    cols, rows = (0, l, l + M, W), (0, t, t + M, H)
+    cols, rows = (0, l, l + Mw, W), (0, t, t + Mh, H)
     for pos, (ci, ri) in FRAME_POS.items():
         box = (cols[ci], rows[ri], cols[ci + 1], rows[ri + 1])
         tx, ty = ox + ci * 2, oy + ri * 2  # 2 px entre peças: nada vaza na renderização
         name = f"{prefix}-{pos}" if prefix else pos
-        sheet.add(name, box[0] + tx, box[1] + ty, box[2] - box[0], box[3] - box[1], draw(layers, box, tx, ty))
+        sheet.add(name, box[0] + tx, box[1] + ty, box[2] - box[0], box[3] - box[1], draw(layers, box, tx, ty, pos))
 
 
 def hints(sheet, prefix, kind, m):
@@ -174,18 +189,23 @@ def frame(sheet, prefix, b, look, M=16, margins=None, mask=False):
         sheet.hint(f"{prefix}-hint-stretch-borders", 4, 4)
 
 
-def shadows(sheet, chamfer, over, spread, strength, M=16, prefix="shadow"):
+def shadows(sheet, chamfer, over, spread, strength, M=16, prefix="shadow", glow=False):
     """Sombra curta em 9 peças: o KWin a usa nos popups (DialogShadows) e o QML nas dicas (prefixo "shadow").
 
     over = quanto a peça entra por baixo da janela (cobre o chanfro); spread = alcance para fora.
+    glow: com a opção "brilho" (V4), a sombra vira um halo na cor de destaque.
     """
     win = over * 2 + M
     total = win + 2 * spread
     outer, labels = outline(spread, spread, spread + win, spread + win, chamfer)
+    color, core = "#000000", None
+    if glow and BRILHO[1] is not None:
+        color, strength, core = BRILHO
     rings, prev = [], outer
     for i in range(1, spread + 1):
         grown = offset_polygon(outer, labels, lambda _, i=i: -i)
-        rings.append((grown, prev, P("#000000", strength * (1 - (i - 1) / spread) ** 2)))
+        a = strength * (1 - (i - 1) / spread) ** 2
+        rings.append((grown, prev, P(core, 0.65) if core and i == 1 else P(color, a)))
         prev = grown
     T = spread + over
     ox, oy = sheet.block(total + 4, total + 4)
@@ -203,14 +223,64 @@ def ring_chamfer(c, d):
     return c + d * (2 - math.sqrt(2))
 
 
+# ---------------------------------------------------------------- opções de estilo
+MARCADOR, MOLDURA, SELECAO = EST["marcador"], EST["moldura"], EST["selecao"]
+DCH = corte(CW)          # cantos chanfrados de popups e widgets (V1)
+PARCIAL_T = 24           # V3 "parcial": altura do bloco, que vira a borda de cima da peça
+TEXTURA = EST["textura"] if EST["textura_onde"] in ("ambos", "popups") else "lisa"
+
+
+def marcas(tinta=None):
+    """Faixas do marcador lateral (V3) dos popups e widgets."""
+    tinta = tinta or P(RED)
+    return {"cheio": [("l", MARK, tinta)], "parcial": [("l", MARK, tinta, ("topleft",))],
+            "topo": [("t", MARK, tinta)], "nenhum": []}[MARCADOR]
+
+
+def margem_esq():
+    return MARK if MARCADOR in ("cheio", "parcial") else 0
+
+
+def bordas(c):
+    """Bordas (topo, direita, base, esquerda) de popup/widget: o "parcial" pede a de cima mais alta."""
+    return (max(c, PARCIAL_T) if MARCADOR == "parcial" else c, c, c, c)
+
+
+def contorno(linha, onde=CORNERS):
+    """(linha, cantoneira) da moldura (V2): contorno inteiro, só os cantos, ou filete neutro + cantos."""
+    if MOLDURA == "contorno":
+        return linha, None
+    return (P(LINE) if MOLDURA == "misto" else None), (P(RED), EMPH, onde)
+
+
+def textura(b):
+    """V30: grade (16 px) ou scanline (4 px) a 4% no centro em ladrilhos (hint-tile-center) dos popups."""
+    if TEXTURA == "lisa":
+        return None
+    t, _, _, l = b
+
+    def layers(W, H):
+        tinta = P(TXT1, 0.04)
+        if TEXTURA == "grade":
+            rects = [rectpoly(l, t, l + 16, t + 1), rectpoly(l, t + 1, l + 1, t + 16)]
+        else:
+            rects = [rectpoly(l, t + y, l + 16, t + y + 1) for y in (0, 4, 8, 12)]
+        return [(r, None, tinta, ("center",)) for r in rects]
+    return layers
+
+
 # ---------------------------------------------------------------- arquivos do tema
 def dialog_svg(variant):
     """dialogs/background: popups do Plasma (menu iniciar, calendário, bandeja) e notificações."""
     s = Sheet(f"{variant}dialogs/background")
-    look = surface(P(DLG_FILL, alpha(0.94, variant)), P(DLG_LINE), chamfer={"br": CW},
-                   bands=[("l", MARK, P(RED))])
-    frame(s, "", (CW,) * 4, look, margins=(6, 6, 6, MARK + 6), mask=True)
-    shadows(s, {"br": CW}, CW, 10, 0.32)
+    b = bordas(CW)
+    linha, bracket = contorno(P(DLG_LINE))
+    look = surface(P(DLG_FILL, alpha(0.94, variant)), linha, chamfer=DCH,
+                   bands=marcas(), bracket=bracket, texture=textura(b))
+    frame(s, "", b, look, margins=(dens(6), dens(6), dens(6), margem_esq() + dens(6)), mask=True)
+    shadows(s, DCH, CW, 10, 0.32, glow=True)
+    if TEXTURA != "lisa":
+        s.hint("hint-tile-center", 4, 4)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
@@ -246,9 +316,20 @@ def panel_svg(variant):
 def tooltip_svg(variant):
     """widgets/tooltip: superfície opaca elevada, moldura fina (documento, seção 9)."""
     s = Sheet(f"{variant}widgets/tooltip")
-    look = surface(P(TIP_FILL, alpha(0.96, variant)), P(TIP_LINE), chamfer={"br": CS})
-    frame(s, "", (CS,) * 4, look, margins=(6, 8, 6, 8), mask=True)
-    shadows(s, {"br": CS}, CS, 6, 0.30)
+    dica, ch = EST["dica"], corte(CS)
+    linha, bracket, bands = P(TIP_LINE), None, []
+    if dica == "cantoneira":
+        linha, bracket = None, (P(RED), EMPH)
+    elif dica == "chanfro":
+        linha, bracket = contorno(P(TIP_LINE))
+    elif dica == "faixa":
+        bands = [("t", 3, P(CYAN))]
+    else:
+        bands = [("l", MARK, P(RED))]
+    c = max(CS, 8) if bracket else CS
+    look = surface(P(TIP_FILL, alpha(0.96, variant)), linha, chamfer=ch, bands=bands, bracket=bracket)
+    frame(s, "", (c,) * 4, look, margins=(dens(6), dens(8), dens(6), dens(8)), mask=True)
+    shadows(s, ch, CS, 6, 0.30, glow=True)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
@@ -256,21 +337,39 @@ def tooltip_svg(variant):
 def background_svg(variant):
     """widgets/background: widgets soltos na área de trabalho."""
     s = Sheet(f"{variant}widgets/background")
-    look = surface(P(DLG_FILL, alpha(0.92, variant)), P(mix(RED, PANEL, BRAND)), chamfer={"br": CW},
-                   bands=[("l", MARK, P(RED))])
-    frame(s, "", (CW,) * 4, look, margins=(12, 12, 12, 12 + MARK), mask=True)
+    b = bordas(CW)
+    linha, bracket = contorno(P(mix(RED, PANEL, BRAND)))
+    look = surface(P(DLG_FILL, alpha(0.92, variant)), linha, chamfer=DCH, bands=marcas(), bracket=bracket)
+    m = (dens(12), dens(12), dens(12), dens(12) + margem_esq())
+    frame(s, "", b, look, margins=m, mask=True)
     if variant == "translucent/":
         # Widgets com fundo desfocado ("blurred"): mesma peça, e a máscara com o nome que o QML usa.
-        frame(s, "blurred", (CW,) * 4, look, margins=(12, 12, 12, 12 + MARK))
-        pieces(s, "blurred-mask", (CW,) * 4, [(look(2 * CW + 16, 2 * CW + 16)[0], None, P("#000000"))], 16)
-    shadows(s, {"br": CW}, CW, 8, 0.28)
+        frame(s, "blurred", b, look, margins=m)
+        pieces(s, "blurred-mask", b, [(look(b[3] + b[1] + 16, b[0] + b[2] + 16)[0], None, P("#000000"))], 16)
+    shadows(s, DCH, CW, 8, 0.28, glow=True)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
 
 def state(fill=None, line=None, marker=False, chamfer=CSM, bw=1.0, bands=()):
     extra = [("l", MARK, P(RED))] if marker else []
-    return surface(fill, line, bw=bw, chamfer={"br": chamfer} if chamfer else None, bands=extra + list(bands))
+    return surface(fill, line, bw=bw, chamfer=corte(chamfer) if chamfer else None, bands=extra + list(bands))
+
+
+def selecao(pressed="selected", hover_sel="selected+hover"):
+    """Estados de seleção das listas (V17): marcador, bloco, colchetes ou sublinhado."""
+    if SELECAO == "marcador":
+        return {pressed: state(P(RED, SEL), P(RED, 0.45), marker=True),
+                hover_sel: state(P(RED, SEL + 0.06), P(RED, 0.60), marker=True)}
+    if SELECAO == "bloco":  # o Plasma não troca a cor do texto na seleção: bloco a 55% para o texto ler
+        return {pressed: state(P(RED, 0.55), P(RED)), hover_sel: state(P(RED, 0.65), P(RED))}
+    if SELECAO == "colchetes":
+        def colch(a):
+            return surface(P(RED, a), bands=[("l", 2, P(RED)), ("r", 2, P(RED)),
+                                             ("t", 2, P(RED), CORNERS), ("b", 2, P(RED), CORNERS)])
+        return {pressed: colch(0.10), hover_sel: colch(0.16)}
+    return {pressed: state(P(RED, HOV), bands=[("b", 2, P(RED))]),
+            hover_sel: state(P(RED, HOV + 0.06), bands=[("b", 2, P(RED))])}
 
 
 def viewitem_svg():
@@ -279,11 +378,11 @@ def viewitem_svg():
     looks = {
         "normal": state(),
         "hover": state(P(RED, HOV), P(RED, 0.22)),                       # hover tonal
-        "selected": state(P(RED, SEL), P(RED, 0.45), marker=True),       # marcador vermelho
-        "selected+hover": state(P(RED, SEL + 0.06), P(RED, 0.60), marker=True),
+        **selecao(),                                                     # marcador vermelho (padrão)
     }
+    b = max(5, tam(CSM) + 1)
     for pre, look in looks.items():  # sem hint de margem: margens = bordas (5 px), como no Breeze
-        frame(s, pre, (5,) * 4, look)
+        frame(s, pre, (b,) * 4, look)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
@@ -294,28 +393,38 @@ def listitem_svg():
     looks = {
         "normal": state(),
         "hover": state(P(RED, HOV), P(RED, 0.22)),
-        "pressed": state(P(RED, SEL), P(RED, 0.45), marker=True),
+        "pressed": selecao("pressed", "-")["pressed"],
         "section": state(chamfer=0, bands=[("b", 1, P(LINE))]),
     }
+    b = max(4, tam(CSM))
     for pre, look in looks.items():
-        frame(s, pre, (4,) * 4, look, margins=(6,) * 4)
+        frame(s, pre, (b,) * 4, look, margins=(dens(6),) * 4)
     x, y = s.block(40, 1)
     s.add("separator", x, y, 40, 1, [box(0, 0, 40, 1, LINE)(x, y)])
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
 
+def focus_ring():
+    """Anel de foco pelo teclado (V34): (bordas, margem, superfície)."""
+    if EST["foco"] == "grosso":
+        return 8, 3, state(line=P(CYAN), bw=3, chamfer=ring_chamfer(CSM, 3))
+    if EST["foco"] == "cantoneira":
+        return 7, FOCUS, surface(chamfer=corte(ring_chamfer(CSM, FOCUS)), bracket=(P(CYAN), FOCUS))
+    return 7, FOCUS, state(line=P(CYAN), bw=FOCUS, chamfer=ring_chamfer(CSM, FOCUS))
+
+
 def button_svg():
     """widgets/button: botões e botões de ferramenta do PlasmaComponents 3."""
     s = Sheet("widgets/button")
-    ring = state(line=P(CYAN), bw=FOCUS, chamfer=ring_chamfer(CSM, FOCUS))  # foco pelo teclado
-    frame(s, "normal", (5,) * 4, state(P(RAISED), P(BTN_LINE)), margins=(6,) * 4)
+    fb, fm, ring = focus_ring()  # foco pelo teclado
+    frame(s, "normal", (5,) * 4, state(P(RAISED), P(BTN_LINE)), margins=(dens(6),) * 4)
     frame(s, "hover", (5,) * 4, state(P(RED, HOV), P(RED, 0.75)), margins=(ZERO,) * 4)
-    frame(s, "pressed", (5,) * 4, state(P(mix(RED, RAISED, PRS)), P(RED)), margins=(6,) * 4)
-    frame(s, "focus", (7,) * 4, ring, margins=(FOCUS,) * 4)
-    frame(s, "toolbutton-hover", (5,) * 4, state(P(RED, HOV), P(RED, 0.30)), margins=(4,) * 4)
-    frame(s, "toolbutton-pressed", (5,) * 4, state(P(RED, 0.28), P(RED, 0.70)), margins=(4,) * 4)
-    frame(s, "toolbutton-focus", (7,) * 4, ring, margins=(FOCUS,) * 4)
+    frame(s, "pressed", (5,) * 4, state(P(mix(RED, RAISED, PRS)), P(RED)), margins=(dens(6),) * 4)
+    frame(s, "focus", (fb,) * 4, ring, margins=(fm,) * 4)
+    frame(s, "toolbutton-hover", (5,) * 4, state(P(RED, HOV), P(RED, 0.30)), margins=(dens(4),) * 4)
+    frame(s, "toolbutton-pressed", (5,) * 4, state(P(RED, 0.28), P(RED, 0.70)), margins=(dens(4),) * 4)
+    frame(s, "toolbutton-focus", (fb,) * 4, ring, margins=(fm,) * 4)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
@@ -323,11 +432,22 @@ def button_svg():
 def lineedit_svg():
     """widgets/lineedit: campos de texto e busca (foco ciano, documento 9)."""
     s = Sheet("widgets/lineedit")
-    frame(s, "base", (5,) * 4, state(P(INPUT), P(CONTROL_LINE)), margins=(6,) * 4)
-    frame(s, "hover", (5,) * 4, state(line=P(RED, 0.60)), margins=(ZERO,) * 4)
-    frame(s, "focus", (5,) * 4, state(line=P(CYAN)), margins=(ZERO,) * 4)
-    frame(s, "focusframe", (7,) * 4, state(line=P(CYAN), bw=FOCUS, chamfer=ring_chamfer(CSM, FOCUS)),
-          margins=(FOCUS,) * 4)
+    ch = corte(CSM)
+    if EST["campos"] == "sublinhado":  # V15: só a linha de baixo; foco = linha grossa e lateral ciano
+        base = surface(P(INPUT, 0.55), P(CONTROL_LINE), sides="b", chamfer=ch)
+        hover = surface(None, P(RED, 0.60), sides="b", chamfer=ch)
+        focus = surface(None, P(CYAN), sides="b", bw=2, chamfer=ch, bands=[("l", 2, P(CYAN))])
+    elif EST["campos"] == "bloco":     # fundo sem contorno; foco = faixa ciano à esquerda
+        base = surface(P(INPUT), chamfer=ch)
+        hover = surface(None, chamfer=ch, bands=[("l", 2, P(RED, 0.6))])
+        focus = surface(None, chamfer=ch, bands=[("l", 3, P(CYAN))])
+    else:
+        base, hover, focus = state(P(INPUT), P(CONTROL_LINE)), state(line=P(RED, 0.60)), state(line=P(CYAN))
+    fb, fm, ring = focus_ring()
+    frame(s, "base", (5,) * 4, base, margins=(dens(6),) * 4)
+    frame(s, "hover", (5,) * 4, hover, margins=(ZERO,) * 4)
+    frame(s, "focus", (5,) * 4, focus, margins=(ZERO,) * 4)
+    frame(s, "focusframe", (fb,) * 4, ring, margins=(fm,) * 4)
     s.hint("hint-focus-over-base", 2, 2)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
@@ -355,17 +475,21 @@ def plasmoidheading_svg():
     margem do diálogo), por isso as peças repetem o contorno, o marcador e o chanfro do diálogo.
     """
     s = Sheet("widgets/plasmoidheading")
-    header = surface(HEAD_FILL, P(DLG_LINE), sides="tr",
-                     bands=[("l", MARK, P(RED)), ("b", 1, P(LINE))])
+    # Sem a faixa cheia à esquerda, o contorno do diálogo passa por lá e o cabeçalho também o desenha.
+    esq = "" if MARCADOR == "cheio" else "l"
+    hline, hbr = contorno(P(DLG_LINE), ("topleft", "topright"))
+    header = surface(HEAD_FILL, hline, sides="tr" + esq, chamfer=corte(CW, "tl tr"), bracket=hbr,
+                     bands=marcas() + [("b", 1, P(LINE))])
     # Rodapé sem contorno próprio: o fundo recua 1 px da direita, da base e do chanfro, e o contorno
     # que aparece é sempre o do diálogo. Com contorno próprio, as duas molduras discordavam quando o
     # Plasma liga bordas diferentes nelas. No menu do Latte (popup encostado no dock), o chanfro do
     # rodapé ficava por cima da borda direita reta do diálogo, que seguia até o fundo (14/09).
-    footer = surface(HEAD_FILL, P(DLG_LINE, 0.0), sides="rb", chamfer={"br": CW},
-                     bands=[("l", MARK, P(RED)), ("t", 1, P(LINE))])
-    for pre, look in (("header", header), ("footer", footer)):
-        frame(s, pre, (CW,) * 4, look, margins=(6,) * 4)
-    hints(s, "", "margin", (6,) * 4)  # o Breeze só tem as margens sem prefixo
+    _, fbr = contorno(P(DLG_LINE), ("bottomleft", "bottomright"))
+    footer = surface(HEAD_FILL, P(DLG_LINE, 0.0), sides="rb" + esq, chamfer=corte(CW, "bl br"), bracket=fbr,
+                     bands=([("l", MARK, P(RED))] if MARCADOR == "cheio" else []) + [("t", 1, P(LINE))])
+    for pre, look, b in (("header", header, bordas(CW)), ("footer", footer, (CW,) * 4)):
+        frame(s, pre, b, look, margins=(dens(6),) * 4)
+    hints(s, "", "margin", (dens(6),) * 4)  # o Breeze só tem as margens sem prefixo
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
@@ -377,8 +501,18 @@ TABS = {"north": ("b", (3, 6, 3, 6), (10, 6, 10, 6)), "south": ("t", (3, 6, 3, 6
 
 def tabbar_svg():
     s = Sheet("widgets/tabbar")
+    abas = EST["abas"]
     for side, (edge, b, m) in TABS.items():
-        frame(s, f"{side}-active-tab", b, surface(P(RED, HOV), bands=[(edge, EMPH, P(RED))]), margins=m)
+        if abas == "sublinhada":   # V10: só o traço ciano
+            look = surface(P(CYAN, 0.06), bands=[(edge, EMPH, P(CYAN))])
+        elif abas == "bloco":      # o Plasma não escurece o texto da aba: bloco a 45%
+            look = surface(P(RED, 0.45), bands=[(edge, EMPH, P(RED))])
+        elif abas == "cartao":     # contorno nos outros três lados e faixa grossa embaixo
+            look = surface(P(RED, HOV), P(mix(RED, PANEL, BRAND)), sides="tblr".replace(edge, ""),
+                           bands=[(edge, 3, P(RED))])
+        else:
+            look = surface(P(RED, HOV), bands=[(edge, EMPH, P(RED))])
+        frame(s, f"{side}-active-tab", b, look, margins=m)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
@@ -386,9 +520,9 @@ def tabbar_svg():
 def frame_svg():
     """widgets/frame: molduras plain/raised/sunken usadas por alguns widgets."""
     s = Sheet("widgets/frame")
-    frame(s, "plain", (4,) * 4, state(line=P(LINE)), margins=(6,) * 4)
-    frame(s, "raised", (4,) * 4, state(P(RAISED), P(LINE)), margins=(6, 6, 8, 6))
-    frame(s, "sunken", (4,) * 4, state(P(INPUT), P(LINE)), margins=(6,) * 4)
+    frame(s, "plain", (4,) * 4, state(line=P(LINE)), margins=(dens(6),) * 4)
+    frame(s, "raised", (4,) * 4, state(P(RAISED), P(LINE)), margins=(dens(6), dens(6), dens(8), dens(6)))
+    frame(s, "sunken", (4,) * 4, state(P(INPUT), P(LINE)), margins=(dens(6),) * 4)
     s.hint("hint-stretch-borders", 4, 4)
     return s.svg()
 
@@ -402,12 +536,139 @@ def line_svg():
 
 
 def bar_meter_svg():
-    """widgets/bar_meter_horizontal: barra de progresso (bateria, volume, cópia de arquivos)."""
+    """widgets/bar_meter_horizontal: barra de progresso (bateria, volume, cópia de arquivos).
+
+    Com a opção "progresso" escolhida (V24), a parte cheia usa o mesmo padrão do Kvantum: centro em
+    ladrilhos (hint-tile-center) e borda de 1 px. Sem a opção, lisa como sempre."""
     s = Sheet("widgets/bar_meter_horizontal")
     frame(s, "bar-inactive", (3,) * 4, surface(P(INPUT), P(LINE)), M=6)
-    frame(s, "bar-active", (3,) * 4, surface(P(RED)), M=6)
+    prog = EST["progresso"] if "progresso" in ESTILO_DEFINIDO else "lisa"
+    if prog == "lisa":
+        frame(s, "bar-active", (3,) * 4, surface(P(RED)), M=6)
+    else:
+        tw, th = {"segmentada": (8, 4), "hachurada": (8, 8), "pontos": (4, 4)}[prog]
+        if prog == "segmentada":
+            cells = [rectpoly(1, 1, 7, 5)]
+        elif prog == "pontos":
+            cells = [rectpoly(2, 2, 4, 4)]
+        else:  # faixas a 45° que emendam nos dois sentidos, sobre o destaque a 30%
+            cells = [rectpoly(1, 1, 9, 9)]
+            cells += [clip([(k - 20, 20), (k + 20, -20), (k + 23, -20), (k - 17, 20)], 1, 1, 9, 9)
+                      for k in (-6, 2, 10)]
+        layers = [(rectpoly(0, 0, tw + 2, th + 2), rectpoly(1, 1, tw + 1, th + 1), P(RED, 0.45))]
+        layers += [(c, None, P(RED, 0.30 if prog == "hachurada" and i == 0 else 1.0), ("center",))
+                   for i, c in enumerate(cells) if area(c) > 1e-6]
+        pieces(s, "bar-active", (1,) * 4, layers, (tw, th))
+        s.hint("hint-tile-center", 4, 4)
     s.hint("hint-bar-size", 6, 6)
     s.hint("hint-stretch-borders", 4, 4)
+    return s.svg()
+
+
+# ---------------------------------------------------------------- peças próprias (opção "pecas")
+# Com "pecas" = cyberkde, o tema passa a ter chave, slider, marcas, rádio e indicador de ocupado
+# próprios, com os ids que o PlasmaComponents 3 (Plasma 6.6) procura; senão, ficam os do Breeze.
+def element_at(sheet, id_, w, h, shapes):
+    """Peça única (sem 9 partes): formas desenhadas em (ox, oy) dentro de w x h."""
+    x, y = sheet.block(w, h)
+    sheet.add(id_, x, y, w, h, [f(x, y) for f in shapes])
+
+
+def three_slice(sheet, prefix, l, m, r, h, look):
+    """Moldura horizontal de 3 partes (left/center/right), como a trilha do switch do Breeze."""
+    W = l + m + r
+    outer, layers = look(W, h)
+    ox, oy = sheet.block(W + 4, h + 4)
+    for i, (pos, xa, xb) in enumerate((("left", 0, l), ("center", l, l + m), ("right", l + m, W))):
+        box_ = (xa, 0, xb, h)
+        tx, ty = ox + i * 2, oy
+        sheet.add(f"{prefix}-{pos}", xa + tx, ty, xb - xa, h, draw(layers, box_, tx, ty, pos))
+
+
+def handle(size, inner, fill, border=None, c=3):
+    """Cursor quadrado chanfrado (inner x inner) centrado numa peça size x size."""
+    o = (size - inner) / 2
+    return [chamfered(inner, inner, c, P(fill) if fill else None, border, x=o, y=o)]
+
+
+def ring_shape(size, inner, color, width=2, c=3):
+    o = (size - inner) / 2
+    return [chamfered(inner, inner, c + width * (2 - math.sqrt(2)), None, P(color), bw=width, x=o, y=o)]
+
+
+def switch_svg():
+    """widgets/switch (V12): trilha angular chanfrada e cursor quadrado."""
+    s = Sheet("widgets/switch")
+    trilho = {"inactive": surface(P(INPUT), P(CONTROL_LINE), chamfer=corte(4)),
+              "active": surface(P(mix(RED, INPUT, 0.35)), P(RED), chamfer=corte(4))}
+    for pre, look in trilho.items():
+        three_slice(s, pre, 8, 5, 8, 16, look)
+    for id_, fill, brd in (("handle", TXT2, None), ("handle-hover", TXT1, P(RED)),
+                           ("handle-pressed", CYAN, None), ("handle-active", RED_LIGHT, None)):
+        element_at(s, id_, 18, 18, handle(18, 12, fill, brd))
+    element_at(s, "handle-focus", 24, 24, ring_shape(24, 18, CYAN))
+    element_at(s, "handle-shadow", 18, 18, [])
+    s.hint("hint-bar-size", 36, 16)
+    s.hint("hint-stretch-borders", 4, 4)
+    return s.svg()
+
+
+def slider_svg():
+    """widgets/slider (V14): trilha fina e cursor chanfrado, como no Kvantum."""
+    s = Sheet("widgets/slider")
+    frame(s, "groove", (3,) * 4, surface(P(INPUT), P(CONTROL_LINE)), M=3)
+    frame(s, "groove-highlight", (3,) * 4, surface(P(RED)), M=3)
+    for d in ("horizontal", "vertical"):
+        element_at(s, f"{d}-slider-handle", 20, 20, handle(20, 14, RED, None, 4))
+        element_at(s, f"{d}-slider-hover", 20, 20, handle(20, 14, RED_LIGHT, P(TXT1), 4))
+        element_at(s, f"{d}-slider-focus", 24, 24, ring_shape(24, 18, CYAN, c=4))
+        element_at(s, f"{d}-slider-shadow", 20, 20, [])
+    s.hint("hint-handle-size", 20, 20)
+    s.hint("hint-stretch-borders", 4, 4)
+    return s.svg()
+
+
+def checkmarks_svg():
+    """widgets/checkmarks (V11): marca da caixa de seleção (desenhada sobre o botão "normal")."""
+    s = Sheet("widgets/checkmarks")
+    element_at(s, "checkbox", 16, 16, [strokes([[(3.5, 8.5), (6.5, 11.5), (12.5, 5)]], RED, 2)])
+    element_at(s, "radiobutton", 16, 16, [circle(8, 8, 3.5, RED)])
+    return s.svg()
+
+
+def radiobutton_svg():
+    """widgets/radiobutton (V11): anel com miolo, como o rádio do Kvantum."""
+    s = Sheet("widgets/radiobutton")
+    element_at(s, "normal", 16, 16, [circle(8, 8, 7.5, INPUT, CONTROL_LINE)])
+    element_at(s, "checked", 16, 16, [circle(8, 8, 7.5, None, RED)])
+    element_at(s, "hover", 16, 16, [circle(8, 8, 7.5, None, mix(RED, INPUT, 0.6))])
+    element_at(s, "focus", 20, 20, [circle(10, 10, 9, None, CYAN, 2)])
+    element_at(s, "symbol", 6, 6, [circle(3, 3, 3, RED)])
+    element_at(s, "shadow", 16, 16, [])
+    s.hint("hint-size", 16, 16)
+    return s.svg()
+
+
+def busy_ring(size):
+    """Anel de 8 blocos com opacidade decrescente: girando, vira o indicador segmentado (V25)."""
+    c, r0, r1, w = size / 2, size * 0.30, size * 0.48, size * 0.16
+    shapes = []
+    for i in range(8):
+        ang = math.radians(i * 45 - 90)
+        dx, dy, px, py = math.cos(ang), math.sin(ang), -math.sin(ang), math.cos(ang)
+        pts = [(c + dx * r0 + px * w / 2, c + dy * r0 + py * w / 2), (c + dx * r1 + px * w / 2, c + dy * r1 + py * w / 2),
+               (c + dx * r1 - px * w / 2, c + dy * r1 - py * w / 2), (c + dx * r0 - px * w / 2, c + dy * r0 - py * w / 2)]
+        shapes.append(poly(pts, RED, 1.0 - i * 0.11))
+    return shapes
+
+
+def busywidget_svg():
+    s = Sheet("widgets/busywidget")
+    element_at(s, "busywidget", 36, 36, busy_ring(36))
+    element_at(s, "22-22-busywidget", 22, 22, busy_ring(22))
+    element_at(s, "16-16-busywidget", 16, 16, busy_ring(16))
+    element_at(s, "stopped", 36, 36, busy_ring(36)[:1])
+    s.hint("hint-rotation-angle", 45, 45)  # passo de 45°: um bloco por vez (usado pelo busywidget antigo)
     return s.svg()
 
 
@@ -430,6 +691,14 @@ def files():
         "widgets/line.svg": line_svg(),
         "widgets/bar_meter_horizontal.svg": bar_meter_svg(),
     })
+    if EST["pecas"] == "cyberkde":
+        out.update({
+            "widgets/switch.svg": switch_svg(),
+            "widgets/slider.svg": slider_svg(),
+            "widgets/checkmarks.svg": checkmarks_svg(),
+            "widgets/radiobutton.svg": radiobutton_svg(),
+            "widgets/busywidget.svg": busywidget_svg(),
+        })
     return out
 
 

@@ -10,11 +10,14 @@
 //   220–540 grupos (título, usuário, senha, mensagens, ações) entram com defasagem de 30 ms
 //   430–490 acento de glitch (moldura fantasma ciano/vermelha, 60 ms) e depois tudo estabiliza
 // Erro: tremida curta (~290 ms), campo e faixa em vermelho e mensagem clara até a próxima digitação.
+// Sucesso (concedido(), opcional): em ~160 ms o estado vira "ACESSO CONCEDIDO", faixa e mensagem em verde
+// com ✓ (UI kit A15). Só depois da resposta real do SDDM/PAM; nunca finge progresso.
 import QtQuick
 import "."
 
 FocusScope {
     id: root
+    objectName: "loginPanel"
 
     // ---------------------------------------------------------------- API
     property string mode: "login"
@@ -52,13 +55,17 @@ FocusScope {
         return it ? it.sName : ""
     }
 
+    property bool granted: false
+    property real grantGlow: 0
+
     readonly property string msgKind: message !== "" ? messageKind : (capsLock ? "caps" : "")
     readonly property string msgText: message !== "" ? message : (capsLock ? "Caps Lock está ativado." : "")
-    readonly property color msgColor: msgKind === "error" ? CK.danger : (msgKind === "caps" ? CK.gold : CK.cyan)
+    readonly property color msgColor: msgKind === "error" ? CK.danger : (msgKind === "caps" ? CK.gold
+                                      : (msgKind === "ok" ? CK.green : CK.cyan))
 
     readonly property bool failed: messageKind === "error" && message !== ""
-    readonly property string statusText: busy ? "VERIFICANDO" : (failed ? "FALHA" : "PRONTO")
-    readonly property color statusColor: failed ? CK.danger : CK.cyan
+    readonly property string statusText: granted ? "ACESSO CONCEDIDO" : (busy ? "VERIFICANDO" : (failed ? "FALHA" : "PRONTO"))
+    readonly property color statusColor: granted ? CK.green : (failed ? CK.danger : CK.cyan)
 
     property real shakeX: 0
     property real errorGlow: 0
@@ -76,6 +83,15 @@ FocusScope {
         pass.forceActiveFocus()
         shake.restart()
         errorPulse.restart()
+    }
+
+    // Autenticação aceita: confirmação curta antes de a tela sair (quem chama decide se sai já).
+    function concedido() {
+        busy = false
+        granted = true
+        message = isLock ? "Acesso concedido. Desbloqueando…" : "Acesso concedido. Iniciando a sessão…"
+        messageKind = "ok"
+        grantPulse.restart()
     }
 
     function info(msg) {
@@ -160,6 +176,11 @@ FocusScope {
         NumberAnimation { target: root; property: "shakeX"; to: -5; duration: CK.dur(55); easing.type: Easing.InOutQuad }
         NumberAnimation { target: root; property: "shakeX"; to: 3; duration: CK.dur(50); easing.type: Easing.InOutQuad }
         NumberAnimation { target: root; property: "shakeX"; to: 0; duration: CK.dur(45); easing.type: Easing.OutQuad }
+    }
+    NumberAnimation {
+        id: grantPulse
+        target: root; property: "grantGlow"; from: 0; to: 1
+        duration: CK.dur(160); easing.type: Easing.OutCubic
     }
     NumberAnimation {
         id: errorPulse
@@ -267,7 +288,22 @@ FocusScope {
             x: root.glitch ? -2 : 0
             width: CK.band
             height: parent.height * CK.ramp(root.t, 0, 200)
-            color: CK.red
+            color: root.granted ? Qt.tint(CK.red, CK.alpha(CK.green, root.grantGlow)) : CK.red
+        }
+        Rectangle {  // halo do sucesso
+            x: -7
+            width: 3
+            height: parent.height
+            color: CK.green
+            opacity: 0.6 * root.grantGlow
+            visible: root.granted
+        }
+        Rectangle {  // linha de cima acende em verde da esquerda para a direita
+            visible: root.granted
+            y: 0
+            width: parent.width * root.grantGlow
+            height: 2
+            color: CK.green
         }
 
         Column {
@@ -461,7 +497,7 @@ FocusScope {
                         CyberIcon {
                             x: 13
                             anchors.verticalCenter: parent.verticalCenter
-                            name: "warn"
+                            name: root.msgKind === "ok" ? "check" : "warn"
                             color: root.msgColor
                             width: 16; height: 16
                         }
@@ -509,7 +545,7 @@ FocusScope {
                         primary: true
                         busy: root.busy
                         trailing: root.busy ? "" : "arrow"
-                        text: root.busy ? "Verificando…" : (root.isLock ? "Desbloquear" : "Entrar")
+                        text: root.granted ? "Concedido" : (root.busy ? "Verificando…" : (root.isLock ? "Desbloquear" : "Entrar"))
                         enabled: root.inputEnabled
                         onClicked: root.startLogin()
                     }

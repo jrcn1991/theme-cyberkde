@@ -38,6 +38,17 @@ PIECES = {"topleft": (0, 0), "top": (1, 0), "topright": (2, 0),
           "bottomleft": (0, 2), "bottom": (1, 2), "bottomright": (2, 2)}
 
 
+@dataclass
+class LookX(Look):
+    """Look com as peças das opções de estilo: `bracket` = contorno só nas peças de canto (cantoneiras,
+    com braço do tamanho da moldura) e `extras` = formas a mais [(polígono(x0, y0, x1, y1), tinta)]."""
+    bracket: tuple | None = None
+    extras: list = field(default_factory=list)
+
+
+CORNERS = ("topleft", "topright", "bottomleft", "bottomright")
+
+
 def element(name, state, frames, look, interior=True, M=12):
     """Emite as 9 peças de um estado. frames = (topo, base, esquerda, direita)."""
     t, b, l, r = frames
@@ -45,7 +56,9 @@ def element(name, state, frames, look, interior=True, M=12):
     it, ir, ib, il = look.inset
     x0, y0, x1, y1 = il, it, W - ir, H - ib
     outer, labels = outline(x0, y0, x1, y1, look.chamfer)
-    if look.border:
+    bracket = getattr(look, "bracket", None)
+    extras = [(f(x0, y0, x1, y1), pt) for f, pt in getattr(look, "extras", [])]
+    if look.border or bracket:
         def dist(lbl):
             if len(lbl) == 1:
                 return look.bw if lbl in look.sides else 0
@@ -72,6 +85,12 @@ def element(name, state, frames, look, interior=True, M=12):
         tx, ty = ox + ci * 2, oy + ri * 2  # vista "explodida" só para leitura no Inkscape
         parts = [invisible(xa + tx, ya + ty, xb - xa, yb - ya)]
         parts += shape_svg(outer, inner, look.fill, look.border, tx, ty, (xa, ya, xb, yb))
+        if bracket and pos in CORNERS:
+            parts += shape_svg(outer, inner, None, bracket, tx, ty, (xa, ya, xb, yb))
+        for shp, pt in extras:
+            m = clip(shp, xa, ya, xb, yb)
+            if area(m) > 1e-6:
+                parts.append(f'<path d="{sub(m, tx, ty)}" {paint(pt)}/>')
         if mk:
             m = clip(mk, xa, ya, xb, yb)
             if area(m) > 1e-6:
@@ -95,53 +114,142 @@ def icon(id_, w, h, *shapes):
 FR = {}  # molduras por elemento, reaproveitadas no kvconfig
 
 
-def frames(name, t, b, l, r):
+def frames(name, t, b, l, r, ch=None, minimo=0):
+    """Molduras de um elemento. Com `ch` (cantos chanfrados), cada lado cresce até caber o chanfro dos
+    cantos dele; `minimo` = todos os lados com pelo menos isso (braço das cantoneiras)."""
+    t, b, l, r = (max(v, minimo) for v in (t, b, l, r))
+    for k, c in (ch or {}).items():
+        if "t" in k:
+            t = max(t, c)
+        if "b" in k:
+            b = max(b, c)
+        if "l" in k:
+            l = max(l, c)
+        if "r" in k:
+            r = max(r, c)
     FR[name] = (t, b, l, r)
     return FR[name]
 
 
-cs, cm = CH["chamferSmall"], CH["chamferStandard"]
+cs, cm = tam(CH["chamferSmall"]), tam(CH["chamferStandard"])
 mw = CH["markerWidth"]
+EST = ESTILO
+CS_, CM_ = corte(cs), corte(cm)  # cantos chanfrados das peças pequenas e das padrão (opção "corte")
+ARM = 6                          # braço das cantoneiras (V2/V34): o tamanho da peça de canto
+
+
+def colchetes(arm, bw, paint_):
+    """Colchetes [ ] nas pontas (seleção V17): barra vertical e braços curtos, dentro das colunas laterais."""
+    def lado(esq):
+        def f(x0, y0, x1, y1):
+            xa, xb = (x0, x0 + arm) if esq else (x1 - arm, x1)
+            xv = (x0, x0 + bw) if esq else (x1 - bw, x1)
+            return [rectpoly(xv[0], y0, xv[1], y1), rectpoly(xa, y0, xb, y0 + bw), rectpoly(xa, y1 - bw, xb, y1)]
+        return f
+    return [(lambda *a, f=lado(e), i=i: f(*a)[i], paint_) for e in (True, False) for i in range(3)]
 
 # Botão (PanelButtonCommand) — chanfro padrão no canto inferior direito
-widget("button", frames("button", 2, cm, 2, cm), {
-    "normal": Look(P(RAISED), P(mix(RED, RAISED, BRAND)), chamfer={"br": cm}),
-    "focused": Look(P(mix(RED, RAISED, HOV)), P(RED), chamfer={"br": cm}),
-    "pressed": Look(P(mix(RED, RAISED, PRS)), P(RED), chamfer={"br": cm}),
-    "toggled": Look(P(mix(RED, RAISED, SEL)), P(RED), chamfer={"br": cm}),
+widget("button", frames("button", 2, cm, 2, cm, CM_), {
+    "normal": Look(P(RAISED), P(mix(RED, RAISED, BRAND)), chamfer=CM_),
+    "focused": Look(P(mix(RED, RAISED, HOV)), P(RED), chamfer=CM_),
+    "pressed": Look(P(mix(RED, RAISED, PRS)), P(RED), chamfer=CM_),
+    "toggled": Look(P(mix(RED, RAISED, SEL)), P(RED), chamfer=CM_),
 })
 
 # Botão de ferramenta (toolbar do Dolphin) — chanfro pequeno
-widget("tbutton", frames("tbutton", 1, cs, 1, cs), {
-    "normal": Look(None, P(mix(RED, PANEL, BRAND)), chamfer={"br": cs}),
-    "focused": Look(P(mix(RED, BASE, HOV)), P(mix(RED, BASE, BRAND)), chamfer={"br": cs}),
-    "pressed": Look(P(mix(RED, BASE, PRS)), P(RED), chamfer={"br": cs}),
-    "toggled": Look(P(mix(RED, BASE, SEL)), P(RED), chamfer={"br": cs}),
+widget("tbutton", frames("tbutton", 1, cs, 1, cs, CS_), {
+    "normal": Look(None, P(mix(RED, PANEL, BRAND)), chamfer=CS_),
+    "focused": Look(P(mix(RED, BASE, HOV)), P(mix(RED, BASE, BRAND)), chamfer=CS_),
+    "pressed": Look(P(mix(RED, BASE, PRS)), P(RED), chamfer=CS_),
+    "toggled": Look(P(mix(RED, BASE, SEL)), P(RED), chamfer=CS_),
 })
 
 # Item de lista/ícone (seleção do Dolphin): hover tonal, seleção com marcador lateral
-iv = dict(chamfer={"br": cs})
-widget("itemview", frames("itemview", 1, cs, cs, cs), {
-    "focused": Look(P(RED, HOV), P(RED, BRAND), **iv),
-    "pressed": Look(P(RED, SEL), P(RED), marker=(P(RED), "left", mw), **iv),
-    "toggled": Look(P(RED, SEL + 0.06), P(RED), marker=(P(RED), "left", mw), **iv),
-    "pressed-inactive": Look(P(RED, 0.12), P(RED, 0.45), marker=(P(RED, 0.6), "left", mw), **iv),
-    "toggled-inactive": Look(P(RED, 0.12), P(RED, 0.45), marker=(P(RED, 0.6), "left", mw), **iv),
-})
+iv = dict(chamfer=CS_)
+SELECAO = EST["selecao"]
+if SELECAO == "marcador":
+    widget("itemview", frames("itemview", 1, cs, cs, cs, CS_), {
+        "focused": Look(P(RED, HOV), P(RED, BRAND), **iv),
+        "pressed": Look(P(RED, SEL), P(RED), marker=(P(RED), "left", mw), **iv),
+        "toggled": Look(P(RED, SEL + 0.06), P(RED), marker=(P(RED), "left", mw), **iv),
+        "pressed-inactive": Look(P(RED, 0.12), P(RED, 0.45), marker=(P(RED, 0.6), "left", mw), **iv),
+        "toggled-inactive": Look(P(RED, 0.12), P(RED, 0.45), marker=(P(RED, 0.6), "left", mw), **iv),
+    })
+elif SELECAO == "bloco":  # destaque sólido e texto escuro (o "LOST GIRL" do diário)
+    widget("itemview", frames("itemview", 1, cs, cs, cs, CS_), {
+        "focused": Look(P(RED, HOV), P(RED, BRAND), **iv),
+        "pressed": Look(P(RED), None, **iv),
+        "toggled": Look(P(RED), None, **iv),
+        # Sem foco o Kvantum pinta o texto claro: a seleção fica tonal, como no marcador.
+        "pressed-inactive": Look(P(RED, 0.28), P(RED, 0.6), **iv),
+        "toggled-inactive": Look(P(RED, 0.28), P(RED, 0.6), **iv),
+    })
+elif SELECAO == "colchetes":  # [ ] nas pontas, preenchimento fraco
+    br = colchetes(5, 2, P(RED))
+    bri = colchetes(5, 2, P(RED, 0.6))
+    widget("itemview", frames("itemview", 2, 2, 5, 5), {
+        "focused": LookX(P(RED, HOV), extras=colchetes(5, 1, P(RED, 0.45))),
+        "pressed": LookX(P(RED, HOV), extras=br),
+        "toggled": LookX(P(RED, SEL - 0.06), extras=br),
+        "pressed-inactive": LookX(P(RED, 0.08), extras=bri),
+        "toggled-inactive": LookX(P(RED, 0.08), extras=bri),
+    })
+else:  # sublinhado: traço de 2 px embaixo
+    widget("itemview", frames("itemview", 1, cs, cs, cs, CS_), {
+        "focused": Look(P(RED, HOV), P(RED, BRAND), **iv),
+        "pressed": Look(P(RED, HOV + 0.04), marker=(P(RED), "bottom", 2), **iv),
+        "toggled": Look(P(RED, SEL - 0.04), marker=(P(RED), "bottom", 2), **iv),
+        "pressed-inactive": Look(P(RED, 0.08), marker=(P(RED, 0.6), "bottom", 2), **iv),
+        "toggled-inactive": Look(P(RED, 0.08), marker=(P(RED, 0.6), "bottom", 2), **iv),
+    })
 
 # Campo de texto: contorno neutro, foco ciano de 2 px
-widget("lineedit", frames("lineedit", 2, cs, 2, cs), {
-    "normal": Look(P(INPUT), P(CONTROL_LINE), chamfer={"br": cs}),
-    "focused": Look(P(INPUT), P(CYAN), bw=2, chamfer={"br": cs}),
-})
+if EST["campos"] == "caixa":
+    widget("lineedit", frames("lineedit", 2, cs, 2, cs, CS_), {
+        "normal": Look(P(INPUT), P(CONTROL_LINE), chamfer=CS_),
+        "focused": Look(P(INPUT), P(CYAN), bw=2, chamfer=CS_),
+    })
+elif EST["campos"] == "sublinhado":  # só a linha de baixo; o foco engrossa a linha e acende a lateral
+    widget("lineedit", frames("lineedit", 2, cs, 2, cs, CS_), {
+        "normal": Look(P(INPUT, 0.55), P(CONTROL_LINE), sides="b", chamfer=CS_),
+        "focused": Look(P(INPUT), P(CYAN), bw=2, sides="b", chamfer=CS_, marker=(P(CYAN), "left", 2)),
+    })
+else:  # bloco: fundo de entrada sem contorno; foco = faixa ciano à esquerda
+    widget("lineedit", frames("lineedit", 2, cs, 3, cs, CS_), {
+        "normal": Look(P(INPUT), chamfer=CS_),
+        "focused": Look(P(mix(CYAN, INPUT, 0.06)), chamfer=CS_, marker=(P(CYAN), "left", 3)),
+    })
 
 # Abas: inativa = só filete inferior; ativa = moldura vermelha + faixa de 2 px
-widget("tab", frames("tab", cs, 2, 1, cs), {
-    "normal": Look(None, P(LINE), sides="b", chamfer={"tr": cs}),
-    "focused": Look(P(mix(RED, PANEL, HOV)), P(mix(RED, PANEL, BRAND)), chamfer={"tr": cs}),
-    "pressed": Look(P(mix(RED, PANEL, SEL)), P(RED), sides="tlr", chamfer={"tr": cs}, marker=(P(RED), "bottom", 2)),
-    "toggled": Look(P(mix(RED, PANEL, SEL)), P(RED), sides="tlr", chamfer={"tr": cs}, marker=(P(RED), "bottom", 2)),
-})
+ABAS = EST["abas"]
+if ABAS == "moldura":
+    widget("tab", frames("tab", cs, 2, 1, cs), {
+        "normal": Look(None, P(LINE), sides="b", chamfer={"tr": cs}),
+        "focused": Look(P(mix(RED, PANEL, HOV)), P(mix(RED, PANEL, BRAND)), chamfer={"tr": cs}),
+        "pressed": Look(P(mix(RED, PANEL, SEL)), P(RED), sides="tlr", chamfer={"tr": cs}, marker=(P(RED), "bottom", 2)),
+        "toggled": Look(P(mix(RED, PANEL, SEL)), P(RED), sides="tlr", chamfer={"tr": cs}, marker=(P(RED), "bottom", 2)),
+    })
+elif ABAS == "sublinhada":  # sem moldura; a ativa ganha um traço ciano de 2 px embaixo (navegação do diário)
+    widget("tab", frames("tab", 2, 2, 1, 1), {
+        "normal": Look(None, P(LINE), sides="b"),
+        "focused": Look(P(mix(CYAN, PANEL, 0.06)), P(mix(CYAN, PANEL, 0.5)), sides="b"),
+        "pressed": Look(P(mix(CYAN, PANEL, 0.10)), marker=(P(CYAN), "bottom", 2)),
+        "toggled": Look(None, marker=(P(CYAN), "bottom", 2)),
+    })
+elif ABAS == "bloco":  # ativa sólida (texto escuro), inativas escuras
+    widget("tab", frames("tab", cs, 2, 1, cs), {
+        "normal": Look(P(RAISED), P(LINE), sides="b", chamfer={"tr": cs}),
+        "focused": Look(P(mix(RED, RAISED, 0.22)), P(mix(RED, RAISED, BRAND)), sides="b", chamfer={"tr": cs}),
+        "pressed": Look(P(RED), chamfer={"tr": cs}),
+        "toggled": Look(P(RED), chamfer={"tr": cs}),
+    })
+else:  # cartao: abas altas com chanfro em cima à direita e faixa grossa embaixo da ativa
+    widget("tab", frames("tab", cm, 3, 1, cm), {
+        "normal": Look(P(mix(RED, PANEL, 0.04)), P(LINE), sides="tlr", chamfer={"tr": cm}),
+        "focused": Look(P(mix(RED, PANEL, HOV)), P(mix(RED, PANEL, BRAND)), sides="tlr", chamfer={"tr": cm}),
+        "pressed": Look(P(mix(RED, PANEL, SEL)), P(RED), sides="tlr", chamfer={"tr": cm}, marker=(P(RED), "bottom", 3)),
+        "toggled": Look(P(mix(RED, PANEL, SEL)), P(RED), sides="tlr", chamfer={"tr": cm}, marker=(P(RED), "bottom", 3)),
+    })
 widget("tabframe", frames("tabframe", 1, 1, 1, 1), {"normal": Look(None, P(LINE))})
 
 # Cabeçalho de colunas (modo detalhes)
@@ -155,7 +263,13 @@ icon("header-separator", 1, 20, box(0, 5, 1, 10, LINE))
 
 # Molduras genéricas e grupos
 widget("common", frames("common", 1, 1, 1, 1), {"normal": Look(None, P(LINE)), "focused": Look(None, P(LINE))})
-widget("group", frames("group", 1, cm, 1, cm), {"normal": Look(None, P(LINE), chamfer={"br": cm})})
+MOLDURA = EST["moldura"]
+if MOLDURA == "contorno":
+    widget("group", frames("group", 1, cm, 1, cm, CM_), {"normal": Look(None, P(LINE), chamfer=CM_)})
+else:  # cantoneiras na cor de destaque sobre o filete neutro. O Kvantum encolhe os cantos do grupo,
+    # então o filete fica também no "cantoneira" (sem ele o grupo quase sumia).
+    widget("group", frames("group", 1, cm, 1, cm, CM_, minimo=ARM), {"normal": LookX(
+        None, P(LINE), chamfer=CM_, bracket=P(mix(RED, PANEL, 0.7)))})
 
 # Barra de ferramentas: superfície base + filete vermelho de identidade embaixo
 widget("toolbar", frames("toolbar", 1, 1, 1, 1), {"normal": Look(P(BASE), P(mix(RED, BASE, BRAND)), sides="b")})
@@ -163,23 +277,54 @@ icon("toolbar-separator", 5, 20, box(2, 4, 1, 12, LINE))
 
 # Barra de menus e seus itens
 widget("menubar", frames("menubar", 0, 1, 0, 0), {"normal": Look(P(BASE), P(mix(RED, BASE, BRAND)), sides="b")})
-widget("menubaritem", frames("menubaritem", 2, 2, 2, 2), {
-    "focused": Look(P(mix(RED, BASE, HOV)), marker=(P(RED), "bottom", 2)),
-    "pressed": Look(P(mix(RED, BASE, SEL)), marker=(P(RED), "bottom", 2)),
-    "toggled": Look(P(mix(RED, BASE, SEL)), marker=(P(RED), "bottom", 2)),
-})
+if SELECAO == "bloco":
+    widget("menubaritem", frames("menubaritem", 2, 2, 2, 2), {
+        "focused": Look(P(mix(RED, BASE, HOV)), marker=(P(RED), "bottom", 2)),
+        "pressed": Look(P(RED)),
+        "toggled": Look(P(RED)),
+    })
+elif SELECAO == "colchetes":
+    widget("menubaritem", frames("menubaritem", 2, 2, 4, 4), {
+        st: LookX(P(mix(RED, BASE, HOV)), extras=colchetes(4, 2, P(RED))) for st in ("focused", "pressed", "toggled")})
+else:
+    widget("menubaritem", frames("menubaritem", 2, 2, 2, 2), {
+        "focused": Look(P(mix(RED, BASE, HOV)), marker=(P(RED), "bottom", 2)),
+        "pressed": Look(P(mix(RED, BASE, SEL)), marker=(P(RED), "bottom", 2)),
+        "toggled": Look(P(mix(RED, BASE, SEL)), marker=(P(RED), "bottom", 2)),
+    })
 
 # Menus (popup opaco chanfrado) e itens com marcador lateral
-widget("menu", frames("menu", 2, cm, 2, cm), {"normal": Look(P(RAISED), P(mix(RED, RAISED, BRAND)), chamfer={"br": cm})})
-widget("menuitem", frames("menuitem", 1, 1, mw + 1, 1), {
-    "focused": Look(P(mix(RED, RAISED, HOV)), marker=(P(RED), "left", mw)),
-    "pressed": Look(P(mix(RED, RAISED, SEL)), marker=(P(RED), "left", mw)),
-    "toggled": Look(P(mix(RED, RAISED, SEL)), marker=(P(RED), "left", mw)),
-})
+widget("menu", frames("menu", 2, cm, 2, cm, CM_), {"normal": Look(P(RAISED), P(mix(RED, RAISED, BRAND)), chamfer=CM_)})
+if SELECAO == "marcador":
+    widget("menuitem", frames("menuitem", 1, 1, mw + 1, 1), {
+        "focused": Look(P(mix(RED, RAISED, HOV)), marker=(P(RED), "left", mw)),
+        "pressed": Look(P(mix(RED, RAISED, SEL)), marker=(P(RED), "left", mw)),
+        "toggled": Look(P(mix(RED, RAISED, SEL)), marker=(P(RED), "left", mw)),
+    })
+elif SELECAO == "bloco":
+    widget("menuitem", frames("menuitem", 1, 1, mw + 1, 1), {
+        st: Look(P(RED)) for st in ("focused", "pressed", "toggled")})
+elif SELECAO == "colchetes":
+    widget("menuitem", frames("menuitem", 2, 2, 5, 5), {
+        st: LookX(P(mix(RED, RAISED, HOV)), extras=colchetes(5, 2, P(RED))) for st in ("focused", "pressed", "toggled")})
+else:
+    widget("menuitem", frames("menuitem", 1, 2, mw + 1, 1), {
+        st: Look(P(mix(RED, RAISED, HOV)), marker=(P(RED), "bottom", 2)) for st in ("focused", "pressed", "toggled")})
 icon("menuitem-separator", 20, 9, box(0, 4, 20, 1, LINE))
 
 # Dica (tooltip)
-widget("tooltip", frames("tooltip", cm, cm, cm, cm), {"normal": Look(P(RAISED), P(mix(RED, RAISED, BRAND)), chamfer={"br": cm})})
+DICA = EST["dica"]
+_tip_line = P(mix(RED, RAISED, BRAND))
+_tip = dict(chamfer=CM_)
+if DICA == "cantoneira" or (DICA == "chanfro" and MOLDURA != "contorno"):
+    _tip.update(bracket=P(RED))
+    _tip_line = P(LINE) if MOLDURA == "misto" and DICA == "chanfro" else None
+if DICA == "faixa":    # faixa ciano no alto (a dica "EQUIPPED")
+    _tip.update(marker=(P(CYAN), "top", 3))
+elif DICA == "marcador":
+    _tip.update(marker=(P(RED), "left", mw))
+widget("tooltip", frames("tooltip", cm, cm, cm, cm, CM_, minimo=ARM if "bracket" in _tip else 0),
+       {"normal": LookX(P(RAISED), _tip_line, **_tip)})
 
 # Rolagem: trilho de 1 px e cursor de 6 px
 widget("scrollbargroove", frames("scrollbargroove", 0, 0, 4, 5), {"normal": Look(P(LINE), inset=(0, 5, 0, 4))})
@@ -198,8 +343,25 @@ widget("splitter", frames("splitter", 0, 0, 2, 2), {
 
 # Barra de progresso segmentada
 widget("progress", frames("progress", 1, 1, 1, 1), {"normal": Look(P(BASE), P(LINE))})
-icon("progress-pattern-normal", 8, 8, box(0, 0, 6, 8, RED))
-icon("progress-pattern-disabled", 8, 8, box(0, 0, 6, 8, TXTD))
+
+
+def hachura(col):
+    """Ladrilho 8x8 com faixas a 45° que emendam nos dois sentidos."""
+    return [poly(clip([(k - 20, 20), (k + 20, -20), (k + 23, -20), (k - 17, 20)], 0, 0, 8, 8), col)
+            for k in (-8, 0, 8)]
+
+
+PROGRESSO = EST["progresso"]
+PATTERN = {"segmentada": (8, None), "hachurada": (8, 8), "pontos": (5, 5), "lisa": (None, None)}[PROGRESSO]
+for st, col in (("normal", RED), ("disabled", TXTD)):
+    if PROGRESSO == "segmentada":
+        icon(f"progress-pattern-{st}", 8, 8, box(0, 0, 6, 8, col))
+    elif PROGRESSO == "hachurada":
+        icon(f"progress-pattern-{st}", 8, 8, box(0, 0, 8, 8, col, 0.30), *hachura(col))
+    elif PROGRESSO == "pontos":
+        icon(f"progress-pattern-{st}", 5, 5, box(0.5, 0.5, 3, 3, col))
+    else:
+        icon(f"progress-pattern-{st}", 8, 8, box(0, 0, 8, 8, col))
 
 # Slider: trilha fina e cursor sólido chanfrado
 icon("slider-normal", 4, 12, box(0, 0, 4, 12, LINE))
@@ -209,8 +371,17 @@ for st, fill, brd in (("normal", RED, None), ("focused", RED_LIGHT, P(WHITE)),
     icon(f"slidercursor-{st}", 14, 14, chamfered(14, 14, 4, P(fill), brd))
 
 # Foco por teclado: anel ciano de 2 px (sem estados, sem interior)
-element("focus", None, frames("focus", 2, cs, 2, cs),
-        Look(None, P(CYAN), bw=TOK["focus"]["width"], chamfer={"br": cs}), interior=False)
+FOCO = EST["foco"]
+if FOCO == "anel":
+    element("focus", None, frames("focus", 2, cs, 2, cs, CS_),
+            Look(None, P(CYAN), bw=TOK["focus"]["width"], chamfer=CS_), interior=False)
+elif FOCO == "grosso":  # 3 px, mais fácil de achar
+    element("focus", None, frames("focus", 3, cs, 3, cs, CS_, minimo=3),
+            Look(None, P(CYAN), bw=3, chamfer=CS_), interior=False)
+else:  # cantoneira: o Kvantum encolhe as peças de canto do foco para ~2 px (os "L" somem); nos apps
+    # fica o anel de sempre, e as cantoneiras valem no Plasma.
+    element("focus", None, frames("focus", 2, cs, 2, cs, CS_),
+            Look(None, P(CYAN), bw=TOK["focus"]["width"], chamfer=CS_), interior=False)
 
 # ---------------------------------------------------------------- indicadores
 ARROW_STATES = {"normal": TXT2, "focused": WHITE, "pressed": RED, "toggled": WHITE, "disabled": TXTD}
@@ -264,6 +435,7 @@ def fr(name):
 def margins(name, pad_v, pad_h):
     """Margens de texto que compensam molduras assimétricas, centralizando o conteúdo."""
     t, b, l, r = FR[name]
+    pad_v, pad_h = dens(pad_v), dens(pad_h)
     big_v, big_h = max(t, b), max(l, r)
     return (f"text.margin=true\ntext.margin.top={pad_v + big_v - t}\ntext.margin.bottom={pad_v + big_v - b}\n"
             f"text.margin.left={pad_h + big_h - l}\ntext.margin.right={pad_h + big_h - r}")
@@ -273,6 +445,27 @@ TEXT_WHITE = (f"text.normal.color={TXT1}\ntext.focus.color={TXT1}\n"
               f"text.press.color={TXT1}\ntext.toggle.color={TXT1}")
 TEXT_SOFT = (f"text.normal.color={TXT2}\ntext.focus.color={TXT1}\n"
              f"text.press.color={TXT1}\ntext.toggle.color={TXT1}")
+# Seleção em bloco: texto escuro sobre o destaque sólido (o _legivel garante 4,5:1).
+TEXT_SEL = TEXT_WHITE if SELECAO != "bloco" else (f"text.normal.color={TXT1}\ntext.focus.color={TXT1}\n"
+                                                    f"text.press.color={ONRED}\ntext.toggle.color={ONRED}")
+TEXT_MENU = TEXT_WHITE if SELECAO != "bloco" else (f"text.normal.color={TXT1}\ntext.focus.color={ONRED}\n"
+                                                     f"text.press.color={ONRED}\ntext.toggle.color={ONRED}")
+TEXT_TAB = TEXT_SOFT if ABAS != "bloco" else (f"text.normal.color={TXT2}\ntext.focus.color={TXT1}\n"
+                                                f"text.press.color={ONRED}\ntext.toggle.color={ONRED}")
+
+
+# Texto sobre a seleção: as listas e os menus do Qt pintam o texto com o HighlightedText da paleta (o
+# text.toggle.color do Kvantum não vale ali). No bloco, o escuro; o Dolphin só usa essa cor enquanto o
+# item está pressionado (a seleção dele é tonal, com o texto normal).
+SEL_TXT = ONRED if SELECAO == "bloco" else ONSEL
+
+
+def tm(v):  # margem de texto fixa, na densidade escolhida
+    return dens(v)
+
+
+MENU_H = {"compacto": "1.4font", "espacoso": "2font"}.get(EST["densidade"], "1.6font")
+PATTERN_KV = "".join(f"\ninterior.{eixo}.patternsize={v}" for eixo, v in zip("xy", PATTERN) if v)
 
 KV = f"""[%General]
 author={AUTHOR}
@@ -285,7 +478,7 @@ left_tabs=true
 attach_active_tab=false
 joined_inactive_tabs=false
 group_toolbar_buttons=false
-toolbar_item_spacing=2
+toolbar_item_spacing={dens(2)}
 toolbar_interior_spacing=2
 toolbar_separator_thickness=5
 spread_progressbar=false
@@ -318,8 +511,8 @@ tooltip_delay={TOK["motion"].get("tooltipDelay", 350)}
 combo_as_lineedit=true
 inline_spin_indicators=true
 fill_rubberband=false
-layout_spacing=4
-layout_margin=6
+layout_spacing={dens(4)}
+layout_margin={dens(6)}
 
 [GeneralColors]
 window.color={PANEL}
@@ -339,7 +532,7 @@ window.text.color={TXT1}
 button.text.color={TXT1}
 disabled.text.color={TXTD}
 tooltip.text.color={TXT1}
-highlight.text.color={ONSEL}
+highlight.text.color={SEL_TXT}
 link.color={CYAN}
 link.visited.color=#B46CFA
 progress.indicator.text.color={ONRED}
@@ -454,7 +647,7 @@ frame.element=tab
 interior.element=tab
 indicator.element=tab
 {fr("tab")}
-{TEXT_SOFT}
+{TEXT_TAB}
 {margins("tab", 3, 8)}
 
 [TabFrame]
@@ -484,10 +677,10 @@ indicator.element=arrow
 indicator.size=8
 {TEXT_SOFT}
 text.margin=true
-text.margin.top=3
-text.margin.bottom=3
-text.margin.left=6
-text.margin.right=6
+text.margin.top={tm(3)}
+text.margin.bottom={tm(3)}
+text.margin.left={tm(6)}
+text.margin.right={tm(6)}
 
 [SizeGrip]
 indicator.element=resize-grip
@@ -531,8 +724,7 @@ text.bold=false
 inherits=PanelButtonCommand
 frame=false
 interior=true
-interior.element=progress-pattern
-interior.x.patternsize=8
+interior.element=progress-pattern{PATTERN_KV}
 
 [ItemView]
 inherits=PanelButtonCommand
@@ -541,12 +733,12 @@ frame.element=itemview
 interior=true
 interior.element=itemview
 {fr("itemview")}
-{TEXT_WHITE}
+{TEXT_SEL}
 text.margin=true
-text.margin.top=1
-text.margin.bottom=1
-text.margin.left=2
-text.margin.right=2
+text.margin.top={tm(1)}
+text.margin.bottom={tm(1)}
+text.margin.left={tm(2)}
+text.margin.right={tm(2)}
 
 [Splitter]
 inherits=PanelButtonCommand
@@ -588,13 +780,13 @@ interior=true
 interior.element=menuitem
 indicator.element=menuitem
 {fr("menuitem")}
-{TEXT_WHITE}
+{TEXT_MENU}
 text.margin=true
-text.margin.top=3
-text.margin.bottom=3
-text.margin.left=6
-text.margin.right=8
-min_height=1.6font
+text.margin.top={tm(3)}
+text.margin.bottom={tm(3)}
+text.margin.left={tm(6)}
+text.margin.right={tm(8)}
+min_height={MENU_H}
 
 [MenuBarItem]
 inherits=PanelButtonCommand
@@ -603,12 +795,12 @@ frame.element=menubaritem
 interior=true
 interior.element=menubaritem
 {fr("menubaritem")}
-{TEXT_WHITE}
+{TEXT_SEL}
 text.margin=true
-text.margin.top=3
-text.margin.bottom=3
-text.margin.left=6
-text.margin.right=6
+text.margin.top={tm(3)}
+text.margin.bottom={tm(3)}
+text.margin.left={tm(6)}
+text.margin.right={tm(6)}
 
 [MenuBar]
 inherits=PanelButtonCommand
@@ -676,13 +868,13 @@ def kc(h):
     return ",".join(str(v) for v in rgb(h))
 
 
-def color_group(bg, alt, fg=TXT1, inactive=TXT2, negative=DANGER):
+def color_group(bg, alt, fg=TXT1, inactive=TXT2, negative=NEGATIVO):
     return (f"BackgroundAlternate={kc(alt)}\nBackgroundNormal={kc(bg)}\n"
             f"DecorationFocus={kc(CYAN)}\nDecorationHover={kc(RED)}\n"
             f"ForegroundActive={kc(CYAN)}\nForegroundInactive={kc(inactive)}\n"
             f"ForegroundLink={kc(CYAN)}\nForegroundNegative={kc(negative)}\n"
-            f"ForegroundNeutral={kc(GOLD)}\nForegroundNormal={kc(fg)}\n"
-            f"ForegroundPositive={kc(GREEN)}\nForegroundVisited={kc(VISITED)}\n")
+            f"ForegroundNeutral={kc(NEUTRO)}\nForegroundNormal={kc(fg)}\n"
+            f"ForegroundPositive={kc(POSITIVO)}\nForegroundVisited={kc(VISITED)}\n")
 
 
 # O fundo Selection é o vermelho puro: o Dolphin 25.x desenha a própria seleção com
@@ -711,7 +903,7 @@ Enable=false
 [Colors:Header][Inactive]
 {color_group(BASE, PANEL, TXT2, TXTD)}
 [Colors:Selection]
-{color_group(RED, mix(RED, BASE, SEL), ONSEL, TXT2, mix(WHITE, DANGER, 0.4))}
+{color_group(RED, mix(RED, BASE, SEL), SEL_TXT, TXT2, mix(WHITE, NEGATIVO, 0.4))}
 [Colors:Tooltip]
 {color_group(RAISED, PANEL)}
 [Colors:View]

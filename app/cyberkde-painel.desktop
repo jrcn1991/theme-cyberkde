@@ -1,0 +1,19 @@
+# Modelo do lançador do painel. Quem instala troca @APP@ pela pasta app/ instalada (ex.:
+# ~/.local/opt/cyberkde/app) e copia para ~/.local/share/applications/cyberkde-painel.desktop.
+# O nome do arquivo precisa ser "cyberkde-painel.desktop": é o desktopFileName do app (Wayland usa
+# isso para achar o ícone e o nome da janela).
+[Desktop Entry]
+Type=Application
+Name=CyberKDE Panel
+Name[pt_BR]=Painel do CyberKDE
+GenericName=Theme control panel
+GenericName[pt_BR]=Painel de controle do tema
+Comment=Turn the CyberKDE theme and its parts on or off, and pick a corporation color
+Comment[pt_BR]=Liga e desliga o tema CyberKDE e cada parte dele, e escolhe a corporação
+Exec=python3 "@APP@/cyberkde-painel.py"
+Icon=@APP@/cyberkde-painel.svg
+Terminal=false
+Categories=Settings;DesktopSettings;Qt;KDE;
+Keywords=cyberkde;tema;theme;cyberpunk;cor;color;
+StartupNotify=true
+StartupWMClass=cyberkde-painel

@@ -3,7 +3,8 @@
 # Quem instala o tema não compila nada: o "cyberkde animados" baixa estes .deb e confere o SHA-256
 # fixado no código do tema. Rodar à mão (Actions → apps → Run workflow) com a tag da release, por
 # exemplo "apps-25.12.3-1", quando mudar o patch ou quando o Ubuntu atualizar o Dolphin/Konsole.
-# Depois: copiar os SHA-256 da release para "apps_debs" em scripts/cyberkde.
+# A revisão de cada pacote (-cyberkdeN) vem de <app>/REVISAO. Depois: copiar os SHA-256 da release para
+# "apps_debs" em scripts/cyberkde (marcador "ATUALIZAR DEPOIS DO CI").
 name: apps
 
 on:

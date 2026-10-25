@@ -17,6 +17,7 @@ Parent=FALLBACK/
 TerminalCenter=false
 TerminalMargin=10
 DimWhenInactive=false
+AlternatingBars=0
 
 [Terminal Features]
 BlinkingCursorEnabled=false

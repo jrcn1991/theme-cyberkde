@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Emblema genérico do CyberKDE (reserva), inspirado no clima da corporação; não é o logo do jogo. -->
+  <path d="M21 4H43L60 21V43L43 60H21L4 43V21Z" fill="none" stroke="#FF7A1A" stroke-width="5" stroke-linejoin="miter"/>
+  <rect x="17" y="16" width="8" height="32" fill="#FF7A1A"/>
+  <path d="M27 32L41 16H50L36 32L50 48H41Z" fill="#FF7A1A"/>
+</svg>

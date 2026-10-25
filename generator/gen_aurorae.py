@@ -12,12 +12,21 @@ OUT = ROOT / "themes" / "aurorae" / "CyberKDE"
 
 PAD = 8                                  # área da sombra curta em volta da janela
 BORDER_L, BORDER_R, BORDER_B = 4, 6, 4   # esquerda = faixa de 3 px + 1 px de respiro
-EDGE_T, TITLE_H, EDGE_B = 4, 24, 4
+# Opções de estilo (cyberlib.ESTILO). Tamanho do corte: as bordas da direita e de baixo limitam o chanfro
+# (o FrameSvg dá ao canto a largura da borda vizinha), então "largo" alarga as duas.
+BORDER_R, BORDER_B = {"pequeno": (4, 3), "largo": (10, 10)}.get(ESTILO["tamanho"], (BORDER_R, BORDER_B))
+CORTE_ESQ = ESTILO["corte"] in ("oposto", "octogono")  # cantos da esquerda chanfrados
+if CORTE_ESQ:
+    BORDER_L = max(BORDER_L, BORDER_R)   # o chanfro da esquerda precisa de borda para caber
+EDGE_T, TITLE_H, EDGE_B = 4, {"compacto": 20, "espacoso": 30}.get(ESTILO["densidade"], 24), 4
 TITLE = EDGE_T + TITLE_H + EDGE_B
 M = 16                                   # miolo esticável das peças
 MARK = CH["markerWidth"]
-CHAMFER = {"tr": BORDER_R, "br": BORDER_B}
-BTN_W, BTN_H = 30, 24
+CHAMFER = {"canto": {"tr": BORDER_R, "br": BORDER_B}, "oposto": {"tl": BORDER_L, "br": BORDER_B},
+           "topo": {"tr": BORDER_R}, "reto": {},
+           "octogono": {"tl": BORDER_L, "tr": BORDER_R, "bl": min(BORDER_L, BORDER_B), "br": BORDER_B}}[ESTILO["corte"]]
+MARCADOR = ESTILO["marcador"]
+BTN_W, BTN_H = {"compacto": 26, "espacoso": 34}.get(ESTILO["densidade"], 30), TITLE_H
 FRAME_POS = {"topleft": (0, 0), "top": (1, 0), "topright": (2, 0),
              "left": (0, 1), "center": (1, 1), "right": (2, 1),
              "bottomleft": (0, 2), "bottom": (1, 2), "bottomright": (2, 2)}
@@ -59,26 +68,51 @@ def frame(sheet, prefix, active, oy):
     inner = offset_polygon(outer, labels, lambda s: 1 if s in ("t", "r", "b", "tr", "br") else 0)
     line = mix(RED, BASE, BRAND) if active else LINE
     strength = 0.22 if active else 0.14
+    # Brilho (V4): só a janela ativa troca a sombra preta por um halo na cor de destaque.
+    glow, core = "#000000", None
+    if active and BRILHO[1] is not None:
+        glow, strength, core = BRILHO
 
     shadow, prev = [], outer
     for i in range(1, PAD + 1):
         grown = offset_polygon(outer, labels, lambda _, i=i: -i)
-        shadow.append((grown, prev, strength * (1 - (i - 1) / PAD) ** 2))
+        a = strength * (1 - (i - 1) / PAD) ** 2
+        shadow.append((grown, prev, (core, 0.65) if core and i == 1 else (glow, a)))
         prev = grown
 
     separator = rectpoly(x0 + BORDER_L, y0 + TITLE - 1, x1 - BORDER_R, y0 + TITLE)
-    marker = rectpoly(x0, y0, x0 + (MARK if active else 1), y1)
     mark_color = RED if active else LINE
+
+    def faixa_esq(w, ate=None):
+        """Faixa da esquerda (w px). Com chanfro à esquerda ela é o contorno menos o recuo, e segue o corte."""
+        if not CORTE_ESQ:
+            return ("poly", rectpoly(x0, y0, x0 + w, y1 if ate is None else ate))
+        band = offset_polygon(outer, labels, lambda s: w if "l" in s else 0)
+        if ate is None:
+            return ("band", (outer, band))
+        return ("band", (clip(outer, x0, y0, x1, ate), clip(band, x0, y0, x1, ate)))
+
+    if not active or MARCADOR == "cheio":
+        marks = [(*faixa_esq(MARK if active else 1), mark_color)]
+    else:  # V3: a faixa vira um filete de 1 px; "parcial" põe o bloco só na altura do título
+        marks = [(*faixa_esq(1), line)]
+        if MARCADOR == "parcial":
+            marks.append((*faixa_esq(MARK, y0 + TITLE), RED))
+        elif MARCADOR == "topo":
+            marks.append(("band", (outer, offset_polygon(outer, labels, lambda s: MARK if "t" in s else 0)), RED))
 
     cols, rows = (0, PAD + BORDER_L, PAD + BORDER_L + M, W), (0, PAD + TITLE, PAD + TITLE + M, H)
     for pos, (ci, ri) in FRAME_POS.items():
         bx = (cols[ci], rows[ri], cols[ci + 1], rows[ri + 1])
         tx, ty = 10 + ci * 2, oy + ri * 2
         parts = []
-        for grown, inside, a in shadow:
-            parts += ring(grown, inside, "#000000", a, bx, tx, ty)
+        for grown, inside, (cor, a) in shadow:
+            parts += ring(grown, inside, cor, a, bx, tx, ty)
         parts += shape_svg(outer, inner, P(BASE), P(line), tx, ty, bx)
-        for shape, color in ((separator, LINE), (marker, mark_color)):
+        for kind, shape, color in [("poly", separator, LINE)] + marks:
+            if kind == "band":
+                parts += ring(*shape, color, 1.0, bx, tx, ty)
+                continue
             s = clip(shape, *bx)
             if area(s) > 1e-6:
                 parts.append(f'<path d="{sub(s, tx, ty)}" {paint(P(color))}/>')
@@ -134,9 +168,9 @@ def button_svg(name):
         "inactive": (None, None, TXTD),
         "deactivated": (None, None, mix(TXTD, BASE, 0.5)),
     }
-    if name == "close":  # fechar: vermelho sólido com glifo escuro (ação destrutiva), qualquer que seja o destaque
-        states["hover"] = (P(DANGER), None, ONRED)
-        states["pressed"] = (P(mix(DANGER, BASE, 0.7)), None, ONRED)
+    if name == "close":  # fechar: cor de alerta sólida com glifo escuro (ação destrutiva), qualquer que seja o destaque
+        states["hover"] = (P(NEGATIVO), None, ONRED)
+        states["pressed"] = (P(mix(NEGATIVO, BASE, 0.7)), None, ONRED)
     sheet = Sheet()
     for i, (state, (fill, border, glyph)) in enumerate(states.items()):
         x, y = 10 + i * (BTN_W + 10), 10

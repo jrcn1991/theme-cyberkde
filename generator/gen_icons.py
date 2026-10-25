@@ -26,7 +26,14 @@ from cyberlib import BASE, CYAN, GOLD, GREEN, RED, TOK, VISITED, mix  # noqa: E4
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "assets" / "icons" / "ai-final"
+BASE_ESCURO = (18, 18, 28, 255)  # fundo das miniaturas (surface.base)
+ALT_SRC = ROOT / "assets" / "icons" / "alternativos"  # estilos alternativos (mesmos nomes do ai-final), só os 6 de ALT_GRUPOS
 OUT = ROOT / "themes" / "icons" / "CyberKDE"
+# grupo da opção "cyberkde efeito icones" → ícone do ai-final que o estilo alternativo substitui
+ALT_GRUPOS = {
+    "documents": "folder-documents", "music": "folder-music", "pictures": "folder-pictures",
+    "recent": "folder-recent", "remote": "folder-remote", "trash": "user-trash-full",
+}
 BREEZE = [pathlib.Path("/usr/share/icons/breeze-dark"), pathlib.Path("/usr/share/icons/breeze")]
 # ImageMagick 7 chama "magick"; o 6, ainda padrão em várias distribuições, chama "convert".
 MAGICK = ["magick"] if shutil.which("magick") else ["convert"]
@@ -229,7 +236,14 @@ def passthrough(defined):
     return meta
 
 
-def main():
+def fonte(base, alt):
+    """Arquivo de origem de um ícone: o alternativo, se o grupo dele foi escolhido; senão, o do ai-final."""
+    if base in alt:
+        return ALT_SRC / f"{base}.png"
+    return SRC / f"{base}.png"
+
+
+def main(alt=frozenset()):
     shutil.rmtree(OUT, ignore_errors=True)
     dirs = set()
     seen = {}
@@ -245,7 +259,7 @@ def main():
             for base, (ctx, names) in ICONS.items():
                 if changed:
                     names = [n for n in names if n != "folder-red"]
-                pending.append((pool.submit(source, SRC / f"{base}.png"), ctx, names))
+                pending.append((pool.submit(source, fonte(base, alt)), ctx, names))
             pending += [(pool.submit(source, SRC / f"{base}.png"), ctx, [name]) for name, (ctx, base) in EXTRA.items()]
             for color, value in FOLDER_COLORS.items():
                 src = tmp / f"folder-{color}.png"
@@ -307,5 +321,43 @@ def main():
     print(f"{count} ícones/links em {len(ordered)} pastas → {OUT}")
 
 
+def previas(destino):
+    """Miniaturas das opções (cor padrão): <grupo>-padrao.webp, <grupo>-alt.webp (128 px, alfa) e a
+    comparacao.webp (as seis lado a lado, padrão em cima e alternativo embaixo, sobre o fundo escuro)."""
+    from PIL import Image
+    destino.mkdir(parents=True, exist_ok=True)
+    pares = {g: (SRC / f"{b}.png", ALT_SRC / f"{b}.png") for g, b in ALT_GRUPOS.items()}
+    tela = Image.new("RGBA", (len(pares) * 168 + 8, 2 * 168 + 8), BASE_ESCURO)
+    for i, (grupo, caminhos) in enumerate(pares.items()):
+        for j, (estilo, src) in enumerate(zip(("padrao", "alt"), caminhos)):
+            im = Image.open(src).convert("RGBA")
+            im.resize((128, 128), Image.LANCZOS).save(destino / f"{grupo}-{estilo}.webp", "WEBP", quality=92, alpha_quality=100, method=6)
+            tela.alpha_composite(im.resize((160, 160), Image.LANCZOS), (8 + i * 168, 8 + j * 168))
+    tela.convert("RGB").save(destino / "comparacao.webp", "WEBP", quality=88, method=6)
+    print(f"prévias em {destino}")
+
+
+def argumentos():
+    """--alt documents,music,...|todos: estilos alternativos (assets/icons/alternativos).
+    --saida DIR: gera fora de themes/icons/CyberKDE (que é versionado)."""
+    import argparse
+    global OUT
+    ap = argparse.ArgumentParser(description="Gera o tema de ícones CyberKDE.")
+    ap.add_argument("--alt", default="", help="grupos com o estilo alternativo: " + ",".join(ALT_GRUPOS) + " ou todos")
+    ap.add_argument("--saida", default="", help="pasta de saída (padrão: themes/icons/CyberKDE)")
+    ap.add_argument("--previas", default="", help="só grava as miniaturas das opções nesta pasta e sai")
+    a = ap.parse_args()
+    if a.previas:
+        previas(pathlib.Path(a.previas))
+        raise SystemExit(0)
+    grupos = list(ALT_GRUPOS) if a.alt.strip() == "todos" else [g for g in a.alt.replace(" ", "").split(",") if g]
+    ruim = [g for g in grupos if g not in ALT_GRUPOS]
+    if ruim:
+        ap.error(f"grupo desconhecido: {', '.join(ruim)} (há: {', '.join(ALT_GRUPOS)})")
+    if a.saida:
+        OUT = pathlib.Path(a.saida)
+    return frozenset(ALT_GRUPOS[g] for g in grupos)
+
+
 if __name__ == "__main__":
-    main()
+    main(argumentos())

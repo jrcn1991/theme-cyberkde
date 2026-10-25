@@ -7,6 +7,8 @@
 # Carregado com "source": só define funções e registra nomes.
 
 CYBERKDE_PHASES+=(icones-sistema)
+descreve_fase icones-sistema "Ícones do sistema" sistema nao "Ícones do tema no Plasma e em todos os apps." \
+  "System icons" "Theme icons in Plasma and every app."
 CYBERKDE_OFF_HOOKS+=(off_icones-sistema)
 
 # Avisa os aplicativos abertos que o tema de ícones mudou, como faz o plasma-changeicons:
