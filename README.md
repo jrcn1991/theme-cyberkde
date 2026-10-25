@@ -17,7 +17,7 @@ It changes the colors, the windows, the icons, the terminal and the login screen
 
 The screenshots show what a fresh install with `./instalar.sh --ligar` gives you: the bar on top and a [Latte Dock NG](https://github.com/jrcn1991/latte-dock-ng) dock, which the installer offers to install on Ubuntu 26.04.
 
-> Fan project, not affiliated with CD PROJEKT. Nothing here comes from the game: every image was made for this theme.
+> Fan project, not affiliated with CD PROJEKT.
 
 ## What it themes
 
@@ -105,10 +105,6 @@ cyberkde uninstall       # or ./desinstalar.sh
 ```
 
 It switches the theme off, restores every original value and removes the theme files, your CyberKDE preferences and the program itself.
-
-## KDE Store version
-
-The pieces are also published on the [KDE Store](https://store.kde.org) (Global Theme, Plasma style, window decoration, Kvantum, icons, SDDM, color schemes, KWin effects, wallpaper), in the default red. That version installs from *System Settings → Get New…*. It has no accent-color regeneration, no Dolphin/Konsole animations and no one-command on/off, but it needs nothing beyond Plasma. `scripts/empacotar-loja.sh` builds those packages.
 
 ## Tested on
 

@@ -17,7 +17,7 @@ Ele muda as cores, as janelas, os ícones, o terminal e a tela de login, e coloc
 
 As capturas mostram o resultado de uma instalação nova com `./instalar.sh --ligar`: a barra em cima e uma dock do [Latte Dock NG](https://github.com/jrcn1991/latte-dock-ng), que o instalador oferece instalar no Ubuntu 26.04.
 
-> Projeto de fã, sem ligação com a CD PROJEKT. Nada aqui vem do jogo: todas as imagens foram feitas para este tema.
+> Projeto de fã, sem ligação com a CD PROJEKT.
 
 ## O que ele muda
 
@@ -103,10 +103,6 @@ cyberkde uninstall       # ou ./desinstalar.sh
 ```
 
 Desliga o tema, devolve todos os valores originais e apaga os arquivos do tema, as suas preferências do CyberKDE e o próprio programa.
-
-## Versão da KDE Store
-
-As peças também estão na [KDE Store](https://store.kde.org), no vermelho padrão: Tema Global, estilo do Plasma, moldura de janelas, Kvantum, ícones, SDDM, esquemas de cores, efeitos do KWin e papel de parede. Essa versão se instala por *Configurações do Sistema → Obter novos…*. Ela não tem troca de cor, animações do Dolphin e do Konsole nem liga/desliga com um comando, mas não precisa de nada além do Plasma. O `scripts/empacotar-loja.sh` gera esses pacotes.
 
 ## Testado em
 
