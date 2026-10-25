@@ -12,7 +12,7 @@
 <p align="center">
   <a href="README.md">Read in English</a> ·
   <a href="#instalar">Instalar</a> ·
-  <a href="#painel-de-controle">Painel</a> ·
+  <a href="#o-painel">Painel</a> ·
   <a href="#comandos">Comandos</a> ·
   <a href="#créditos-e-marcas">Créditos</a>
 </p>
@@ -30,7 +30,7 @@ Fiz este tema para usar no meu computador e resolvi compartilhar. Ele muda as co
 Uma corporação troca o tema inteiro de uma vez: a cor de destaque, a secundária, a cor de alerta, o tom das superfícies, o ícone do botão do menu, o logo da tela de abertura e o papel de parede. No painel, passar o mouse num cartão mostra a paleta antes de aplicar; ao confirmar, a interface faz o glitch e assenta na paleta nova.
 
 <p align="center">
-  <img src="assets/readme/painel-corp-pt.gif" width="100%" alt="Painel do CyberKDE: abertura com o logo da Arasaka, prévia da Militech, confirmação e a transição de glitch para a paleta amarela">
+  <img src="assets/readme/painel-previa-pt.gif" width="100%" alt="Seção Corporação do painel: o mouse passa pelos cartões da Militech, NetWatch, Biotechnica, Kang Tao e Trauma Team, e o painel inteiro se recolore na paleta de cada uma">
 </p>
 
 <p align="center">
@@ -47,15 +47,47 @@ As paletas ficam em `tokens/corporacoes.json` (fonte única do CLI e do painel):
 
 <p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
 
-## Painel de controle
+## O painel
 
 `SYS.02 // CONTROL.PANEL`
 
-Tudo o que o CLI faz também está num painel gráfico, que abre com `cyberkde painel` ou pelo menu de aplicativos (mesmo com o tema desligado). Ele liga e desliga o tema e cada parte, escolhe a corporação ou uma cor, monta a página de configurações sozinho a partir da lista de efeitos do CLI (com prévias animadas de cada opção), troca o papel de parede, roda o diagnóstico e guarda o registro de tudo o que foi aplicado. Fala português e inglês e tem a opção "Reduzir animações".
+Tudo o que o CLI faz também está num painel gráfico, que abre com `cyberkde painel` ou pelo menu de aplicativos (mesmo com o tema desligado). Ele liga e desliga o tema e cada parte, escolhe a corporação ou uma cor, monta a página de configurações sozinho a partir da lista de efeitos do CLI, troca o papel de parede, roda o diagnóstico e guarda o registro de tudo o que foi aplicado. Fala português e inglês.
+
+A interface segue a mesma linguagem do tema: a abertura monta o logo da corporação em fatias, cada seção entra com as molduras se traçando e os cartões acendendo, e trocar de corporação passa por um glitch que revela a paleta nova. "Reduzir animações" (ou o movimento "mínimo" do tema) desliga tudo isso.
+
+<p align="center">
+  <img src="assets/readme/painel-abertura-pt.gif" width="100%" alt="Abertura do painel: feixes de dados, o logo da Arasaka se montando em fatias com aberração de cor, o nome escrito letra a letra e a cortina abrindo para a seção Status">
+</p>
+
+**Seções.** Cada troca de seção traça as molduras a partir do canto, acende os cartões em sequência e decodifica o título.
+
+<p align="center">
+  <img src="assets/readme/painel-secoes-pt.gif" width="100%" alt="O painel passando por Corporação, Configurações e Papel de parede: o título decodifica, as molduras se traçam e os cartões acendem um a um">
+</p>
+
+**Aplicar uma corporação.** O cartão escolhido mostra a paleta, o modal pede confirmação e, ao confirmar, a tela passa pelo glitch, a barra de progresso acompanha o CLI e o logo do inspetor se remonta.
+
+<p align="center">
+  <img src="assets/readme/painel-aplicar-pt.gif" width="100%" alt="Aplicando a Militech: clique no cartão, botão Aplicar, modal Militech Protocol, glitch amarelo, progresso das fases e o logo se montando no inspetor">
+</p>
+
+**Configurações.** O seletor de movimento, os presets de interface e, em cada grupo, as opções com prévia animada: na galeria de janelas, cada uma das 21 animações toca quando o mouse passa por cima.
+
+<p align="center">
+  <img src="assets/readme/painel-config-pt.gif" width="100%" alt="Seção Configurações: seletor de movimento, presets de interface e a galeria de animações de janela, com as prévias tocando sob o mouse">
+</p>
+
+**Terminal.** O cartão da cascata do Konsole mostra a prévia ao vivo; a altura da faixa e as cores mudam com um clique, e cada mudança é confirmada no canto da tela.
+
+<p align="center">
+  <img src="assets/readme/painel-cascata-pt.gif" width="100%" alt="Cartão da cascata de dados do Konsole: a prévia da pluma colorida tocando, a altura da faixa mudando de 19 para 6 linhas e as cores entre vídeo e tema">
+</p>
 
 | | |
 |---|---|
-| ![Seção Status: núcleo de energia com o tema ligado e a telemetria](assets/readme/painel-status-pt.jpg) | ![Seção Configurações: movimento, busca, grupos e os presets de interface com prévias](assets/readme/painel-config-pt.jpg) |
+| ![Status: núcleo de energia, telemetria e avisos](assets/readme/painel-status-pt.jpg) | ![Corporação: grade das 14 corporações e o inspetor da Militech, com dossiê, paleta e o botão do menu](assets/readme/painel-corporacao-pt.jpg) |
+| ![Configurações, visão geral: movimento, grupos e presets de interface](assets/readme/painel-config-pt.jpg) | ![Configurações, grupo Janelas: abrir, fechar e 1ª abertura, intensidade e durações](assets/readme/painel-config-janelas-pt.jpg) |
+| ![Papel de parede: o papel atual e as imagens do tema](assets/readme/painel-papel-pt.jpg) | ![Diagnóstico: requisitos conferidos, com o comando de correção de cada aviso](assets/readme/painel-diagnostico-pt.jpg) |
 
 O painel nunca grava a configuração do tema por conta própria: ele só chama o `cyberkde`, um comando de cada vez, e nunca pede senha (o que precisa de sudo vira um comando para o terminal).
 

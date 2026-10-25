@@ -12,7 +12,7 @@
 <p align="center">
   <a href="README.pt-BR.md">Leia em português</a> ·
   <a href="#install">Install</a> ·
-  <a href="#control-panel">Panel</a> ·
+  <a href="#the-panel">Panel</a> ·
   <a href="#commands">Commands</a> ·
   <a href="#credits-and-trademarks">Credits</a>
 </p>
@@ -30,7 +30,7 @@ I made this theme for my own desktop and decided to share it. It changes the col
 A corporation changes the whole theme at once: the accent color, the secondary color, the alert color, the tint of the dark surfaces, the menu-button icon, the startup-splash logo and the wallpaper. In the panel, hovering a card previews its palette before anything is applied; when you confirm, the interface glitches and settles into the new palette.
 
 <p align="center">
-  <img src="assets/readme/painel-corp-en.gif" width="100%" alt="CyberKDE panel: startup with the Arasaka logo, Militech preview, confirmation and the glitch transition to the yellow palette">
+  <img src="assets/readme/painel-previa-en.gif" width="100%" alt="The panel's Corporation section: the mouse moves over the Militech, NetWatch, Biotechnica, Kang Tao and Trauma Team cards, and the whole panel recolors in each palette">
 </p>
 
 <p align="center">
@@ -47,15 +47,47 @@ The palettes live in `tokens/corporacoes.json` (the single source for the CLI an
 
 <p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
 
-## Control panel
+## The panel
 
 `SYS.02 // CONTROL.PANEL`
 
-Everything the CLI does is also in a graphical panel, opened with `cyberkde painel` or from the application menu (even with the theme off). It turns the theme and each part on and off, picks a corporation or a color, builds its settings page by itself from the CLI's list of effects (with an animated preview of each option), changes the wallpaper, runs the diagnostics and keeps a log of everything it applied. It speaks English and Portuguese and has a "Reduce animations" option.
+Everything the CLI does is also in a graphical panel, opened with `cyberkde painel` or from the application menu (even with the theme off). It turns the theme and each part on and off, picks a corporation or a color, builds its settings page by itself from the CLI's list of effects, changes the wallpaper, runs the diagnostics and keeps a log of everything it applied. It speaks English and Portuguese.
+
+The interface speaks the theme's own language: the startup assembles the corporation logo in slices, each section comes in with its frames tracing and its cards lighting up, and switching corporations goes through a glitch that reveals the new palette. "Reduce animations" (or the theme's "minimal" motion) turns all of it off.
+
+<p align="center">
+  <img src="assets/readme/painel-abertura-en.gif" width="100%" alt="Panel startup: data beams, the Arasaka logo assembling in slices with chromatic aberration, the name typed letter by letter and the curtain opening onto the Status section">
+</p>
+
+**Sections.** Every section change traces the frames from the corner, lights the cards in sequence and decodes the title.
+
+<p align="center">
+  <img src="assets/readme/painel-secoes-en.gif" width="100%" alt="The panel moving through Corporation, Settings and Wallpaper: the title decodes, the frames trace and the cards light up one by one">
+</p>
+
+**Applying a corporation.** The chosen card shows its palette, a modal asks for confirmation and, once you confirm, the screen glitches, the progress bar follows the CLI and the inspector's logo reassembles.
+
+<p align="center">
+  <img src="assets/readme/painel-aplicar-en.gif" width="100%" alt="Applying Militech: click on the card, the Apply button, the Militech Protocol modal, the yellow glitch, phase progress and the logo assembling in the inspector">
+</p>
+
+**Settings.** The motion selector, the interface presets and, in each group, the options with an animated preview: in the window gallery, each of the 21 animations plays when the mouse hovers over it.
+
+<p align="center">
+  <img src="assets/readme/painel-config-en.gif" width="100%" alt="Settings section: motion selector, interface presets and the window animation gallery, with previews playing under the mouse">
+</p>
+
+**Terminal.** The Konsole data cascade card shows a live preview; the strip height and the colors change with a click, and each change is confirmed in the corner of the screen.
+
+<p align="center">
+  <img src="assets/readme/painel-cascata-en.gif" width="100%" alt="Konsole data cascade card: the colored plume preview playing, the strip height changing from 19 to 6 lines and the colors switching between video and theme">
+</p>
 
 | | |
 |---|---|
-| ![Status section: the power core with the theme on, and the telemetry](assets/readme/painel-status-en.jpg) | ![Settings section: motion, search, groups and the interface presets with previews](assets/readme/painel-config-en.jpg) |
+| ![Status: power core, telemetry and notices](assets/readme/painel-status-en.jpg) | ![Corporation: the grid of 14 corporations and the Militech inspector, with dossier, palette and menu button](assets/readme/painel-corporacao-en.jpg) |
+| ![Settings overview: motion, groups and interface presets](assets/readme/painel-config-en.jpg) | ![Settings, Windows group: open, close and first open, intensity and durations](assets/readme/painel-config-janelas-en.jpg) |
+| ![Wallpaper: the current wallpaper and the theme images](assets/readme/painel-papel-en.jpg) | ![Diagnostics: requirements checked, with the fix command for each notice](assets/readme/painel-diagnostico-en.jpg) |
 
 The panel never writes the theme configuration on its own: it only calls `cyberkde`, one command at a time, and it never asks for a password (anything that needs sudo becomes a command for the terminal).
 
