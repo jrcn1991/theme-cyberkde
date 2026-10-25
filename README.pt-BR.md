@@ -19,7 +19,9 @@
 
 Fiz este tema para usar no meu computador e resolvi compartilhar. Ele muda as cores, as janelas, os ícones, o terminal, o cursor, os sons e a tela de login, e coloca animações por todo lado. Liga com `cyberkde on`; o `cyberkde off` deixa tudo como estava antes.
 
-> Projeto de fã, sem ligação com a CD PROJEKT.
+> [!IMPORTANT]
+> **This is an unofficial fan work and is not approved/endorsed by CD PROJEKT RED.**
+> Obra de fã não oficial, sem aprovação nem endosso da CD PROJEKT RED.
 
 <p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
 

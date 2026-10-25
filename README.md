@@ -19,7 +19,8 @@
 
 I made this theme for my own desktop and decided to share it. It changes the colors, the windows, the icons, the terminal, the cursor, the sounds and the login screen, and adds animations everywhere. Turn it on with `cyberkde on`; `cyberkde off` puts everything back the way it was.
 
-> Fan project, not affiliated with CD PROJEKT.
+> [!IMPORTANT]
+> **This is an unofficial fan work and is not approved/endorsed by CD PROJEKT RED.**
 
 <p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
 
