@@ -6,18 +6,22 @@
 
 <p align="center">
   <b>A cyberpunk theme for KDE Plasma 6, inspired by the menus of Cyberpunk 2077.</b><br>
-  <code>SYS://CYBERKDE</code> · Plasma 6 · Wayland · 14 corporations · graphical panel · fully reversible
+  <code>SYS://CYBERKDE</code> · Plasma 6 · Wayland · 14 corporations · graphical panel · Cyber Fence · DATASHARD · widgets · dynamic island · fully reversible
 </p>
 
 <p align="center">
   <a href="README.pt-BR.md">Leia em português</a> ·
   <a href="#install">Install</a> ·
   <a href="#the-panel">Panel</a> ·
+  <a href="#cyber-fence">Cyber Fence</a> ·
+  <a href="#datashard">DATASHARD</a> ·
+  <a href="#widgets">Widgets</a> ·
+  <a href="#dynamic-island">Island</a> ·
   <a href="#commands">Commands</a> ·
   <a href="#credits-and-trademarks">Credits</a>
 </p>
 
-I made this theme for my own desktop and decided to share it. It changes the colors, the windows, the icons, the terminal, the cursor, the sounds and the login screen, and adds animations everywhere. Turn it on with `cyberkde on`; `cyberkde off` puts everything back the way it was.
+I made this theme for my own desktop and decided to share it. It changes the colors, the windows, the icons, the terminal, the cursor, the sounds and the login screen, and brings desktop fences, a file manager, widgets and animations everywhere. Turn it on with `cyberkde on`; `cyberkde off` puts everything back the way it was.
 
 > [!IMPORTANT]
 > **This is an unofficial fan work and is not approved/endorsed by CD PROJEKT RED.**
@@ -52,7 +56,9 @@ The palettes live in `tokens/corporacoes.json` (the single source for the CLI an
 
 `SYS.02 // CONTROL.PANEL`
 
-Everything the CLI does is also in a graphical panel, opened with `cyberkde painel` or from the application menu (even with the theme off). It turns the theme and each part on and off, picks a corporation or a color, builds its settings page by itself from the CLI's list of effects, changes the wallpaper, runs the diagnostics and keeps a log of everything it applied. It speaks English and Portuguese.
+Everything the CLI does is also in a graphical panel, opened with `cyberkde painel` or from the application menu (even with the theme off). It turns the theme and each part on and off, picks a corporation or a color, builds its settings page by itself from the CLI's list of effects, runs the diagnostics and keeps a log of everything it applied. It speaks English and Portuguese.
+
+It has ten sections: STATUS, CORPORATION, SETTINGS, WIDGETS (gallery, inspector, screen map, edit mode and the FUI layout), FILES (open DATASHARD and choose whether it is the default), CYBER FENCE (fences, animations, rules, layouts and backup), ISLAND (theme, modules, animations and shortcuts), WALLPAPER (animated or static, with a note about your graphics card), DIAGNOSTICS and LOG.
 
 The interface speaks the theme's own language: the startup assembles the corporation logo in slices, each section comes in with its frames tracing and its cards lighting up, and switching corporations goes through a glitch that reveals the new palette. "Reduce animations" (or the theme's "minimal" motion) turns all of it off.
 
@@ -88,15 +94,180 @@ The interface speaks the theme's own language: the startup assembles the corpora
 |---|---|
 | ![Status: power core, telemetry and notices](assets/readme/painel-status-en.jpg) | ![Corporation: the grid of 14 corporations and the Militech inspector, with dossier, palette and menu button](assets/readme/painel-corporacao-en.jpg) |
 | ![Settings overview: motion, groups and interface presets](assets/readme/painel-config-en.jpg) | ![Settings, Windows group: open, close and first open, intensity and durations](assets/readme/painel-config-janelas-en.jpg) |
-| ![Wallpaper: the current wallpaper and the theme images](assets/readme/painel-papel-en.jpg) | ![Diagnostics: requirements checked, with the fix command for each notice](assets/readme/painel-diagnostico-en.jpg) |
+| ![Widgets: edit mode, FUI layout, gallery and inspector](assets/readme/painel-widgets-en.jpg) | ![Files: DATASHARD and the default file manager choice](assets/readme/painel-arquivos-en.jpg) |
+| ![Cyber Fence, Rules tab: active rules, simulate, apply and history](assets/readme/painel-regras-en.jpg) | ![Wallpaper: current selection, the animated FUI and the static options](assets/readme/painel-papel-en.jpg) |
+| ![Diagnostics: requirements checked, with the fix command for each notice](assets/readme/painel-diagnostico-en.jpg) |
 
 The panel never writes the theme configuration on its own: it only calls `cyberkde`, one command at a time, and it never asks for a password (anything that needs sudo becomes a command for the terminal).
 
 <p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
 
+## Cyber Fence
+
+`SYS.03 // DESK.FENCES`
+
+Fences for the desktop: each fence is a real folder in a theme frame that rolls up to just its title. It comes from the same code as Plasma's folder view, so dragging, opening, renaming and the context menu work as you expect. Create as many as you like, on any screen.
+
+<p align="center">
+  <img src="assets/readme/cerca-animacoes.gif" width="100%" alt="Fences appearing and vanishing with the line draw, glitch, shards and hologram animations, and the icons coming in with data burst, cascade, decode and glitch">
+</p>
+
+**In a fence.** A real folder or a list of shortcuts (what you drop becomes a shortcut and nothing moves), tabs with other folders, a filter by type, compact density, subfolders in a popup, a color from the palette, a blurred background and the roll-up trigger (Ctrl+click, click or when the mouse leaves). Dropping files moves them right away; Ctrl copies, and it can be undone.
+
+**Hide and peek.** A double-click on the desktop hides the fences and another brings them back; a fence marked "Do not hide" stays in view. Peek brings the fences above the windows.
+
+**Rules.** Loose files on the desktop go to the right fence by extension or part of the name. Simulate first, apply once or leave it watching; each batch can be undone, and anything overwritten is kept until then.
+
+<p align="center">
+  <img src="assets/readme/cerca-organizar.gif" width="100%" alt="Fences rolling up to the title and back; then a rule takes the PDFs on the desktop to the Contratos fence, and undo brings them back">
+</p>
+
+**Layouts.** Save the position, size and settings of every fence under a name and restore them whenever you want, even automatically when the monitors change (`--por-resolucao on`). Backup exports and imports rules, layouts and the current layout in one file.
+
+**Animations.** 16 for hiding and showing fences and 8 for the icons, with a preview in the panel's CYBER FENCE section.
+
+| | |
+|---|---|
+| ![The 16 hide and show animations](assets/readme/cerca-16-animacoes.gif) | ![The 8 icon animations](assets/readme/cerca-8-icones.gif) |
+
+**Global shortcuts** (off until you turn them on; if a combination is taken, the theme warns you or picks the next free one):
+
+| Shortcut | Action |
+|---|---|
+| `Meta+Shift+F` | new fence (asks for the name) |
+| `Meta+Shift+H` | show or hide them all |
+| `Meta+Shift+Space` | peek: fences above the windows |
+
+```bash
+cyberkde cerca nova --titulo Contracts        # new fence on the mouse's screen, with its own folder
+cyberkde cerca alternar                       # also: mostrar | ocultar | peek [on|off|alternar]
+cyberkde efeito widget-cerca --atalhos on     # turn the shortcuts on (--atalho-nova, --atalho-alternar, --atalho-peek)
+cyberkde efeito widget-cerca --instancia 2 --animacao glitch --animacaoIcones cascata
+
+cyberkde cerca regras adicionar --destino cerca:1 --extensoes pdf,doc --nome Documents
+cyberkde cerca regras aplicar --simular       # shows what would move; without --simular, it moves
+cyberkde cerca regras desfazer                # undo the last batch
+cyberkde efeito widget-cerca --vigiar on      # new desktop files follow the rules on their own
+
+cyberkde cerca snapshot salvar Work           # also: restaurar | listar | apagar
+cyberkde efeito widget-cerca --por-resolucao on
+cyberkde cerca backup                         # also: exportar <file> | importar <file> [--aplicar]
+```
+
+Everything lives in `~/.config/cyberkde/cercas/`, which `cyberkde uninstall` keeps. Removing a fence never deletes its folder. With no name or folder, new fences go to `Documents/Cercas` (`--base` changes it). Rules never touch hidden files, shortcuts, links, folders or half-finished downloads.
+
+<p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
+
+## DATASHARD
+
+`SYS.04 // FILE.MANAGER`
+
+The theme's file manager: every folder is a shard. It lives alongside Dolphin, sits in the application menu and opens with `cyberkde arquivos`. Making it the system default is your choice, and switching that off brings Dolphin back.
+
+<p align="center">
+  <img src="assets/readme/datashard-en.gif" width="100%" alt="DATASHARD: folder stacks lighting up when selected, the Imagens folder, the list and grid views and an image preview">
+</p>
+
+| Feature | What it does |
+|---|---|
+| Views | isometric STACKS that light up when selected, a data LIST and a GRID with thumbnails; each folder remembers its own |
+| Navigation | tabs, split view, a clickable code path (Ctrl+L edits it) and Places with drives and usage bars |
+| LOG panel | details type themselves out like a terminal, with a preview, tags, rating and comment |
+| Preview | Space opens images, video, audio, PDF and text without leaving the folder |
+| Operations | a queue with progress, conflict choices, compress and extract, batch rename and Ctrl+Z undo (up to 30 steps) |
+| Search | filters the folder as you type; Enter searches subfolders |
+| Safety | no network; Del goes to the trash, and deleting for good always asks first |
+| Theme | corporation colors, PT/EN and the theme's animations, which follow the motion level |
+
+```bash
+cyberkde arquivos ~/Downloads     # open DATASHARD in that folder
+cyberkde arquivos --checar        # only check the packages (and list the optional ones)
+cyberkde efeito datashard on      # default for folders and "Show in folder"; off brings Dolphin back
+```
+
+F1 shows the keyboard shortcuts. A `dolphin --daemon` that is already running keeps answering "Show in folder" until the next login.
+
+<p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
+
+## Widgets
+
+`SYS.05 // DESK.WIDGETS`
+
+Eleven Plasma widgets in the theme's look, in the corporation's colors, plus the FUI dashboard and its 15 standalone modules. In edit mode, each one resizes by hand or with the S·M·L presets; outside it, they show only their data. What you write in them (notes, gigs, lists) is kept when they are switched off and comes back when they are on.
+
+<p align="center">
+  <img src="assets/readme/widgets.jpg" width="100%" alt="The widgets in small, medium and large sizes: notes, gigs, exchange, media, news, Docker, clock and performance">
+</p>
+
+| Widget | What it shows |
+|---|---|
+| Clock | HUD time, a second time zone, calendar and upcoming events |
+| Weather | now, the next hours and up to 5 days (Open-Meteo, no account) |
+| Performance | CPU per core, memory, GPU, temperatures, network and disk |
+| Media | what is playing, in the HUD, Jukebox, Jukebox mini, equalizer-only and Neon Radio styles |
+| Notes | a notes board with colors, pinning, reordering and checklists |
+| Gigs | tasks as contracts: priority, deadline, client and status |
+| Exchange | rates in "eddies", with the day's change and a chart |
+| Drives | space on each drive, a warning when it fills up, live read and write |
+| Docker | containers with state, CPU and memory; start, stop and restart |
+| Network | interface, IP, speed, ping, loss and VPN (public IP off by default) |
+| News | headlines from the RSS/Atom feeds you choose |
+
+**FUI dashboard.** The Cyberpunk 2077 interface dashboard in a 4×3 grid, with real system data, scaling without changing its proportions. The `fui` layout puts it in the middle of the main screen, with the widgets that are on in columns at the sides. Each of the 15 modules also exists on its own: CPU, Cores, Sensors, Memory, GPU, Drives, Disk I/O, Network, Traffic, Processes, Log, System, Time, Weather and States.
+
+<p align="center">
+  <img src="assets/readme/painel-fui.jpg" width="80%" alt="FUI dashboard: cores, log, sensors, CPU, processes, GPU, drives, time, weather, memory, network and I/O, with made-up sample data">
+</p>
+
+**Jukebox and Neon Radio.** The Media widget gained the game's big jukebox screen, with a 12-band equalizer, "now playing" and a volume knob, and the neon radio, with a marquee, a flickering frame and a badge with the album cover. The equalizer can be synthetic or read the actual sound (`--espectroReal true`, with PipeWire and numpy; it uses more CPU), in the corporation's colors or the jukebox's (`--paletaJukebox true`).
+
+| | |
+|---|---|
+| ![Jukebox style of the Media widget](assets/readme/midia-jukebox.gif) | ![Neon Radio style of the Media widget](assets/readme/midia-neon.gif) |
+
+```bash
+cyberkde efeito widget-relogio on --posicao superior-direito --modo medio
+cyberkde efeito widget-midia on --estilo neon             # hud | jukebox | mini | eq | neon
+cyberkde efeito widget-clima --cidade "Night City"        # options: cyberkde efeito --lista
+cyberkde efeito widget-painelfui on
+cyberkde efeito widget-layout fui                         # livre puts each one back
+cyberkde efeito widget-fui-cpu on                         # one module alone: widget-fui-<module>
+cyberkde edicao alternar                                  # Plasma edit mode: on | off | alternar
+```
+
+<p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
+
+## Dynamic island
+
+`SYS.06 // DESK.ISLAND`
+
+A pill at the top of the screen that shows what is going on and opens into a panel on hover or click. It is a port of Halo's island to PyQt6 and QML, with native layer-shell: it floats above everything, clicks outside it pass through, and it hides by itself on fullscreen windows. It is off by default; the theme works without it.
+
+<p align="center">
+  <img src="assets/readme/ilha-en.gif" width="100%" alt="Dynamic island in the Halo, Lines, Neomilitary and Overdrive punk themes: a notice on the pill, the open panel with media and shortcuts, and the volume HUD">
+</p>
+
+| Theme | What it looks like |
+|---|---|
+| Halo | the black plate of Halo's island, with its springs and three styles |
+| Lines | soft: just thin lines in the theme color |
+| Neomilitary | chamfer, corner brackets, micro-data and a traced frame |
+| Overdrive punk | glitch, chromatic aberration, block alerts and a marquee in transitions |
+
+**Modules.** Media with a spectrum, audio and a volume HUD, notices, network, Bluetooth, system, clocks, desktop (silence, caffeine), clipboard, downloads, screenshots, a file shelf, stashed windows, phone, drives, keyboard, focus with a timer and a local API for scripts. Each one can be turned on or off, and everything is set in the panel's ISLAND section: theme, style, animation, position, opening gesture, modules and shortcuts.
+
+**Network.** Synced lyrics and weather are **off** by default because they use the network: lyrics send the title and artist to [lrclib.net](https://lrclib.net), and weather queries open-meteo.com with the Weather widget's coordinates. Clipboard history stays in memory only. With Halo's island open, the theme's one hides and says so.
+
+```bash
+cyberkde ilha on          # turn it on (also at login); off turns it off
+cyberkde ilha status      # state; --json for programs
+```
+
+<p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
+
 ## Windows
 
-`SYS.03 // WINDOW.FX` · 21 open and close animations
+`SYS.07 // WINDOW.FX` · 21 open and close animations
 
 <p align="center">
   <img src="assets/readme/janelas-en.gif" width="100%" alt="Grid of the 21 window animations opening and closing: scan, traced frame, RGB glitch, rising data, hologram, CRT boot, decode and more">
@@ -116,7 +287,7 @@ Ids: `scan`, `moldura`, `glitch`, `dados`, `holograma`, `crt`, `decodificar`, `c
 
 ## Terminal
 
-`SYS.04 // KONSOLE.FX` · data cascade + 8 effects
+`SYS.08 // KONSOLE.FX` · data cascade + 8 effects
 
 In the animated Konsole, the lines that scroll off the screen rise in a strip above the text, as a colored plume that breaks apart. The text is never covered.
 
@@ -141,7 +312,7 @@ The terminal effects need the animated Konsole (see [Animated Dolphin and Konsol
 
 ## Styles and presets
 
-`SYS.05 // UI.STYLE`
+`SYS.09 // UI.STYLE`
 
 The Kvantum style for the apps has 15 fine-grained settings (selection, neon glow, frame cut, density, tabs, progress bar, focus, background texture, tooltips, text fields, state colors…) and seven presets that set several of them at once.
 
@@ -158,7 +329,7 @@ cyberkde efeito estilo-corte --variante octogono   # each setting: cyberkde efei
 
 ## Login, splash and lock screen
 
-`SYS.06 // AUTH`
+`SYS.10 // AUTH`
 
 The login screen (SDDM), the startup splash and the lock screen follow the corporation. The panel entrance, its position, the access confirmation and the length of the splash are up to you.
 
@@ -175,17 +346,27 @@ cyberkde efeito login --entrada fatias --painel esquerda
 
 ## Wallpapers, cursor, sounds and icons
 
-`SYS.07 // AMBIENT`
+`SYS.11 // AMBIENT`
 
-**Wallpapers.** Four options for the desktop, the lock screen and the login screen, always in the accent color (with a corporation, its emblem goes into the background, as at the top of this page). `cyberkde papel ~/Pictures/mine.jpg` uses your own image.
+**Wallpapers.** Four static options for the desktop, the lock screen and the login screen, always in the accent color, plus the corporation's own, which changes with it (`cyberkde efeito papel corp`, as at the top of this page). `cyberkde papel ~/Pictures/mine.jpg` uses your own image.
 
 <p align="center"><img src="assets/readme/papeis.png" width="80%" alt="The four wallpaper options: HUD and city, technical frame, city and panels"></p>
 
-**Cursor.** Cursors with corner brackets and the theme accent, in four variants: default, neon, minimal and crosshair (with a hand that closes brackets). It is an optional part: `cyberkde on cursor`.
+**Animated FUI wallpaper.** A living wallpaper with smoke, beams with pulses of light, particles, a HUD reticle, a short glitch and the corporation's logo and motto, which assemble as it appears. It follows the corporation, animates only on the desktop (the lock and login screens get a still frame) and pauses with a maximized or fullscreen window. It takes 2 to 4% of a dedicated graphics card; on integrated graphics, prefer the static ones. Intensity, speed, 30 or 60 fps, logo and text are in the panel's WALLPAPER section.
+
+<p align="center">
+  <img src="assets/readme/papel-fui.gif" width="100%" alt="Animated FUI wallpaper in six corporations: Arasaka, Militech, NetWatch, Biotechnica, Kang Tao and Trauma Team">
+</p>
+
+```bash
+cyberkde efeito papel fui        # animated; a | b | c | d = fixed static ones; corp = the corporation's
+```
+
+**Cursor.** Cursors with corner brackets and the theme accent, in four variants: default, neon, minimal and crosshair (with a hand that closes brackets). It is optional: `cyberkde efeito cursor neon` turns it on, and `off` restores the previous one.
 
 <p align="center"><img src="assets/readme/cursores.png" width="90%" alt="The four cursor variants: default, neon, minimal and crosshair"></p>
 
-**Sounds.** Quiet beeps and sweeps, synthesized for the theme, for twelve events (notification, warning, error, login, devices, trash, volume…), in a default and a subtle variant. Off by default: `cyberkde on som`.
+**Sounds.** Quiet beeps and sweeps, synthesized for the theme, for twelve events (notification, warning, error, login, devices, trash, volume…), in a default and a subtle variant. Off by default: `cyberkde efeito som padrao` turns them on, and `off` restores the previous ones.
 
 **Icons.** Folders, places, file types and a cyborg dolphin for Dolphin; six icons have a second style you can pick one by one (`cyberkde efeito icones`). Everything else inherits Breeze Dark.
 
@@ -203,7 +384,11 @@ cyberkde efeito login --entrada fatias --painel esquerda
 | Icons | folders, places, file types and the Dolphin dolphin; six alternative icons |
 | Konsole | color scheme and profile; in the animated Konsole, the data cascade and 8 more effects |
 | Login | SDDM, startup splash and lock screen, with selectable animations |
-| Wallpaper | four options in the accent color, or your own image |
+| Wallpaper | four options in the accent color, the corporation's own, the animated FUI or your own image |
+| Cyber Fence | desktop fences with rules, layouts, 16+8 animations and shortcuts |
+| DATASHARD | the theme's file manager, alongside Dolphin |
+| Widgets | 11 widgets, the FUI dashboard and 15 modules, with Jukebox and Neon Radio in media |
+| Dynamic island | a pill at the top of the screen with system modules and 4 themes (off by default) |
 | Optional | cursor (4 variants), sounds (2 variants), click rings, desktops as modules |
 | Panel | a graphical interface for all of the above, in English and Portuguese |
 
@@ -211,9 +396,9 @@ cyberkde efeito login --entrada fatias --painel esquerda
 
 ## Install
 
-`SYS.08 // INSTALL`
+`SYS.12 // INSTALL`
 
-Requirements: KDE Plasma 6, `python3`, ImageMagick, `qdbus6`, the Breeze icons and Kvantum for Qt 6. The graphical panel uses PyQt6 and a few Qt 6 QML modules.
+Requirements: KDE Plasma 6, `python3`, ImageMagick, `qdbus6`, the Breeze icons and Kvantum for Qt 6. The graphical panel, DATASHARD, Cyber Fence and the island use PyQt6 and a few Qt 6 QML modules; the theme works without them.
 
 ```bash
 # Ubuntu / Debian / Kubuntu
@@ -221,6 +406,14 @@ sudo apt install git python3 imagemagick qdbus-qt6 kf6-breeze-icon-theme qt-styl
 # for the graphical panel (cyberkde painel):
 sudo apt install python3-pyqt6 python3-pyqt6.qtqml python3-pyqt6.qtquick qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-effects \
   qml6-module-qtquick-shapes qml6-module-qtquick-dialogs qml6-module-qtquick-window
+# for DATASHARD (the panel's packages plus this one) and for Cyber Fence:
+sudo apt install qml6-module-qtmultimedia qml6-module-qt-labs-folderlistmodel
+# for the dynamic island (the panel's packages plus this one):
+sudo apt install qml6-module-org-kde-layershell
+# island extras: volume and spectrum, screenshot OCR, phone, temperatures
+sudo apt install pulseaudio-utils tesseract-ocr tesseract-ocr-por spectacle kdeconnect lm-sensors
+# optional: video and PDF thumbnails, 7z in DATASHARD; the real equalizer in the Media widget
+sudo apt install ffmpegthumbnailer poppler-utils 7zip python3-numpy
 # other distributions: install the equivalent packages (the installer lists anything missing)
 
 git clone https://github.com/jrcn1991/theme-cyberkde.git
@@ -246,7 +439,7 @@ The installation is per user. Root is only needed for the Latte package and the 
 
 ## Commands
 
-`SYS.09 // CLI`
+`SYS.13 // CLI`
 
 ```
 cyberkde on              # turn everything on
@@ -257,7 +450,7 @@ cyberkde painel          # open the graphical panel (also in the app menu, even 
 cyberkde painel --checar # only check the panel's packages and print the apt line
 cyberkde on <part>       # a single part: dolphin, apps, janelas, carregamento, icones, konsole,
                          # konsole-anim, icones-sistema, kwin-extras, login, papeis-de-parede, plasma,
-                         # barra-e-dock; optional (not in "on"): cursor, som, login-bloqueio
+                         # barra-e-dock, widgets; optional (not in "on"): cursor, som, login-bloqueio, datashard
 cyberkde off <part>      # switch a single part off (a key another part still uses stays as it is)
 cyberkde fases           # every part, and which ones are on
 cyberkde cor '#5EF6FF'   # change the accent color ('cyberkde cor padrao' = back to red);
@@ -269,6 +462,14 @@ cyberkde corp militech   # a corporation: palette, menu-button icon, splash logo
 cyberkde corp --lista    # every corporation and its colors
 cyberkde papel ~/Pictures/mine.jpg   # use your own wallpaper ('cyberkde papel padrao' = theme's)
 cyberkde layout lateral --aplicar    # arrangement: tema | duas-telas | compacto | lateral | manter
+cyberkde arquivos ~/Downloads  # open DATASHARD, the theme's file manager
+cyberkde efeito datashard on    # make DATASHARD the default for folders ('off' brings Dolphin back)
+cyberkde ilha on          # turn on the dynamic island at the top of the screen (off | status; --json)
+cyberkde widgets alternar # hide or show the widgets (ocultar | mostrar | estado)
+cyberkde cerca nova       # new Cyber Fence on the mouse's screen (also: alternar | mostrar | ocultar)
+cyberkde cerca regras aplicar --simular   # sort the desktop into fences ('cyberkde cerca regras ajuda')
+cyberkde cerca snapshot salvar Work       # save the fence layout (restaurar | listar | apagar)
+cyberkde edicao alternar # Plasma edit mode (move and resize widgets): on | off | alternar
 cyberkde latte           # install the reviewed Latte Dock NG package (Ubuntu 26.04)
 cyberkde animados        # install the animated Dolphin and Konsole packages (Ubuntu 26.04)
 cyberkde padrao dolphin  # open an app with its original look, to compare
@@ -283,7 +484,8 @@ cyberkde efeito konsole-cascata on   # "data cascade" in the animated Konsole (-
 cyberkde efeito konsole-chuva on     # also: konsole-grade, -crt, -varredura, -hud, -faiscas, -erro, -campainha
 cyberkde efeito estilo-preset --variante <id>        # interface preset; estilo-* = each setting
 cyberkde efeito movimento reduzido   # motion: completo | reduzido (short fades only) | minimo (none)
-cyberkde efeito papel corp           # theme wallpaper: a | b | c | d | corp (follows the corporation) | padrao
+cyberkde efeito papel corp           # theme wallpaper: a | b | c | d | corp (follows the corporation) | fui (animated) | padrao
+cyberkde efeito widget-relogio on    # one widget: widget-<name> [on|off]; widget-layout fui | livre
 cyberkde efeito splash curto         # startup splash: completo | curto | nenhum
 cyberkde efeito login --fundo papel  # login and lock screen: --entrada, --painel, --sucesso on|off, --fundo
 cyberkde efeito icones alt           # alternative folder and trash icons (or <group>=alt)
@@ -291,8 +493,8 @@ cyberkde efeito menu grade           # app menu: lista | grade | tela-cheia
 cyberkde efeito dock --indicador ponto --zoom off    # Latte Dock indicator, zoom and launch bounce
 cyberkde efeito areas 4              # virtual desktops named as modules (off | 4 | 6, --nomes cyber|simples)
 cyberkde efeito modal-escurecer on   # also: efeito clique on (click rings in the theme colors)
-cyberkde on cursor; cyberkde efeito cursor neon      # the theme cursor (optional part): padrao | neon | minimo | mira
-cyberkde on som; cyberkde efeito som discreto        # the theme sounds (optional part) and the variant
+cyberkde efeito cursor neon      # turn on the theme cursor in a variant: padrao | neon | minimo | mira | off
+cyberkde efeito som discreto     # turn on the theme sounds in a variant: padrao | discreto | off
 # --json: one-line answer for programs (status, fases, on, off, cor, corp, efeito, checar...);
 # --lang en: messages in English
 ```
@@ -326,7 +528,7 @@ CyberKDE and [AppleKDE](https://github.com/jrcn1991/theme_apple_kde) are never m
 cyberkde uninstall       # or ./desinstalar.sh
 ```
 
-Switches the theme off, restores every original value and deletes the theme files, your CyberKDE preferences and the program itself. Corporation images you put in `~/.config/cyberkde/corporacoes/` stay.
+Switches the theme off, restores every original value and deletes the theme files, your CyberKDE preferences and the program itself. What stays: corporation images in `~/.config/cyberkde/corporacoes/`, fence rules and layouts, what you saved in the widgets, and the island's note and shelf. Fence folders are never deleted.
 
 ## Tested on
 
@@ -336,7 +538,7 @@ Kubuntu 26.04 and Ubuntu 26.04 (with Plasma installed), Plasma 6.6, Wayland; als
 
 ## Credits and trademarks
 
-`SYS.10 // LEGAL`
+`SYS.14 // LEGAL`
 
 - Code, generators, patches and the theme files they generate: **GPL-3.0-or-later** (see [LICENSE](LICENSE)).
 - Original artwork (icons in `assets/icons`, wallpapers in `assets/wallpapers`): **CC BY-SA 4.0** (see [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt)). The cursors and sounds are generated by the theme's own scripts.

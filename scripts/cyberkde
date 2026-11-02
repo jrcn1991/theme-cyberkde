@@ -25,9 +25,10 @@
 #     konsole-cascata, konsole-{chuva,grade,crt,varredura,hud,faiscas,erro,campainha}
 #                            efeitos do Konsole animado: on|off e parâmetros (desligados por padrão)
 #     estilo-*               estilos da interface (seleção, brilho, corte, abas, foco, presets...): --variante V
-#     cursor <padrao|neon|minimo|mira>   cursor do tema (liga com: cyberkde on cursor)
-#     som <padrao|discreto>  sons do tema
-#     papel <a|b|c|d|padrao> papel de parede do tema       icones [padrao|alt|<grupo>=<padrao|alt>]
+#     cursor <padrao|neon|minimo|mira|off>   cursor do tema (escolher liga a fase cursor; off devolve o de antes)
+#     som <padrao|discreto|off>  sons do tema (escolher liga a fase som; off devolve os de antes)
+#     papel <a|b|c|d|corp|fui|padrao> papel de parede do tema (fui: animado, com --intensidade, --velocidade, --fps, --logo, --textos, --pausar)
+#           icones [padrao|alt|<grupo>=<padrao|alt>]
 #     movimento <completo|reduzido|minimo>   nível de animação de tudo (KDE e efeitos do tema)
 #     menu <padrao|lista|grade|tela-cheia>   menu iniciar
 #     layout <tema|duas-telas|compacto|lateral|manter>   arranjo da barra e da dock
@@ -45,6 +46,16 @@
 #   cyberkde install     só instala/atualiza os arquivos do tema (cores, Kvantum, fontes)
 #   cyberkde checar      confere pré-requisitos e problemas conhecidos (diz como corrigir cada um)
 #   cyberkde layout [tema|duas-telas|compacto|lateral|manter] [--aplicar]  arranjo da barra e da dock
+#   cyberkde arquivos [pasta]  abre o DATASHARD, o gerenciador de arquivos do tema (--checar: só confere
+#                        os pacotes). Para ser o padrão das pastas: cyberkde efeito datashard on
+#   cyberkde ilha on|off|status [--json]  a ilha dinâmica (padrão desligada)
+#   cyberkde widgets ocultar|mostrar|alternar|estado [--json]  oculta e exibe todos os widgets do tema
+#                        (também: gesto on|off, junto on|off, animacao <id>|cercas)
+#   cyberkde cerca nova|alternar|mostrar|ocultar [--json]  cerca nova na tela do mouse; mostra ou oculta todas
+#   cyberkde cerca peek [on|off|alternar] [--json]  cercas por cima das janelas
+#   cyberkde cerca regras|snapshot|backup|exportar|importar  organização, layouts e cópias das cercas
+#   cyberkde edicao [on|off|alternar] [--json]  modo de edição do Plasma (mover e redimensionar os
+#                        widgets); sem argumento, só lê. É estado da sessão: nada vai para o registro
 #   cyberkde latte       instala o Latte Dock NG (a dock das capturas) pelo pacote revisado (Ubuntu 26.04)
 #   cyberkde uninstall   off + remove os arquivos instalados (e o próprio programa, se veio do instalar.sh)
 #
@@ -473,12 +484,23 @@ reload_kwin() {
 # anotado, e quem chama reinicia depois de todas as fases. Um reinício no meio derrubava o
 # plasmashell justo quando a fase seguinte (a barra e a dock, os papéis de parede) precisava dele.
 plasma_adiar_marca="$state/plasma-reiniciar-no-fim"
+# Applet criado há pouco: o layout do Plasma só grava a geometria depois de um instante (o tamanho vem
+# ainda da animação). Parar o plasmashell antes disso perdia posição e tamanho do último widget criado.
+plasmashell_assentar() {
+  local f="$state/widgets-recentes" idade
+  [[ -e $f ]] || return 0
+  idade=$(( $(date +%s%3N) - $(date -r "$f" +%s%3N) ))
+  if (( idade >= 0 && idade < 2500 )); then
+    sleep "$(( (2500 - idade) / 1000 )).$(printf '%03d' $(( (2500 - idade) % 1000 )))"
+  fi
+}
 restart_plasmashell() {
   local before i pid
   if [[ ${CYBERKDE_ADIAR_PLASMA:-0} == 1 ]]; then
     mkdir -p -- "$state" && : >"$plasma_adiar_marca"
     return 0
   fi
+  plasmashell_assentar
   if [[ -n ${CYBERKDE_CENA:-} ]]; then
     # Capturas e testes num KWin virtual: o plasmashell da cena não é do systemd (o da sessão real é).
     plasmashell_parar
@@ -550,6 +572,7 @@ plasmashell_sem_servico() {
 # então encerra à força.
 plasmashell_parar() {
   local i pid
+  plasmashell_assentar
   if [[ -n ${CYBERKDE_CENA:-} ]]; then
     kquitapp6 plasmashell >/dev/null 2>&1 3>&- 4>&- 9>&- &
     for i in {1..25}; do qdbus6 org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 || break; sleep 0.2; done
@@ -833,7 +856,7 @@ phase_konsole-anim() {
 }
 
 # ------------------------------------------------------------------ efeitos (preferências)
-# "Cascata de dados" do Konsole animado (konsole/PEDIDO-CLI.md): as linhas que saem pelo topo viram
+# "Cascata de dados" do Konsole animado: as linhas que saem pelo topo viram
 # uma pluma de glifos numa faixa acima do texto. Desligada por padrão.
 #
 # Decisão sobre o registro: o efeito é uma PREFERÊNCIA, e não uma fase. A escolha da pessoa fica em
@@ -866,8 +889,19 @@ efeito_cascata_aplicar() {
 # tamanho (~/.cache/cyberkde), e só um Konsole novo é lido de novo.
 konsole_marcas_cache="${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde/konsole-marcas"
 konsole_lib_tem() {  # prefixo marca
-  local f id r
+  local f id r memo="${XDG_RUNTIME_DIR:-/tmp}/cyberkde/konsole-lib.$$"
   [[ -n ${1:-} && -d $1 ]] || return 1
+  # Lembrado nesta execução, só nas leituras (--lista e status, com o lote carregado): elas perguntam o
+  # mesmo para cada efeito do Konsole, cada um num subshell. Num "on" que instala pacotes, não.
+  (( efeitos_lote_ativo )) || { konsole_lib_tem_buscar "$@"; return; }
+  r=$(awk -F'\t' -v p="$1" -v m="$2" '$1 == p && $2 == m {print $3; exit}' "$memo" 2>/dev/null)
+  if [[ -n $r ]]; then [[ $r == 1 ]]; return; fi
+  konsole_lib_tem_buscar "$@"; r=$?
+  { mkdir -p -- "${memo%/*}" && printf '%s\t%s\t%s\n' "$1" "$2" "$([[ $r == 0 ]] && echo 1 || echo 0)" >>"$memo"; } 2>/dev/null || true
+  return "$r"
+}
+konsole_lib_tem_buscar() {  # prefixo marca
+  local f id r
   while IFS= read -r -d '' f; do
     id="$f"$'\t'"$(stat -c '%Y:%s' -- "$f" 2>/dev/null)"$'\t'"$2"
     r=$(grep -F -- "$id"$'\t' "$konsole_marcas_cache" 2>/dev/null | tail -1 | cut -f4)
@@ -1024,9 +1058,45 @@ cmd_efeito() {
   if (( cor_json )); then exec 3>&1 1>&2; else exec 3>&1; fi
   local disponiveis="${CYBERKDE_EFEITOS[*]}"
   if (( lista )); then
-    local itens="" e item g grupos=""
+    local itens="" e item g grupos="" f id js padroes="" lotedir
+    if declare -F cerca_orfas_leitura >/dev/null; then cerca_orfas_leitura; fi
+    # Itens em lote (opcional, como os estados do status): um módulo com muitos efeitos (os widgets)
+    # registra em CYBERKDE_EFEITOS_JSON_LOTE "função:padrão-dos-ids"; a função imprime "id<TAB>item".
+    # Os lotes rodam em paralelo entre si e com os outros itens (o --lista era a soma de todos).
+    local -A lote=() itemde=()
+    efeitos_lote_carregar
+    lotedir=$(mktemp -d)
+    local n=0 reg
+    for reg in "${CYBERKDE_EFEITOS_JSON_LOTE[@]}"; do
+      f=${reg%%:*}
+      declare -F "$f" >/dev/null || continue
+      [[ $reg == *:* ]] && padroes+=" ${reg#*:}"
+      { "$f" >"$lotedir/$n" 2>/dev/null || true; } &
+      n=$((n + 1))
+    done
+    # Os outros itens também em paralelo (só leem; até um por núcleo), cada um no seu arquivo.
+    local pad no_lote max i=0
+    max=$(nproc 2>/dev/null || echo 4)
+    mkdir -p -- "$lotedir/um"
     for e in "${CYBERKDE_EFEITOS[@]}"; do
-      item=$("efeito_json_$e")
+      no_lote=0
+      for pad in $padroes; do [[ $e == $pad ]] && no_lote=1; done
+      (( no_lote )) && continue
+      { "efeito_json_$e" >"$lotedir/um/$i" 2>/dev/null || true; } &
+      itemde[$e]=$i; i=$((i + 1))
+      if (( i % max == 0 )); then wait -n 2>/dev/null || true; fi
+    done
+    wait
+    for e in "${!itemde[@]}"; do itemde[$e]=$(<"$lotedir/um/${itemde[$e]}"); done
+    for f in "$lotedir"/[0-9]*; do
+      [[ -f $f ]] || continue
+      while IFS=$'\t' read -r id js; do [[ -n $id && -n $js ]] && lote[$id]=$js; done <"$f"
+    done
+    rm -rf -- "$lotedir"
+    for e in "${CYBERKDE_EFEITOS[@]}"; do
+      if [[ -n ${itemde[$e]:-} ]]; then item=${itemde[$e]}
+      elif [[ -n ${lote[$e]:-} ]]; then item=${lote[$e]}
+      else item=$("efeito_json_$e"); fi
       # O grupo do registro entra se o próprio efeito não trouxer um.
       if [[ $item != *'"grupo":'* ]]; then item="{\"grupo\":\"${CYBERKDE_EFEITO_GRUPO[$e]:-sistema}\",${item#\{}"; fi
       itens+="${itens:+,}$item"
@@ -1104,9 +1174,53 @@ print()'
 # em Python) registra em CYBERKDE_EFEITOS_LOTE uma função que imprime "id<TAB>objeto-json" por linha;
 # o status usa essas respostas em vez de chamar um efeito_estado_<id> por vez.
 CYBERKDE_EFEITOS_LOTE=()
+# As escolhas do ~/.config/cyberkde/efeitos numa leitura só (o kreadconfig6 custa ~6 ms por chave), para
+# o --lista e o status: efeitos_lote_carregar no processo principal, antes dos subshells de cada efeito.
+declare -gA efeitos_lote=()
+efeitos_lote_ativo=0
+# Com o lote carregado, toda leitura simples desse arquivo sai dele, inclusive as dos módulos (eram 51 processos por
+# "efeito --lista"). Qualquer outro formato, ou outro arquivo, vai ao kreadconfig6 de verdade.
+kreadconfig6() {
+  if (( efeitos_lote_ativo )) && [[ ${1-} == --file && ${2-} == "$efeitos_file" && ${3-} == --group && ${5-} == --key ]]; then
+    case $# in
+      6) efeitos_lote_ler "$4" "$6" ""; return 0 ;;
+      8) if [[ $7 == --default ]]; then efeitos_lote_ler "$4" "$6" "$8"; return 0; fi ;;
+    esac
+  fi
+  command kreadconfig6 "$@"
+}
+efeitos_lote_carregar() {
+  local g k v
+  efeitos_lote=()
+  while IFS=$'\x1f' read -r -d '' g k v; do efeitos_lote["$g"$'\x1f'"$k"]=$v; done < <(python3 -c '
+import re, sys
+g = None
+try:
+    linhas = open(sys.argv[1], encoding="utf-8").read().splitlines()
+except OSError:
+    linhas = []
+def des(v):  # escapes do KConfig
+    return re.sub(r"\\(.)", lambda m: {"s": " ", "t": "\t", "n": "\n", "r": "\r", "\\": "\\"}.get(m.group(1), m.group(0)), v)
+for l in linhas:
+    if l.startswith("["):
+        g = l[1:l.index("]")] if "]" in l else None
+    elif g and "=" in l:
+        k, v = l.split("=", 1)
+        k = re.sub(r"\[\$[a-z]+\]$", "", k.strip())
+        sys.stdout.write(g + "\x1f" + k + "\x1f" + des(v.strip()) + "\0")
+' "$efeitos_file" 2>/dev/null)
+  efeitos_lote_ativo=1
+}
+efeitos_lote_ler() {  # grupo chave padrão
+  local k="$1"$'\x1f'"$2"
+  if [[ -v efeitos_lote[$k] ]]; then printf '%s\n' "${efeitos_lote[$k]}"; else printf '%s\n' "${3:-}"; fi
+}
+CYBERKDE_EFEITOS_JSON_LOTE=()  # o mesmo para os itens do "efeito --lista" (id<TAB>item-json)
 efeitos_status_json() {
   local e chave out="" f id js
   local -A lote=()
+  if declare -F cerca_orfas_leitura >/dev/null; then cerca_orfas_leitura; fi
+  efeitos_lote_carregar
   for f in "${CYBERKDE_EFEITOS_LOTE[@]}"; do
     declare -F "$f" >/dev/null || continue
     while IFS=$'\t' read -r id js; do [[ -n $id && -n $js ]] && lote[$id]=$js; done < <("$f" 2>/dev/null || true)
@@ -1139,7 +1253,7 @@ efeito_json_konsole-cascata() {
 #   [{"id","nome","nome_en","descricao","descricao_en","abrir","fechar","duracaoAbrir","duracaoFechar",
 #     "referencia"}]   (abrir/fechar: a variante serve para abrir/fechar; durações em ms)
 # Configuração do efeito em kwinrc [Effect-cyberkde_scan]: AbrirVariante, FecharVariante, OpenDuration,
-# CloseDuration, Intensidade (0 a 100) (effects/cyberkde_scan/PEDIDO.md). Quem grava é a fase janelas
+# CloseDuration, Intensidade (0 a 100). Quem grava é a fase janelas
 # (set_key, com registro); a escolha fica em ~/.config/cyberkde/efeitos [janelas]. Só vai para o
 # kwinrc o que a pessoa escolheu: sem a chave, o próprio efeito usa o padrão (scan; fechar = a de
 # abrir; a duração da variante no catálogo; intensidade 60). "nenhuma" = sem animação.
@@ -1646,9 +1760,15 @@ EOF
     put_file "$data/applications/$desktop.desktop"
 }
 
-# Dolphin com cascata de carregamento: atalho, comando e serviço D-Bus "Mostrar na pasta".
+# Dolphin com cascata de carregamento: atalho, comando e serviço D-Bus "Mostrar na pasta". Com o
+# efeito datashard ligado, o serviço é do DATASHARD (modules/datashard), e esta fase não o grava; o
+# off_datashard o devolve a ela se ela continuar ligada.
 phase_carregamento() {
   use_patched dolphin org.kde.dolphin
+  if declare -F datashard_ativo >/dev/null && datashard_ativo; then return 0; fi
+  carregamento_servicos
+}
+carregamento_servicos() {
   local service
   for service in org.freedesktop.FileManager1 org.kde.dolphin.FileManager1; do
     # Sem SystemdService, o D-Bus usa o Exec abaixo em vez do serviço do sistema.
@@ -1710,14 +1830,18 @@ for module in "$project"/modules/*/phase.sh; do
 done
 # A barra e a dock por último: o Latte (re)iniciado por ela tem de subir já com o tema de ícones e o
 # tema do Plasma aplicados, senão fica com os ícones antigos até reiniciar.
+# Depois dela, os widgets: a barra guarda o appletsrc original na primeira aplicação, e ele não deve
+# conter os widgets que o tema põe na área de trabalho.
 fases_ordenadas=()
-for p in "${CYBERKDE_PHASES[@]}"; do [[ $p == barra-e-dock ]] || fases_ordenadas+=("$p"); done
-if [[ " ${CYBERKDE_PHASES[*]} " == *" barra-e-dock "* ]]; then fases_ordenadas+=(barra-e-dock); fi
+for p in "${CYBERKDE_PHASES[@]}"; do [[ $p == barra-e-dock || $p == widgets ]] || fases_ordenadas+=("$p"); done
+for p in barra-e-dock widgets; do
+  if [[ " ${CYBERKDE_PHASES[*]} " == *" $p "* ]]; then fases_ordenadas+=("$p"); fi
+done
 CYBERKDE_PHASES=("${fases_ordenadas[@]}")
 unset fases_ordenadas p
 
 # ------------------------------------------------------------------ efeitos do Konsole (Zeta)
-# Oito efeitos do Konsole animado (konsole/PEDIDO-CLI-2.md), todos desligados por padrão, com o mesmo
+# Oito efeitos do Konsole animado, todos desligados por padrão, com o mesmo
 # esquema da cascata: a escolha em ~/.config/cyberkde/efeitos [konsole-<id>], e a fase konsole-anim
 # grava konsolerc [CyberKDE] <Chave>, <Chave><Parâmetro> pelo set_key.
 # Tabela: id | Chave | anima (1 = desliga no movimento reduzido/mínimo) | parâmetros
@@ -1760,7 +1884,10 @@ konsole_efeito_linha() {  # id -> linha da tabela
   for l in "${konsole_efeitos_tabela[@]}"; do [[ ${l%%|*} == "$1" ]] && { printf '%s\n' "$l"; return 0; }; done
   return 1
 }
-konsole_pref() { kreadconfig6 --file "$efeitos_file" --group "konsole-$1" --key "$2" --default "$3" 2>/dev/null; }
+konsole_pref() {
+  if (( efeitos_lote_ativo )); then efeitos_lote_ler "konsole-$1" "$2" "$3"; return 0; fi
+  kreadconfig6 --file "$efeitos_file" --group "konsole-$1" --key "$2" --default "$3" 2>/dev/null
+}
 
 # O Konsole tem estes efeitos? A marca é a chave VarreduraIntervalo na biblioteca (vieram no mesmo patch).
 konsole_tem_efeitos() { konsole_lib_tem "${1:-}" VarreduraIntervalo; }  # prefixo
@@ -1988,14 +2115,19 @@ if declare -F efeito_cmd_papel >/dev/null; then
   efeito_cmd_papel() {
     local arg modo=""
     for arg in "$@"; do
-      case $arg in a | b | c | d) modo=fixo ;; corp | padrao) modo=corp ;; esac
+      # fui: fixo (a corporação não troca o papel por outro; ela só muda a Corporacao do FUI).
+      case $arg in a | b | c | d | fui) modo=fixo ;; corp | padrao) modo=corp ;; esac
     done
     if [[ " $* " == *" corp "* ]] && ! papel_corp_suportado; then
       cor_exit 2 "$(t "o papel por corporação ainda não existe nesta versão do módulo de papel de parede" "the per-corporation wallpaper does not exist in this version of the wallpaper module yet")"
     fi
     if [[ -n $modo ]]; then papel_modo_gravar "$modo"; fi
     local escolheu=0
-    for arg in "$@"; do [[ $arg == a || $arg == b || $arg == c || $arg == d || $arg == corp || $arg == padrao ]] && escolheu=1; done
+    for arg in "$@"; do [[ $arg == a || $arg == b || $arg == c || $arg == d || $arg == corp || $arg == fui || $arg == padrao ]] && escolheu=1; done
+    # "fui" de novo, com o FUI já escolhido e a fase ligada: só os controles (ao vivo), nada a seguir no login.
+    if [[ " $* " == *" fui "* && $(kreadconfig6 --file "$efeitos_file" --group papel --key opcao 2>/dev/null) == fui ]] && fase_ligada papeis-de-parede; then
+      escolheu=0
+    fi
     if (( ! escolheu )) || ! declare -F login_fundo_seguir >/dev/null; then
       efeito_cmd_papel_modulo "$@"
       return
@@ -2040,6 +2172,7 @@ fi
 # Vai para o hicolor com um nome que muda com a imagem (cyberkde-painel-<resumo>), como o ícone do
 # menu: nenhum cache de ícones do KDE serve a imagem velha. O Icon= do lançador aponta para ele.
 painel_icone_atualizar() {
+  arquivos_icone_atualizar  # o do DATASHARD acompanha a cor junto
   local modelo="$project/app/cyberkde-painel.svg" ger="$project/app/gerar_icone.py" tmp nome f n
   local lancador="$data/applications/cyberkde-painel.desktop" ico="$data/icons/hicolor"
   [[ -f $modelo || -f $ger ]] || return 0
@@ -2100,12 +2233,30 @@ cursor_previa() {  # variante -> caminho absoluto da prévia, ou nada
   if [[ -f $f ]]; then printf '%s\n' "$f"; fi
 }
 
+# Efeito de uma fase opcional (cursor, som): escolher a variante LIGA a fase, se ela estiver desligada
+# (escolher é intenção explícita), e "off" a desliga. Chamado com a trava e a escolha já gravada: solta
+# a trava e roda o próprio "cyberkde on|off <fase>", que tem trava, registro e reversão completos.
+# Saída: a dele (0 ok · 3 ocupado · 4 com pendências de sudo · outro = falha).
+efeito_fase_alternar() {  # on|off fase
+  flock -u 9 2>/dev/null || true
+  exec 9>&-
+  "$project/scripts/cyberkde" "$1" "$2" --sem-sudo >&2 </dev/null
+}
+# Resposta comum de erro do efeito_fase_alternar.
+efeito_fase_erro() {  # código fase
+  case $1 in
+    0 | 4) return 0 ;;
+    3) cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")" ;;
+    *) cor_exit 1 "$(t "falha ao ligar ou desligar a fase $2 (detalhes na saída de erro)" "failed to switch the $2 part on or off (details on stderr)")" ;;
+  esac
+}
+
 # Estado: a variante escolhida, se a fase cursor está ligada e o tema de cursor em uso agora.
 efeito_estado_cursor() {
   local ligado=false
   if fase_ligada cursor; then ligado=true; fi
-  printf '{"variante":"%s","ligado":%s,"aplicado":%s,"ligarCom":"cyberkde on cursor","desligarCom":"cyberkde off cursor"}' \
-    "$(cursor_variante)" "$ligado" "$(json_str "$(kreadconfig6 --file kcminputrc --group Mouse --key cursorTheme --default breeze_cursors)")"
+  printf '{"variante":"%s","ligado":%s,"aplicado":%s,"ligarCom":"cyberkde efeito cursor %s","desligarCom":"cyberkde efeito cursor off"}' \
+    "$(cursor_variante)" "$ligado" "$(json_str "$(kreadconfig6 --file kcminputrc --group Mouse --key cursorTheme --default breeze_cursors)")" "$(cursor_variante)"
 }
 
 efeito_json_cursor() {
@@ -2115,8 +2266,8 @@ efeito_json_cursor() {
   done
   printf '{"id":"cursor","nome":%s,"nome_en":%s,"descricao":%s,"descricao_en":%s,"tipo":"variante","opcoes":[{"id":"variante","nome":"Variante","nome_en":"Variant","tipo":"variante","padrao":"padrao","valores":[%s]}],"estado":%s}' \
     "$(json_str "Cursor do tema")" "$(json_str "Theme cursor")" \
-    "$(json_str "Cursores com cantoneiras e o destaque do tema. Liga e desliga pela fase cursor; a variante vale na hora com ela ligada.")" \
-    "$(json_str "Cursors with corner brackets and the theme accent. Turned on and off by the cursor part; the variant applies right away while it is on.")" \
+    "$(json_str "Cursores com cantoneiras e o destaque do tema. Escolher uma variante liga o cursor do tema (fase cursor); off devolve o cursor de antes.")" \
+    "$(json_str "Cursors with corner brackets and the theme accent. Picking a variant turns the theme cursor on (cursor part); off brings the previous cursor back.")" \
     "$valores" "$(efeito_estado_cursor)"
 }
 
@@ -2126,21 +2277,28 @@ efeito_cmd_cursor() {
   local variante="" arg
   for arg in "$@"; do
     case $arg in
-      padrao | neon | minimo | mira) [[ -z $variante ]] && variante=$arg || variante=invalida ;;
+      padrao | neon | minimo | mira | off) [[ -z $variante ]] && variante=$arg || variante=invalida ;;
       *) variante=invalida ;;
     esac
   done
-  [[ $variante != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito cursor [padrao|neon|minimo|mira] [--json]" "usage: cyberkde efeito cursor [padrao|neon|minimo|mira] [--json]")"
+  [[ $variante != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito cursor [padrao|neon|minimo|mira|off] [--json]" "usage: cyberkde efeito cursor [padrao|neon|minimo|mira|off] [--json]")"
   local -a avisos=()
   if [[ -n $variante ]]; then
     take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
-    mkdir -p -- "$(dirname -- "$efeitos_file")"
-    kwriteconfig6 --file "$efeitos_file" --group cursor --key variante "$variante"
-    if fase_ligada cursor; then
-      (fase_atual=cursor; efeito_cursor_aplicar)
+    local rc=0
+    if [[ $variante == off ]]; then
+      if fase_ligada cursor; then efeito_fase_alternar off cursor || rc=$?; efeito_fase_erro "$rc" cursor; fi
     else
-      avisos+=("$(t "O cursor do tema está desligado: a variante foi guardada; para usar, cyberkde on cursor." "The theme cursor is off: the variant was saved; to use it, cyberkde on cursor.")")
+      mkdir -p -- "$(dirname -- "$efeitos_file")"
+      kwriteconfig6 --file "$efeitos_file" --group cursor --key variante "$variante"
+      if fase_ligada cursor; then
+        (fase_atual=cursor; efeito_cursor_aplicar)
+      else
+        efeito_fase_alternar on cursor || rc=$?
+        efeito_fase_erro "$rc" cursor
+      fi
     fi
+    avisos+=("$(t "O cursor troca na hora na área de trabalho; um app já aberto pode manter o anterior até ser reaberto." "The cursor changes right away on the desktop; an app that is already open may keep the old one until it is reopened.")")
   fi
   local estado
   estado=$(efeito_estado_cursor)
@@ -2993,6 +3151,114 @@ cmd_painel() {
   echo "Abrindo o painel do CyberKDE (mensagens em $state/painel.log)."
 }
 
+# ------------------------------------------------------------------ DATASHARD (app/arquivos)
+# O gerenciador de arquivos do tema. App e lançador ficam fora do registro, como o painel (o instalar.sh
+# põe o lançador; o uninstall tira). Ser o padrão das pastas é o efeito "datashard" (modules/datashard).
+arquivos_app="$project/app/arquivos/cyberkde-arquivos.py"
+arquivos_lancador_arq="$data/applications/cyberkde-arquivos.desktop"
+
+# Pacotes que faltam: os do painel e o QtMultimedia do QML (prévia de vídeo e áudio, carregada sempre).
+arquivos_deps_faltando() {
+  local qml
+  {
+    painel_deps_faltando
+    qml=$(python3 -c 'from PyQt6.QtCore import QLibraryInfo; print(QLibraryInfo.path(QLibraryInfo.LibraryPath.QmlImportsPath))' 2>/dev/null ||
+      true)
+    [[ -d $qml ]] || qml=$(ls -d /usr/lib/*/qt6/qml 2>/dev/null | head -1)
+    [[ -f $qml/QtMultimedia/qmldir ]] || echo qml6-module-qtmultimedia
+  } | sort -u
+}
+# Opcionais (o app funciona sem; só some o recurso): pacote<TAB>para quê (PT)<TAB>(EN).
+arquivos_opcionais_faltando() {
+  command -v ffmpegthumbnailer >/dev/null || command -v ffmpeg >/dev/null ||
+    printf 'ffmpegthumbnailer\tminiaturas de vídeo\tvideo thumbnails\n'
+  command -v pdftoppm >/dev/null || printf 'poppler-utils\tminiaturas de PDF\tPDF thumbnails\n'
+  command -v 7z >/dev/null || printf '7zip\tcompactar e extrair 7z (e outros formatos)\tcompress and extract 7z (and other formats)\n'
+}
+
+# Ícone do lançador: losango de shard na moldura chanfrada do tema, na cor de destaque (neutro, no
+# vermelho, com o tema desligado). Se app/arquivos/cyberkde-arquivos.svg existir (desenho do MAX), vale
+# ele, recolorido como o do painel. O nome muda com o conteúdo, para o Plasma não mostrar o antigo.
+arquivos_icone_atualizar() {
+  [[ -f $arquivos_app ]] || return 0
+  local destaque="#F75049" base="#12121C" cores svg nome ico="$data/icons/hicolor/scalable/apps"
+  if tema_ligado; then
+    cores=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cyberlib import RED, BASE; print(RED, BASE)' "$project/generator" 2>/dev/null) &&
+      read -r destaque base <<<"$cores"
+  fi
+  if [[ -f $project/app/arquivos/cyberkde-arquivos.svg ]]; then
+    svg=$(sed -e "s/#F75049/$destaque/gI" -e "s/#12121C/$base/gI" "$project/app/arquivos/cyberkde-arquivos.svg")
+  else
+    svg="<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 64 64\">
+  <path d=\"M14 4H60V48L46 60H4V16Z\" fill=\"$base\" stroke=\"$destaque\" stroke-width=\"2.5\" stroke-linejoin=\"miter\"/>
+  <path d=\"M32 11L47 32L32 53L17 32Z\" fill=\"$destaque\"/>
+  <path d=\"M32 11L38 32L32 53\" fill=\"none\" stroke=\"$base\" stroke-width=\"1.6\" opacity=\"0.55\"/>
+  <path d=\"M17 32H47\" stroke=\"$base\" stroke-width=\"1.6\" opacity=\"0.55\"/>
+  <path d=\"M10 50H20M44 14H54\" stroke=\"$destaque\" stroke-width=\"2\"/>
+</svg>"
+  fi
+  nome="cyberkde-arquivos-$(printf '%s' "$svg" | md5sum | cut -c1-10)"
+  if [[ ! -f $ico/$nome.svg ]]; then
+    mkdir -p -- "$ico"
+    printf '%s\n' "$svg" >"$ico/$nome.svg"
+    find "$ico" -maxdepth 1 -name 'cyberkde-arquivos-*.svg' ! -name "$nome.svg" -delete 2>/dev/null || true
+  fi
+  if [[ -f $arquivos_lancador_arq ]] && ! grep -qx "Icon=$nome" "$arquivos_lancador_arq"; then
+    sed -i "s|^Icon=.*|Icon=$nome|" "$arquivos_lancador_arq"
+  fi
+}
+
+# Lançador "DATASHARD" no menu (~/.local/share/applications/cyberkde-arquivos.desktop: o nome é o
+# desktopFileName do app, que o Wayland usa para o ícone e o nome da janela). Sem InitialPreference: o
+# Dolphin (10, e o kde-mimeapps.list) continua o padrão até a pessoa ligar o efeito datashard.
+arquivos_lancador() {
+  [[ -f $arquivos_app ]] || return 0
+  mkdir -p -- "$(dirname -- "$arquivos_lancador_arq")"
+  cat >"$arquivos_lancador_arq.novo" <<EOF
+[Desktop Entry]
+Type=Application
+Name=DATASHARD
+GenericName=File manager
+GenericName[pt_BR]=Gerenciador de arquivos
+Comment=CyberKDE file manager
+Comment[pt_BR]=Gerenciador de arquivos do CyberKDE
+Exec=python3 "$arquivos_app" %U
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileTools;FileManager;Qt;
+MimeType=inode/directory;
+Keywords=cyberkde;datashard;arquivos;files;pastas;folders;
+StartupNotify=true
+StartupWMClass=cyberkde-arquivos
+EOF
+  mv -f -- "$arquivos_lancador_arq.novo" "$arquivos_lancador_arq"
+  arquivos_icone_atualizar
+}
+
+# "cyberkde arquivos [pasta]": abre o DATASHARD solto (sem a trava, como o painel).
+# "--checar": 0 = pode abrir; 1 = falta pacote (a linha do apt no stdout). Os opcionais vão no stderr.
+cmd_arquivos() {
+  local falta l pac pt en
+  if [[ ${1:-} == --lancador ]]; then arquivos_lancador; return; fi  # o instalar.sh chama
+  falta=$(arquivos_deps_faltando | paste -sd' ' -)
+  if [[ ${1:-} == --checar ]]; then
+    while IFS=$'\t' read -r pac pt en; do
+      [[ -n $pac ]] && echo "$(t "Opcional ($pt)" "Optional ($en)"): sudo apt install $pac" >&2
+    done < <(arquivos_opcionais_faltando)
+    if [[ -n $falta ]]; then echo "sudo apt install $falta"; return 1; fi
+    return 0
+  fi
+  [[ -f $arquivos_app ]] || { echo "$(t "DATASHARD não encontrado em $arquivos_app (esta cópia do tema não traz o app)." "DATASHARD not found at $arquivos_app (this copy of the theme does not include the app).")" >&2; exit 1; }
+  if [[ -n $falta ]]; then
+    echo "$(t "O DATASHARD precisa de pacotes que faltam. Instale com:" "DATASHARD needs missing packages. Install them with:") sudo apt install $falta" >&2
+    exit 1
+  fi
+  [[ -z ${1:-} || -d $1 ]] || { echo "$(t "Pasta não encontrada: $1" "Folder not found: $1")" >&2; exit 2; }
+  mkdir -p -- "$state"
+  sem_travas setsid python3 "$arquivos_app" "$@" >"$state/arquivos.log" 2>&1 </dev/null &
+  echo "$(t "Abrindo o DATASHARD (mensagens em $state/arquivos.log)." "Opening DATASHARD (messages in $state/arquivos.log).")"
+}
+
 # Parte do "status" que olha a sessão: animações do KWin carregadas, vídeo por software, barra e dock.
 status_sessao() {
   local info efeitos e
@@ -3037,9 +3303,9 @@ cmd_status() {
     if [[ -s $ledger ]]; then chaves=$(wc -l <"$ledger"); fi
     # Campos novos só no fim: o Halo e outros leem este JSON (e "ligado" tem de ser o primeiro).
     corp_carregar
-    printf '{"ligado":%s,"cor":"%s","corAplicada":"%s","padrao":%s,"chaves":%d,"reversaoPendente":%s,"completa":%s,"kvantum":%s%s,"paleta":%s,"efeitos":%s,"papel":%s}\n' \
+    printf '{"ligado":%s,"cor":"%s","corAplicada":"%s","padrao":%s,"chaves":%d,"reversaoPendente":%s,"completa":%s,"kvantum":%s%s,"paleta":%s,"efeitos":%s,"papel":%s,"edicao":%s}\n' \
       "$ligado" "$(accent_color)" "$(accent_applied)" "$(accent_is_default)" "$chaves" \
-      "$pendente" "$completa" "$(kvantum_ok && echo true || echo false)" "$(corp_json_campos)" "$(paleta_json)" "$(efeitos_status_json)" "$(papel_status_json)"
+      "$pendente" "$completa" "$(kvantum_ok && echo true || echo false)" "$(corp_json_campos)" "$(paleta_json)" "$(efeitos_status_json)" "$(papel_status_json)" "$(edicao_ler)"
     return
   fi
   printf 'Kvantum: %s\n' "$(kvantum_ok && echo instalado || echo 'NÃO instalado')"
@@ -3120,10 +3386,49 @@ cmd_papel() {
     mkdir -p -- "$(dirname -- "$file")"
     readlink -f -- "$img" >"$file"
     papel_modo_gravar fixo  # escolha da pessoa: a corporação não sobrescreve
+    # Com o FUI escolhido, a imagem própria não valeria: escolher uma imagem sai do FUI.
+    if [[ $(kreadconfig6 --file "$efeitos_file" --group papel --key opcao 2>/dev/null) == fui ]]; then
+      kwriteconfig6 --file "$efeitos_file" --group papel --key opcao a
+    fi
     echo "Papel de parede: $(<"$file")"
   fi
   if tema_ligado; then
     echo "Para aplicar agora: cyberkde on papeis-de-parede"
+  fi
+}
+
+# "cyberkde edicao": o modo de edição do Plasma (a propriedade editMode do plasmashell). Estado de
+# sessão: não entra no registro e o "off" não mexe nele. --json: {"edicao":true|false}.
+# Saída: 0 ok · 1 o plasmashell não respondeu · 2 opção inválida
+edicao_ler() {  # -> true|false (plasmashell fora do ar = false)
+  [[ $(qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.editMode 2>/dev/null) == true ]] && echo true || echo false
+}
+cmd_edicao() {
+  local arg acao="" novo
+  for arg in "$@"; do
+    case $arg in
+      --json) cor_json=1 ;;
+      on | off | alternar) [[ -z $acao ]] && acao=$arg || acao=invalida ;;
+      *) acao=invalida ;;
+    esac
+  done
+  if (( cor_json )); then exec 3>&1 1>&2; else exec 3>&1; fi
+  [[ $acao != invalida ]] || cor_exit 2 "uso: cyberkde edicao [on|off|alternar] [--json]"
+  if [[ -n $acao ]]; then
+    qdbus6 org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 \
+      || cor_exit 1 "$(t "O plasmashell não respondeu: o modo de edição não mudou." "plasmashell did not respond: edit mode did not change.")"
+    case $acao in
+      on) novo=true ;;
+      off) novo=false ;;
+      alternar) [[ $(edicao_ler) == true ]] && novo=false || novo=true ;;
+    esac
+    qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.editMode "$novo" >/dev/null 2>&1 \
+      || cor_exit 1 "$(t "O plasmashell não aceitou a troca do modo de edição." "plasmashell did not accept the edit mode change.")"
+  fi
+  if (( cor_json )); then
+    printf '{"edicao":%s}\n' "$(edicao_ler)" >&3
+  else
+    echo "$(t "Modo de edição" "Edit mode"): $([[ $(edicao_ler) == true ]] && t ligado on || t desligado off)" >&3
   fi
 }
 
@@ -3196,6 +3501,43 @@ cmd_checar() {
     item aviso "Faltam pacotes do painel gráfico (cyberkde painel): ${painel_falta% }. O tema funciona sem ele." \
       "Missing packages for the graphical panel (cyberkde painel): ${painel_falta% }. The theme works without it." \
       "Ubuntu/Debian: sudo apt install ${painel_falta% }"
+  fi
+  if declare -F ilha_deps_faltando >/dev/null && [[ -f $ilha_app ]]; then
+    local il_falta il_opc
+    il_falta=$(ilha_deps_faltando | paste -sd' ' -)
+    il_opc=$(ilha_opcionais_faltando | cut -f1 | paste -sd' ' -)
+    if [[ -n $il_falta ]]; then
+      item aviso "Faltam pacotes da ilha dinâmica (cyberkde ilha): $il_falta. O tema funciona sem ela." \
+        "Missing packages for the dynamic island (cyberkde ilha): $il_falta. The theme works without it." \
+        "Ubuntu/Debian: sudo apt install $il_falta"
+    fi
+    if [[ -n $il_opc ]]; then
+      item aviso "Opcionais da ilha não instalados ($il_opc): sem eles, só some o recurso." \
+        "Island optional tools not installed ($il_opc): without them, only that feature is missing." \
+        "Ubuntu/Debian: sudo apt install $il_opc"
+    fi
+  fi
+  if declare -F arquivos_faltando_cerca >/dev/null && [[ -n $(arquivos_faltando_cerca) ]]; then
+    local cf
+    cf=$(arquivos_faltando_cerca | paste -sd' ' -)
+    item aviso "Faltam pacotes da Cyber Fence (widget-cerca): $cf. Sem eles, ela não abre." \
+      "Cyber Fence packages are missing (widget-cerca): $cf. It does not load without them." \
+      "Ubuntu/Debian: sudo apt install $cf"
+  fi
+  if [[ -f $arquivos_app ]]; then
+    local ds_falta ds_opc
+    ds_falta=$(arquivos_deps_faltando | paste -sd' ' -)
+    ds_opc=$(arquivos_opcionais_faltando | cut -f1 | paste -sd' ' -)
+    if [[ -n $ds_falta ]]; then
+      item aviso "Faltam pacotes do DATASHARD (cyberkde arquivos): $ds_falta. O tema funciona sem ele." \
+        "Missing packages for DATASHARD (cyberkde arquivos): $ds_falta. The theme works without it." \
+        "Ubuntu/Debian: sudo apt install $ds_falta"
+    fi
+    if [[ -n $ds_opc ]]; then
+      item aviso "Opcionais do DATASHARD não instalados ($ds_opc): sem eles, faltam miniaturas de vídeo e PDF ou o 7z." \
+        "DATASHARD optional tools not installed ($ds_opc): without them, video and PDF thumbnails or 7z are missing." \
+        "Ubuntu/Debian: sudo apt install $ds_opc"
+    fi
   fi
   if ! kvantum_ok; then
     item corrigir "Kvantum para Qt 6 não instalado: sem ele os apps ficam sem as formas chanfradas das capturas." "Kvantum for Qt 6 is not installed: without it the apps lack the chamfered shapes from the screenshots." \
@@ -3557,9 +3899,15 @@ cmd_uninstall() {
     "$data/wallpapers/CyberKDE" "$data/cyberkde" "$data/plasma/look-and-feel/org.cyberkde.desktop" \
     "$data/plasma/desktoptheme/CyberKDE" "$data/kwin/effects/cyberkde_popups" "$data/kwin/effects/cyberkde_barra"
   rm -f "$data/color-schemes/CyberKDE.colors" "$data/kwin/effects/.cyberkde_"*
+  # Widgets do tema (modules/widgets): os pacotes instalados. A configuração guardada deles (as notas)
+  # fica, como os logos da usuária (abaixo).
+  rm -rf -- "$data/plasma/plasmoids/org.cyberkde."* "$data/plasma/wallpapers/org.cyberkde.fui"
+  rmdir -- "$data/plasma/wallpapers" 2>/dev/null || true
+  rmdir -- "$data/plasma/plasmoids" 2>/dev/null || true
   # Ícones do menu (gen_menu.py) no hicolor do usuário, que pode ter ícones de outros programas: só os
   # do tema, e só as pastas de tamanho que ele cria, se ficarem vazias.
-  rm -f "$data/icons/hicolor/"*/apps/cyberkde-menu-* "$data/icons/hicolor/"*/apps/cyberkde-painel-*
+  rm -f "$data/icons/hicolor/"*/apps/cyberkde-menu-* "$data/icons/hicolor/"*/apps/cyberkde-painel-* \
+    "$data/icons/hicolor/"*/apps/cyberkde-arquivos-*
   local tam
   for tam in scalable 16x16 22x22 24x24 32x32 48x48 64x64 96x96 128x128 256x256; do
     rmdir -- "$data/icons/hicolor/$tam/apps" "$data/icons/hicolor/$tam" 2>/dev/null || true
@@ -3568,14 +3916,20 @@ cmd_uninstall() {
   rm -f "${XDG_CACHE_HOME:-$HOME/.cache}"/plasma_theme_CyberKDE*.kcache
   # Preferências (cor, corporação, papel de parede), cache dos ícones recoloridos e o estado (o
   # registro já foi esvaziado pelo off; a trava pode sumir com o arquivo aberto). Os logos de
-  # corporação da usuária (~/.config/cyberkde/corporacoes) ficam: são dela, não do tema.
+  # corporação da usuária (~/.config/cyberkde/corporacoes), a cópia dos dados dos widgets
+  # (widgets-dados: as notas), as regras, snapshots e backups das cercas e os dados da ilha (nota e gaveta)
+  # ficam: são dela, não do tema.
   if [[ -d $config/cyberkde ]]; then
-    find "$config/cyberkde" -mindepth 1 -maxdepth 1 ! -name corporacoes -exec rm -rf -- {} +
-    rmdir -- "$config/cyberkde" 2>/dev/null || echo "Seus logos de corporação ficaram em $corp_logos_usuario."
+    rm -f -- "$config/cyberkde/cercas/ocultas" "$config/cyberkde/cercas/peek"
+    # A animação das cercas é preferência, não dado da pessoa.
+    [[ ! -d $config/cyberkde/cercas ]] || find "$config/cyberkde/cercas" -maxdepth 1 \( -name 'animacao.*' -o -name 'animicones.*' \) -delete
+    find "$config/cyberkde" -mindepth 1 -maxdepth 1 ! -name corporacoes ! -name widgets-dados ! -name cercas ! -name ilha-dados.json -exec rm -rf -- {} +
+    rmdir -- "$config/cyberkde" 2>/dev/null ||
+      echo "Ficaram em $config/cyberkde os seus logos de corporação e as notas dos widgets (apague se não for usar mais)."
   fi
   rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde" "$state"
   # Lançador do painel, instalado pelo instalar.sh fora do registro (ver lá).
-  rm -f -- "$data/applications/cyberkde-painel.desktop"
+  rm -f -- "$data/applications/cyberkde-painel.desktop" "$data/applications/cyberkde-arquivos.desktop"
   # Pastas que só existiam por causa do tema.
   local d
   for d in "$data/aurorae/themes" "$data/aurorae" "$data/kwin/effects" "$data/kwin" \
@@ -3613,6 +3967,7 @@ case "${1:-status}" in
   fases) cmd_fases "${@:2}" ;;
   corp) cmd_corp "${@:2}" ;;  # trava pelo cmd_cor (a leitura e a lista não travam)
   painel) cmd_painel "${@:2}" ;;
+  arquivos) cmd_arquivos "${@:2}" ;;  # sem trava, como o painel
   efeito) cmd_efeito "${@:2}" ;;  # trava só ao gravar
   # Saída fechada (ex.: "| head") com o SIGPIPE ignorado por quem chamou: sem "erro de escrita".
   status) cmd_status "${@:2}" 2> >(grep -v -E 'erro de escrita|write error' >&2 || true) ;;
@@ -3626,6 +3981,10 @@ case "${1:-status}" in
   latte) cmd_latte "${@:2}" ;;
   animados) cmd_animados "${@:2}" ;;
   layout) cmd_layout "${@:2}" ;;
+  widgets) cmd_widgets "${@:2}" ;;  # sem trava: estado de sessão
+  ilha) cmd_ilha "${@:2}" ;;  # sem trava na leitura; o on e o off travam
+  cerca) cmd_cerca "${@:2}" ;;  # módulo widgets (só com o pacote da cerca)
+  edicao) cmd_edicao "${@:2}" ;;  # estado de sessão: sem trava nem registro
   uninstall) take_lock || busy; cmd_uninstall ;;
   -h | --help | help | ajuda) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;

@@ -1,0 +1,15 @@
+{
+  "id": "exacerbado",
+  "nome": "Punk exacerbado",
+  "nome_en": "Overdrive punk",
+  "descricao": "Cyberpunk ao extremo nas passadas: glitch, aberração cromática, alerta em bloco e letreiro.",
+  "descricao_en": "Cyberpunk to the extreme in transitions: glitch, chromatic aberration, block alerts and a marquee.",
+  "ordem": 40,
+  "movimentos": [
+    {
+      "id": "corte",
+      "nome": "Corte seco",
+      "nome_en": "Hard cut"
+    }
+  ]
+}

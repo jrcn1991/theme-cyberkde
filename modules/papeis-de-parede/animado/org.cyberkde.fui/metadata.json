@@ -1,0 +1,22 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "Category": "",
+        "Description": "Animated CyberKDE wallpaper: red light beams, smoke and film grain in the corporation colors",
+        "Description[pt_BR]": "Papel de parede animado do CyberKDE: feixes de luz, fumaça e grão de filme nas cores da corporação",
+        "Icon": "preferences-desktop-wallpaper",
+        "Id": "org.cyberkde.fui",
+        "License": "GPL-3.0-or-later",
+        "Name": "CyberKDE FUI",
+        "Name[pt_BR]": "CyberKDE FUI",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde"
+    },
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,51 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-cpu",
+        "Name": "CyberKDE · FUI CPU",
+        "Name[pt_BR]": "CyberKDE · FUI CPU",
+        "Name[en]": "CyberKDE · FUI CPU",
+        "Description": "Carga total da CPU no arco, com a temperatura.",
+        "Description[pt_BR]": "Carga total da CPU no arco, com a temperatura.",
+        "Description[en]": "Total CPU load on the arc, with the temperature.",
+        "Icon": "cpu",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · CPU",
+        "nome_en": "FUI · CPU",
+        "descricao": "Carga total da CPU no arco, com a temperatura. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "Total CPU load on the arc, with the temperature. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            224,
+            320
+        ],
+        "ordem": 200,
+        "opcoes": [
+            {
+                "id": "limiar",
+                "chave": "limiar",
+                "tipo": "inteiro",
+                "min": 50,
+                "max": 99,
+                "padrao": 85,
+                "unidade": "%",
+                "nome": "Alerta acima de",
+                "nome_en": "Alert above"
+            }
+        ]
+    }
+}

@@ -34,6 +34,7 @@ from PyQt6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects()[0] vira QQu
 
 APP_DIR = Path(__file__).resolve().parent
 REPO = APP_DIR.parent
+ILHA_APP = os.environ.get("CYBERKDE_ILHA_APP") or str(APP_DIR / "ilha" / "cyberkde-ilha.py")
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "cyberkde"
 PREFS = CONFIG / "painel.json"
 LOGOS_USUARIA = CONFIG / "corporacoes"
@@ -315,7 +316,9 @@ class Painel(QObject):
     progressoMudou = pyqtSignal()
     prefsMudou = pyqtSignal()
     papelMudou = pyqtSignal()
+    gpuMudou = pyqtSignal()
     diagnosticoMudou = pyqtSignal()
+    datashardMudou = pyqtSignal()
     registroMudou = pyqtSignal()
     paletaMudou = pyqtSignal()
     idiomaMudou = pyqtSignal()
@@ -344,6 +347,8 @@ class Painel(QObject):
         self._corpAtualCli = None
         self._doCli = {}
         self._tokens = ler_tokens_corps()
+        self._cerca = {"regras": [], "lotes": [], "snapshots": [], "simulacao": None, "erro": "", "info": ""}
+        self._ilha = {"esquema": [], "config": {}, "temas": [], "telas": [], "haloAtivo": False, "erro": ""}
         self._especiais = {}
         self._registroPorFase = True
         self._suporteSecundaria = False
@@ -366,13 +371,24 @@ class Painel(QObject):
         self._fxListaGrupos = None
         self._enviados = {}       # efeito -> {opção: valor} já mandados ao CLI, à espera do estado novo
         self._fimOpEfeito = {}    # efeito -> monotonic() do fim da última operação dele
+        # widgets (W6): atualização otimista. Intenção da pessoa (o último clique vale) e o estado que a
+        # resposta do próprio "efeito widget-X on|off --json" confirmou, com a hora (leituras do --lista que
+        # começaram antes dela são velhas e não mexem no interruptor).
+        self._wPedido = {}        # efeito -> bool (a intenção final, enquanto não confirmada)
+        self._wConfirmado = {}    # efeito -> (bool, monotonic())
         self._fxGrupos = []
         self._fxMovimento = None
         self._suporteFxLista = False
-        # efeito "cascata de dados" do Konsole (konsole/PEDIDO-CLI.md); suporte: o CLI informa o estado
+        # efeito "cascata de dados" do Konsole; suporte: o CLI informa o estado
         self._cascata = {"suporte": False, "ligado": False, "linhas": 5, "cores": "video", "disponivel": None,
                          "disponivelAoReligar": False}
         self._diag = {"rodando": False, "codigo": -1, "itens": [], "hora": ""}
+        # DATASHARD (gerenciador de arquivos do tema): estado do efeito "datashard" e dependências
+        self._datashard = {"lido": False, "suporte": False, "ligado": False, "aplicado": False, "padraoAtual": "",
+                           "disponivel": None, "servicoDBus": False, "lancador": False, "avisos": [],
+                           "depsOk": True, "apt": "", "opcionais": [],
+                           "previa": next((url_local(str(f)) for f in (REPO / "assets/previas/datashard.webp",
+                                                                       REPO / "assets/previas/datashard.png") if f.exists()), "")}
         self._registro = []
         self._versaoLogo = int(time.time()) % 100000
         self._log("info", "log.cli", bin=self._bin)
@@ -383,7 +399,7 @@ class Painel(QObject):
     def _processo(self, args, ao_terminar, progresso=False):
         """Roda o CLI com args. ao_terminar(codigo, saida, erro). Linhas PROGRESSO viram progresso."""
         p = QProcess(self)
-        # Idioma das mensagens do CLI: CYBERKDE_LANG (ver PEDIDOS-AO-CLI.md). Um CLI que não conhece a
+        # Idioma das mensagens do CLI: CYBERKDE_LANG. Um CLI que não conhece a
         # variável a ignora; não se passa "--lang", que um CLI antigo recusaria com código 2.
         env = QProcessEnvironment.systemEnvironment()
         env.insert("CYBERKDE_LANG", "en" if self._idioma == "en" else "pt_BR")
@@ -423,7 +439,10 @@ class Painel(QObject):
                 buf["err"] += buf["resto"]
             if estado != QProcess.ExitStatus.NormalExit:
                 codigo = -1
-            p.deleteLater()
+            try:
+                p.deleteLater()
+            except RuntimeError:   # o painel fechou com o processo ainda rodando
+                return
             ao_terminar(codigo, buf["out"].decode("utf-8", "replace"), buf["err"].decode("utf-8", "replace"))
 
         def falhou(erro):
@@ -575,12 +594,63 @@ class Painel(QObject):
     # ---------------------------------------------------------------- leitura
     @pyqtSlot()
     def atualizar(self):
+        self._lerDatashard()
         self._lerSuporte()
         self._lerEfeitos()
         self._lerStatus()
+        self._lerWidgetsOcultar()
         self._lerFases()
         self._lerCorps()
         self._lerPapel()
+
+    # ---------------------------------------------------------------- DATASHARD
+    def _lerDatashard(self):
+        """Estado do efeito datashard (cyberkde efeito datashard --json, só leitura) e as dependências
+        (cyberkde arquivos --checar: 0 = pode abrir; 1 = falta pacote, com a linha do apt no stdout)."""
+        def fimEstado(codigo, saida, erro):
+            d = json_da_saida(saida)
+            ok = codigo == 0 and isinstance(d, dict) and "ligado" in d
+            novo = dict(self._datashard, lido=True, suporte=ok)
+            if ok:
+                for k in ("ligado", "aplicado", "padraoAtual", "disponivel", "servicoDBus", "lancador"):
+                    if k in d:
+                        novo[k] = d[k]
+            self._datashard = novo
+            self.datashardMudou.emit()
+
+        def fimDeps(codigo, saida, erro):
+            apt = next((l.strip() for l in saida.splitlines() if "apt install" in l), "")
+            opc = [l.strip() for l in erro.splitlines() if "apt install" in l]
+            self._datashard = dict(self._datashard, depsOk=codigo == 0, apt=apt if codigo == 1 else "", opcionais=opc)
+            self.datashardMudou.emit()
+        self._processo(["efeito", "datashard", "--json"], fimEstado)
+        self._processo(["arquivos", "--checar"], fimDeps)
+
+    @pyqtProperty("QVariantMap", notify=datashardMudou)
+    def datashard(self):
+        return self._datashard
+
+    @pyqtSlot()
+    def abrirDatashard(self):
+        """cyberkde arquivos: abre o DATASHARD solto (o CLI já usa setsid; aqui também é destacado)."""
+        ok = QProcess.startDetached(self._bin, ["arquivos"])[0]
+        self._log("info" if ok else "erro", "ds.abrindo" if ok else "erro.executar", bin=self._bin)
+        self.notificar.emit("info" if ok else "erro", self._t("ds.abrindo" if ok else "erro.executar", bin=self._bin))
+
+    @pyqtSlot(bool)
+    def ligarDatashard(self, ligar):
+        """cyberkde efeito datashard on|off --json, pela fila (é uma mudança no sistema). Os avisos da
+        resposta ficam no estado até a próxima troca."""
+        def depois(codigo, resultado):
+            if codigo in (0, 4):
+                self._datashard = dict(self._datashard, avisos=list(resultado.get("avisos") or []))
+                for k in ("ligado", "aplicado", "padraoAtual", "disponivel", "servicoDBus", "lancador"):
+                    if k in resultado:
+                        self._datashard[k] = resultado[k]
+                self.datashardMudou.emit()
+        self._enfileirar(("ds.rotulo", {"estado": self._t("comum.ligado" if ligar else "comum.desligado")}),
+                         ["efeito", "datashard", "on" if ligar else "off", "--json"], alvo="datashard",
+                         progresso=False, depois=depois)
 
     def _lerSuporte(self):
         """Recursos que só dá para descobrir pelo texto de uso (só leitura: o "cor --help" sai com
@@ -604,12 +674,14 @@ class Painel(QObject):
                 self._statusOk = True
                 self._lerCascata(dados)
                 self._temaLigado = bool(dados.get("ligado"))
+                self._edicaoLocal = None          # o status lido manda (mudou por fora, ex.: botão direito)
             else:
                 self._statusOk = False
                 self._log("erro", "log.statusFalhou", codigo=codigo)
             self._deduzirCorp()
             self.statusMudou.emit()
             self.paletaMudou.emit()
+            self.edicaoMudou.emit()
         self._processo(["status", "--json"], fim)
 
     def _lerFases(self):
@@ -709,7 +781,7 @@ class Painel(QObject):
                 return int(atual.get(chave, padrao))
             except (TypeError, ValueError):
                 return padrao
-        # "nenhuma" ao abrir: o efeito aceita (PEDIDO.md da Rachael), mas só é oferecido quando o CLI
+        # "nenhuma" ao abrir: o efeito aceita, mas só é oferecido quando o CLI
         # o anuncia em efeito --lista (opção "abrir", "valores"); sem CLI, a galeria de exemplo o mostra
         abrirNenhuma = not cli
         for e in self._fxListaCli or []:
@@ -721,7 +793,7 @@ class Painel(QObject):
             "suporte": bool(cli), "fonte": fonte, "variantes": variantes, "abrirNenhuma": abrirNenhuma,
             "abrir": str(atual.get("abrir") or ""), "fechar": str(atual.get("fechar") or ""),
             "duracaoAbrir": inteiro("duracaoAbrir", 0), "duracaoFechar": inteiro("duracaoFechar", 0),
-            "intensidade": inteiro("intensidade", 60),   # padrão do efeito (PEDIDO.md da Rachael)
+            "intensidade": inteiro("intensidade", 60),   # padrão do efeito
             "primeiraVez": str(atual.get("primeiraVez") or ""),
             "duracaoPrimeiraVez": inteiro("duracaoPrimeiraVez", 0),
             "primeiraVezDisponivel": atual.get("primeiraVezDisponivel") is True,
@@ -736,14 +808,18 @@ class Painel(QObject):
         pendentes = {op["alvo"] for op in self._fila} | ({self._atual["alvo"]} if self._atual else set())
         inicio = getattr(self, "_leituraInicio", 0)
         for eid in list(self._enviados):
-            fim = self._fimOpEfeito.get(eid)
-            if "fx:" + eid not in pendentes and fim is not None and inicio > fim:
+            base = eid.split("#")[0]            # "efeito#instância": a operação é a do efeito
+            fim = self._fimOpEfeito.get(base)
+            if "fx:" + base not in pendentes and fim is not None and inicio > fim:
                 del self._enviados[eid]
         lista = [self._normalizarEfeito(e) for e in self._fxListaCli or [] if isinstance(e, dict) and e.get("id")]
         self._fxGrupos = self._montarGrupos(lista)
         self._fxMovimento = next((e for e in lista if e["id"] == "movimento"), None)
         self._seguirMovimento()
         self._fxLista = lista
+        self._widgets = [self._sobreporWidget(e) for e in lista if e["widget"]]
+        self._widgetLayout = next((e for e in lista if e["id"] == "widget-layout"), None)
+        self._geoWidgets = self._lerGeometriaWidgets()
         self.efeitosMudou.emit()
 
     # Grupos da SYS.CONFIG, na ordem da tela. Os nomes vêm do CLI ("grupos" do efeito --lista); o grupo
@@ -758,7 +834,7 @@ class Painel(QObject):
         ids = list(self.ORDEM_GRUPOS) + [e["grupo"] for e in lista if e["grupo"] not in self.ORDEM_GRUPOS]
         grupos = []
         for gid in dict.fromkeys(ids):
-            membros = [e for e in lista if e["grupo"] == gid and e["id"] != "movimento"]
+            membros = [e for e in lista if e["grupo"] == gid and e["id"] != "movimento" and not e["widget"]]
             if not membros:
                 continue
             nome = nomes.get(gid) or (self._t(f"cfg.grupo.{gid}") if self._tem(f"cfg.grupo.{gid}") else gid.replace("-", " ").capitalize())
@@ -866,8 +942,16 @@ class Painel(QObject):
             oid = o["id"]
             tipo = o.get("tipo")
             vals = self._valoresOpcao(o)
+            if eid == "widget-cerca" and oid == "animacao":
+                # o gerador das opções dos widgets não leva "previa": vem pela convenção do catálogo
+                for v in vals:
+                    f = REPO / "assets/previas/cerca" / f"{v['id']}.webp"
+                    if not v["previa"] and f.exists():
+                        v["previa"] = url_local(str(f))
             if tipo == "inteiro":
                 forma = "inteiro"
+            elif tipo == "texto":
+                forma = "texto"       # campo livre (ex.: widget-clima --cidade)
             elif tipo == "liga" or (len(vals) == 2 and {v["id"] for v in vals} in ({"on", "off"}, {"true", "false"})):
                 forma = "liga"
             else:
@@ -891,7 +975,7 @@ class Painel(QObject):
             opcoes.append({"id": oid, "nome": self._texto(o, "nome") or oid, "forma": forma, "valores": vals,
                            "valor": "" if atual is None else str(atual), "padrao": "" if padrao is None else str(padrao),
                            "min": o.get("min", 0), "max": o.get("max", 100), "passo": o.get("passo", 1),
-                           "unidade": o.get("unidade") or ""})
+                           "unidade": o.get("unidade") or "", "dica": self._texto(o, "dica")})
         variantes = []
         for v in e.get("variantes") or []:
             if isinstance(v, dict) and v.get("id"):
@@ -910,7 +994,7 @@ class Painel(QObject):
         texto = (self._texto(e, "nome") + " " + self._texto(e, "descricao") + " " +
                  " ".join(o["nome"] + " " + " ".join(v["nome"] for v in o["valores"]) for o in opcoes) + " " +
                  " ".join(v["nome"] for v in variantes))
-        return {
+        r = {
             "id": eid, "grupo": e.get("grupo") or "sistema", "nome": self._texto(e, "nome") or eid,
             "descricao": self._texto(e, "descricao"), "tipo": tipo, "ligado": ligado is True,
             "previa": self._url(e.get("previa")), "opcoes": opcoes, "variantes": variantes,
@@ -920,12 +1004,204 @@ class Painel(QObject):
                 e.get("disponivel") if isinstance(e.get("disponivel"), bool) else None),
             "aviso": self._texto(e, "aviso"),
             "especial": eid if eid in ("janelas", "konsole-cascata") else "",
-            # sintaxe vinda do CLI (PEDIDOS-AO-CLI.md, 12): modelo de comando ou forma por opção
+            # sintaxe vinda do CLI: modelo de comando ou forma por opção
             "cliComando": e.get("comando") if isinstance(e.get("comando"), (str, list)) else "",
             "cliForma": e.get("forma") if isinstance(e.get("forma"), dict) else {},
             "retomar": e.get("retomar") or est.get("retomar") or "",
             "busca": self.normalizar(texto),
+            # widgets da área de trabalho (seção WIDGETS): nome do pacote, categoria e estado extra
+            # widget de verdade = tem plasmoide (o estado traz "instalado"/"naAreaDeTrabalho"); o
+            # widget-layout é um controle da seção, não um widget (W7)
+            "widget": eid.startswith("widget-") and ("instalado" in est or "naAreaDeTrabalho" in est),
+            "widgetNome": eid[7:] if eid.startswith("widget-") else "",
+            "nomeCurto": re.sub(r"^\s*widget\s*:\s*", "", self._texto(e, "nome") or eid, flags=re.I),
+            "categoria": (e.get("categoria") if isinstance(e.get("categoria"), str) and e.get("categoria")
+                          else self.CATEGORIA_WIDGET.get(eid[7:], "outros")) if eid.startswith("widget-") else "",
+            "naMesa": int(est.get("naAreaDeTrabalho") or 0) if isinstance(est.get("naAreaDeTrabalho"), (int, float)) else 0,
+            "dadosGuardados": est.get("dadosGuardados") is True,
+            "geometria": est.get("geometria") if isinstance(est.get("geometria"), (list, dict)) else None,
+            # várias instâncias (a cerca; modules/widgets/CONTRATO-CLI.md)
+            "multiInstancia": e.get("multiInstancia") is True,
+            "comandoNova": e.get("comandoNova") if isinstance(e.get("comandoNova"), str) else "",
+            "comandoRemover": e.get("comandoRemover") if isinstance(e.get("comandoRemover"), str) else "",
+            "instancias": self._instanciasDe(eid, est),
+            "cercasOcultas": est.get("cercasOcultas") is True,
+            "peek": est.get("peek") is True,
         }
+        if r["multiInstancia"] and r["instancias"]:
+            # o cartão fala por todas: ligado se alguma do tema está ligada
+            r["ligado"] = any(i.get("ligado") and not i.get("manual") for i in r["instancias"])
+        return r
+
+    def _instanciasDe(self, eid, est):
+        """estado.instancias, com o que já foi mandado e ainda não confirmado por leitura nova por cima."""
+        lista = []
+        for i in est.get("instancias") or []:
+            if isinstance(i, dict) and i.get("id") not in (None, ""):
+                d = dict(i, id=str(i["id"]), manual=i.get("manual") is True)
+                d.update(self._enviados.get(f"{eid}#{d['id']}", {}))
+                lista.append(d)
+        return lista
+
+    # categorias da seção WIDGETS (o CLI pode mandar "categoria"; sem ela, este mapa)
+    CATEGORIA_WIDGET = {"desempenho": "sistema", "discos": "sistema", "rede": "sistema", "docker": "sistema",
+                        "clima": "informacao", "cambio": "informacao", "rss": "informacao", "relogio": "informacao",
+                        "notas": "produtividade", "tarefas": "produtividade", "midia": "produtividade"}
+
+    @pyqtProperty("QVariantList", notify=efeitosMudou)
+    def widgets(self):
+        return getattr(self, "_widgets", [])
+
+    @pyqtProperty("QVariantMap", notify=efeitosMudou)
+    def geometriaWidgets(self):
+        """{"tela": [L, A], "itens": {nome: [x, y, l, a]}} da tela principal, para o mapa (só leitura)."""
+        return getattr(self, "_geoWidgets", {}) or {}
+
+    def _lerGeometriaWidgets(self):
+        """Onde estão os widgets do tema na tela principal. Vem do estado do CLI ("geometria") quando ele
+        manda; senão, da leitura (só leitura) do arquivo de área de trabalho do Plasma, onde o próprio
+        Plasma guarda a geometria dos applets (ItemGeometries-<L>x<A>)."""
+        itens, tela = {}, None
+        for e in getattr(self, "_widgets", []):
+            g = e.get("geometria")
+            # várias instâncias: uma por entrada ("cerca", "cerca@2"...; o mapa volta ao nome antes do @)
+            insts = [(f"{e['widgetNome']}@{i['id']}", i.get("geometria")) for i in e.get("instancias") or [] if i.get("ligado")]
+            for nome, q in insts or [(e["widgetNome"], g)]:
+                if isinstance(q, dict) and all(k in q for k in ("x", "y", "largura", "altura")):
+                    itens[nome] = [q["x"], q["y"], q["largura"], q["altura"]]
+                    if isinstance(q.get("tela"), list) and len(q["tela"]) == 2:
+                        tela = q["tela"]
+            if not insts and isinstance(g, list) and len(g) == 4:
+                itens[e["widgetNome"]] = g
+        if itens:
+            return {"tela": tela or [1920, 1080], "itens": itens}
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+        arq = base / "plasma-org.kde.plasma.desktop-appletsrc"
+        try:
+            st = arq.stat()
+            if getattr(self, "_geoCache", None) and self._geoCache[0] == st.st_mtime:
+                return self._geoCache[1]
+            texto = arq.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return {}
+        grupos, atual = {}, None
+        for linha in texto.splitlines():
+            if linha.startswith("["):
+                atual = tuple(re.findall(r"\[([^\]]*)\]", linha))
+                grupos.setdefault(atual, {})
+            elif atual is not None and "=" in linha:
+                k, v = linha.split("=", 1)
+                grupos[atual][k.strip()] = v
+        melhor = {}
+        for g, kv in grupos.items():
+            # contêiner da área de trabalho na tela 0 (o "principal" do CLI)
+            if len(g) != 2 or g[0] != "Containments" or kv.get("lastScreen", "") != "0" or kv.get("formfactor", "0") != "0":
+                continue
+            plugins = {a[3]: grupos[a].get("plugin", "") for a in grupos
+                       if len(a) == 4 and a[:3] == ("Containments", g[1], "Applets")}
+            geral = grupos.get(("Containments", g[1], "General"), {})
+            chaves = [k for k in geral if re.fullmatch(r"ItemGeometries-\d+x\d+", k)]
+            if not chaves:
+                continue
+            chave = max(chaves, key=lambda k: int(k.split("-")[1].split("x")[0]) * int(k.split("x")[1]))
+            res = [int(x) for x in chave.split("-")[1].split("x")]
+            achados = {}
+            for parte in geral[chave].split(";"):
+                m = re.fullmatch(r"Applet-(\d+):([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+),[-\d.]+", parte.strip())
+                if m and plugins.get(m.group(1), "").startswith("org.cyberkde."):
+                    achados[plugins[m.group(1)][len("org.cyberkde."):]] = [float(m.group(i)) for i in range(2, 6)]
+            if len(achados) > len(melhor.get("itens", {})):
+                melhor = {"tela": res, "itens": achados}
+        self._geoCache = (st.st_mtime, melhor)
+        return melhor
+
+    @pyqtSlot(bool)
+    def todosWidgets(self, ligar):
+        """Liga (ou desliga) todos os widgets (só os que têm plasmoide) que estão no estado contrário."""
+        for e in list(getattr(self, "_widgets", [])):
+            # o Cyber Fence tem seção própria, fora do "ligar todos"
+            if not e.get("multiInstancia") and bool(e.get("ligado")) != ligar and e.get("disponivel") is not False:
+                self._alternarWidget(e["id"], ligar)
+
+    # ---- liga/desliga de widget com atualização otimista (W6)
+    def _widgetEmVoo(self, eid):
+        alvo = "fx:" + eid
+        return any(op["alvo"] == alvo for op in self._fila) or (self._atual is not None and self._atual["alvo"] == alvo)
+
+    def _estadoWidget(self, eid, lido):
+        """O estado que vale agora: confirmado pela resposta (até uma leitura mais nova chegar) ou o lido."""
+        conf = self._wConfirmado.get(eid)
+        if conf is not None:
+            if getattr(self, "_leituraInicio", 0) > conf[1]:
+                del self._wConfirmado[eid]          # a leitura nova já começou depois da resposta: vale ela
+            else:
+                return conf[0]
+        return lido
+
+    def _sobreporWidget(self, e):
+        eid = e["id"]
+        lido = bool(e.get("ligado"))
+        base = self._estadoWidget(eid, lido)
+        pedido = self._wPedido.get(eid)
+        e = dict(e, ligadoLido=lido, ligado=pedido if pedido is not None else base,
+                 ocupado=pedido is not None or self._widgetEmVoo(eid) or eid in self._wConfirmado)
+        return e
+
+    def _alternarWidget(self, eid, ligar):
+        """Clique no interruptor: muda na hora (otimista) e fica OCUPADO até a resposta. Clique durante a
+        espera é a intenção final: no fim, se ela diferir do confirmado, vai UM comando a mais."""
+        self._wPedido[eid] = bool(ligar)
+        if not self._widgetEmVoo(eid):
+            self._enviarWidget(eid)
+        self._recomporWidgets()
+
+    def _enviarWidget(self, eid):
+        e = next((x for x in self._fxLista if x["id"] == eid), None)
+        if not e:
+            self._wPedido.pop(eid, None)
+            return
+        lido = next((bool(w.get("ligadoLido")) for w in getattr(self, "_widgets", []) if w["id"] == eid), bool(e.get("ligado")))
+        atual = self._estadoWidget(eid, lido)
+        quero = self._wPedido.get(eid)
+        if quero is None or quero == atual:
+            self._wPedido.pop(eid, None)
+            return
+
+        def depois(codigo, resultado):
+            if codigo in (0, 4) and isinstance(resultado.get("ligado"), bool):
+                self._wConfirmado[eid] = (resultado["ligado"], time.monotonic())
+            elif codigo not in (0, 4):
+                self._wPedido.pop(eid, None)        # falhou: vale o que o CLI tem
+                self._wConfirmado.pop(eid, None)
+            pedido = self._wPedido.get(eid)
+            conf = self._wConfirmado.get(eid)
+            if pedido is not None and conf is not None and pedido != conf[0]:
+                QTimer.singleShot(0, lambda: self._enviarWidget(eid))   # mudou de ideia no meio: só o último
+            else:
+                self._wPedido.pop(eid, None)
+            self._recomporWidgets()
+        self._enfileirar(("rot.cfg", {"nome": e["nome"], "resumo": self._t("comum.ligar") if quero else self._t("comum.desligar")}),
+                         ["efeito", eid, "on" if quero else "off"] + (["--instancia", "todas"] if e.get("multiInstancia") else []) + ["--json"],
+                         alvo="fx:" + eid, progresso=False, depois=depois)
+
+    def _recomporWidgets(self):
+        self._widgets = [self._sobreporWidget(e) for e in self._fxLista if e["widget"]]
+        self.efeitosMudou.emit()
+
+    # ---- layout dos widgets (widget-layout: FUI ou livre), um controle da seção WIDGETS
+    @pyqtProperty("QVariantMap", notify=efeitosMudou)
+    def widgetLayout(self):
+        e = getattr(self, "_widgetLayout", None)
+        if not e:
+            return {}
+        op = next((o for o in e["opcoes"] if o["id"] == "layout"), None)
+        return {"suporte": True, "layout": op["valor"] if op else "", "ocupado": self._widgetEmVoo("widget-layout"),
+                "valores": op["valores"] if op else []}
+
+    @pyqtSlot(str)
+    def escolherLayoutWidgets(self, layout):
+        if layout in ("fui", "livre"):
+            self.aplicarOpcoes("widget-layout", {"layout": layout})
 
     @pyqtProperty("QVariantList", notify=efeitosMudou)
     def fxGrupos(self):
@@ -947,14 +1223,245 @@ class Painel(QObject):
         m = self._fxMovimento
         return next((o["valor"] for o in m["opcoes"] if o["id"] == "nivel"), "") if m else ""
 
-    # Como cada efeito recebe as escolhas no CLI. Sem o campo "comando" do CLI (PEDIDOS-AO-CLI.md, 12),
+    # Como cada efeito recebe as escolhas no CLI. Sem o campo "comando" do CLI,
     # vale esta regra: liga → on|off; uma opção só → valor posicional; "icones" → grupo=valor;
     # "areas" → número posicional e o resto em --flag; estilo-* → --variante e --<opção>; demais → --flag.
     POSICIONAL_PRIMEIRA = ("areas",)
 
+    # ---- Ilha: quem grava ilha.json é o app dela (--definir); o painel só pede e mostra
+    ilhaMudou = pyqtSignal()
+
+    @pyqtProperty("QVariantMap", notify=ilhaMudou)
+    def ilhaDados(self):
+        return self._ilha
+
+    @pyqtProperty("QVariantMap", notify=efeitosMudou)
+    def efeitoIlha(self):
+        return next((x for x in self._fxLista if x["id"] == "ilha"), {})
+
+    def _ilhaGuardar(self, **campos):
+        self._ilha = dict(self._ilha, **campos)
+        self.ilhaMudou.emit()
+
+    def _ilhaRodar(self, args, fim):
+        p = QProcess(self)
+
+        def acabou(codigo, _estado):
+            saida = bytes(p.readAllStandardOutput()).decode("utf-8", "replace")
+            erro = bytes(p.readAllStandardError()).decode("utf-8", "replace").strip()
+            p.deleteLater()
+            fim(codigo, saida, erro)
+        p.finished.connect(acabou)
+        p.errorOccurred.connect(lambda _e: self._ilhaGuardar(erro=self._t("il.semApp")))
+        p.start("python3", [ILHA_APP] + args)
+
+    def _ilhaTemas(self):
+        temas = []
+        for f in sorted((APP_DIR / "ilha/qml/temas").glob("*/tema.json")):
+            if f.parent.name == "comum":    # peças compartilhadas pelos temas, não um tema
+                continue
+            try:
+                t = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            en = self._idioma == "en"
+            previa = f.parent / "previa.webp"
+            temas.append({"id": f.parent.name, "ordem": t.get("ordem", 50),
+                          "nome": t.get("nome_en" if en else "nome", f.parent.name),
+                          "descricao": t.get("descricao_en" if en else "descricao", ""),
+                          "previa": url_local(str(previa)) if previa.exists() else "",
+                          "movimentos": [{"id": m["id"], "nome": m.get("nome_en" if en else "nome", m["id"])}
+                                         for m in t.get("movimentos") or [] if isinstance(m, dict) and m.get("id")]})
+        return sorted(temas, key=lambda x: x["ordem"])
+
+    @pyqtSlot()
+    def ilhaLer(self):
+        self._ilhaGuardar(temas=self._ilhaTemas())
+
+        def esquema(codigo, saida, _erro):
+            if codigo == 0:
+                try:
+                    self._ilhaGuardar(esquema=json.loads(saida))
+                except ValueError:
+                    self._ilhaGuardar(erro=self._t("il.semApp"))
+
+        def estado(codigo, saida, _erro):
+            r = json_da_saida(saida) or {}
+            if codigo == 0:
+                self._ilhaGuardar(config=r.get("config") or {}, haloAtivo=r.get("halo") is True, telas=r.get("telas") or [], erro="")
+        self._ilhaRodar(["--esquema", "--json"], esquema)
+        self._ilhaRodar(["--estado", "--json"], estado)
+
+    @pyqtSlot(str, str)
+    def ilhaDefinir(self, chave, valor_json):
+        """Muda na hora na tela; se o app recusar, volta ao que está gravado e mostra o motivo."""
+        try:
+            self._ilhaGuardar(config=dict(self._ilha["config"], **{chave: json.loads(valor_json)}), erro="")
+        except ValueError:
+            return
+
+        def fim(codigo, _saida, erro):
+            if codigo != 0:
+                self._ilhaGuardar(erro=erro or self._t("il.semApp"))
+                self.ilhaLer()
+        self._ilhaRodar(["--definir", f"{chave}={valor_json}"], fim)
+
+    @pyqtSlot(str)
+    def ilhaDemonstrar(self, tipo):
+        p = QProcess(self)
+        p.finished.connect(lambda *_a: p.deleteLater())
+        p.start("qdbus6", ["org.cyberkde.Ilha", "/org/cyberkde/Ilha", "org.cyberkde.Ilha.Demonstrar", tipo])
+
+    # ---- Cyber Fence: regras, snapshots e backup ("cyberkde cerca ...", CONTRATO-CLI.md)
+    cercaMudou = pyqtSignal()
+
+    @pyqtProperty("QVariantMap", notify=cercaMudou)
+    def cercaDados(self):
+        return self._cerca
+
+    def _cercaGuardar(self, **campos):
+        self._cerca = dict(self._cerca, **campos)
+        self.cercaMudou.emit()
+
+    @pyqtSlot()
+    def cercaLer(self):
+        def ler(args, chave, campo):
+            def fim(codigo, saida, _erro):
+                r = json_da_saida(saida) or {}
+                if codigo == 0 and isinstance(r.get(chave), list):
+                    self._cercaGuardar(**{campo: r[chave]})
+            self._processo(args + ["--json"], fim)
+        ler(["cerca", "regras", "lista"], "regras", "regras")
+        ler(["cerca", "regras", "historico"], "lotes", "lotes")
+        ler(["cerca", "snapshot", "listar"], "snapshots", "snapshots")
+
+    def _cercaOp(self, resumo, args, depois=None):
+        def fim(codigo, resultado):
+            self._cercaGuardar(erro=(resultado.get("erro") or self._t("ce.falhou")) if codigo not in (0, 4) else "")
+            if depois and codigo in (0, 4):
+                depois(resultado)
+            self.cercaLer()
+        self._enfileirar(("rot.cfg", {"nome": "Cyber Fence", "resumo": resumo}), ["cerca"] + args + ["--json"],
+                         alvo="fx:widget-cerca", progresso=False, depois=fim)
+
+    @pyqtSlot(str, "QVariantMap")
+    def cercaSalvarRegra(self, rid, d):
+        args = ["regras", "editar", rid] if rid else ["regras", "adicionar"]
+        for k in ("nome", "extensoes", "contem", "destino", "conflito"):
+            if d.get(k) or rid:             # editar também limpa um campo; adicionar só leva o que tem
+                args += [f"--{k}", str(d.get(k, ""))]
+        if d.get("semEsperar"):
+            args.append("--sem-esperar")
+        self._cercaOp(self._t("ce.editarRegra" if rid else "ce.novaRegra"), args)
+
+    @pyqtSlot(str)
+    def cercaRemoverRegra(self, rid):
+        self._cercaOp(self._t("ce.removerRegra"), ["regras", "remover", rid])
+
+    @pyqtSlot(str, bool)
+    def cercaAtivar(self, rid, sim):
+        self._cercaOp(self._t("comum.ligado" if sim else "comum.desligado"), ["regras", "ativar" if sim else "desativar", rid])
+
+    @pyqtSlot(str, int)
+    def cercaMover(self, rid, delta):
+        """Sobe ou desce na ordem: renumera de 10 em 10 e grava só as que mudaram."""
+        lista = list(self._cerca["regras"])
+        i = next((n for n, r in enumerate(lista) if r["id"] == rid), -1)
+        j = i + delta
+        if i < 0 or not 0 <= j < len(lista):
+            return
+        lista[i], lista[j] = lista[j], lista[i]
+        for n, r in enumerate(lista):
+            if r.get("prioridade") != (n + 1) * 10:
+                self._cercaOp(self._t("ce.prioridade"), ["regras", "editar", r["id"], "--prioridade", str((n + 1) * 10)])
+
+    @pyqtSlot()
+    def cercaSimular(self):
+        self._cercaOp(self._t("ce.simular"), ["regras", "aplicar", "--simular"], lambda r: self._cercaGuardar(simulacao={
+            "origem": r.get("origem", ""), "movidos": r.get("movidos") or [], "pulados": r.get("pulados") or [], "semRegra": r.get("semRegra", 0)}))
+
+    @pyqtSlot()
+    def cercaAplicar(self):
+        self._cercaOp(self._t("ce.aplicar"), ["regras", "aplicar"], lambda r: self._cercaGuardar(simulacao=None))
+
+    @pyqtSlot(str)
+    def cercaDesfazer(self, lote):
+        self._cercaOp(self._t("ce.desfazer"), ["regras", "desfazer", lote])
+
+    @pyqtSlot(str, str)
+    def cercaSnapshot(self, acao, nome):
+        self._cercaOp(f"{acao}: {nome}", ["snapshot", acao, nome])
+
+    @pyqtSlot()
+    def cercaBackup(self):
+        self._cercaOp(self._t("ce.backupAgora"), ["backup"], lambda r: self._cercaGuardar(info=str(r.get("arquivo") or "")))
+
+    @pyqtSlot(str)
+    def cercaExportar(self, arquivo):
+        self._cercaOp(self._t("ce.exportar"), ["exportar", arquivo], lambda r: self._cercaGuardar(info=str(r.get("arquivo") or arquivo)))
+
+    @pyqtSlot(str, bool)
+    def cercaImportar(self, arquivo, aplicar):
+        self._cercaOp(self._t("ce.importar"), ["importar", arquivo] + (["--aplicar"] if aplicar else []), lambda r: self._cercaGuardar(
+            info=self._t("ce.importado", n=r.get("regras", 0), s=len(r.get("snapshots") or []))))
+
+    @pyqtSlot()
+    def cercaOcultar(self):
+        self._cercaOp(self._t("ce.ocultarTodas"), ["alternar"])
+
+    @pyqtSlot()
+    def cercaPeek(self):
+        self._cercaOp(self._t("ce.peekLigar"), ["peek", "alternar"])
+
+    @pyqtSlot()
+    def testarOcultarCercas(self):
+        """Oculta e, com a animação vista, exibe de novo (alternar duas vezes deixa como estava)."""
+        rotulo = ("rot.cfg", {"nome": "Cyber Fence", "resumo": self._t("wg.testarOcultar")})
+        self._enfileirar(rotulo, ["cerca", "alternar", "--json"], alvo="fx:widget-cerca", progresso=False)
+        QTimer.singleShot(2200, lambda: self._enfileirar(rotulo, ["cerca", "alternar", "--json"], alvo="fx:widget-cerca", progresso=False))
+
+    # ---- várias instâncias: todo comando leva --instancia <id>; a resposta pode trazer outro id (adoção)
+    instanciaMudou = pyqtSignal(str, str, str, arguments=["efeito", "antiga", "nova"])  # nova "" = removida
+
+    @pyqtSlot(str, str, "QVariantMap", "QVariantMap")
+    def aplicarOpcoesInstancia(self, eid, instancia, mudancas, atuais):
+        self.aplicarOpcoes(eid, mudancas, atuais, instancia)
+
+    def _comandoCli(self, modelo, reserva):
+        args = shlex.split(modelo) if modelo else list(reserva)
+        return (args[1:] if args[:1] == ["cyberkde"] else args) + ["--json"]
+
+    @pyqtSlot(str)
+    def novaInstancia(self, eid):
+        e = next((x for x in self._fxLista if x["id"] == eid), None)
+        if not e:
+            return
+
+        def depois(codigo, resultado):
+            if codigo in (0, 4) and resultado.get("instancia"):
+                self.instanciaMudou.emit(eid, "", str(resultado["instancia"]))
+        self._enfileirar(("rot.cfg", {"nome": e["nome"], "resumo": self._t("wg.novaCerca")}),
+                         self._comandoCli(e.get("comandoNova"), ["efeito", eid, "nova"]),
+                         alvo="fx:" + eid, progresso=False, depois=depois)
+
+    @pyqtSlot(str, str)
+    def removerInstancia(self, eid, instancia):
+        e = next((x for x in self._fxLista if x["id"] == eid), None)
+        if not e:
+            return
+
+        def depois(codigo, resultado):
+            if codigo in (0, 4):
+                self._enviados.pop(f"{eid}#{instancia}", None)
+                self.instanciaMudou.emit(eid, instancia, "")
+        modelo = (e.get("comandoRemover") or "").replace("{instancia}", shlex.quote(instancia))
+        self._enfileirar(("rot.cfg", {"nome": e["nome"], "resumo": self._t("wg.removerCerca")}),
+                         self._comandoCli(modelo, ["efeito", eid, "remover", instancia]),
+                         alvo="fx:" + eid, progresso=False, depois=depois)
+
     @pyqtSlot(str, "QVariantMap")
     @pyqtSlot(str, "QVariantMap", "QVariantMap")
-    def aplicarOpcoes(self, eid, mudancas, atuais=None):
+    def aplicarOpcoes(self, eid, mudancas, atuais=None, instancia=""):
         """mudancas: {"ligado": bool} | {"variante": id} | {"<opção>": valor} (só o que mudou).
         atuais: os valores que a interface mostra agora (o cartão manda), para as opções que vão no
         comando sem ter mudado (posicional obrigatório). Sem eles, valem os já enviados ao CLI e ainda
@@ -962,7 +1469,11 @@ class Painel(QObject):
         e = next((x for x in self._fxLista if x["id"] == eid), None)
         if not e or not mudancas:
             return
-        enviados = self._enviados.setdefault(eid, {})
+        if e.get("widget") and set(mudancas) == {"ligado"} and not instancia:
+            self._alternarWidget(eid, bool(mudancas["ligado"]))
+            return
+        chave = f"{eid}#{instancia}" if instancia else eid
+        enviados = self._enviados.setdefault(chave, {})
 
         def valor_atual(o):
             if atuais and atuais.get(o["id"]) not in (None, ""):
@@ -974,6 +1485,8 @@ class Painel(QObject):
         m = dict(mudancas)
         resumo = []
         if "ligado" in m:
+            if instancia:
+                enviados["ligado"] = bool(m["ligado"])
             args.append("on" if m.pop("ligado") else "off")
             resumo.append(self._t("comum.ligar") if args[-1] == "on" else self._t("comum.desligar"))
         if "variante" in m and e["variantes"]:      # variante do efeito (estilo-*), não uma opção "variante"
@@ -1021,14 +1534,29 @@ class Painel(QObject):
             v = str(m[o["id"]])
             nome_v = next((x["nome"] for x in o["valores"] if x["id"] == v), None)
             if nome_v is None:
-                nome_v = self._t("comum.ligado") if v in ("on", "true") else self._t("comum.desligado") if v in ("off", "false") else v
+                nome_v = self._t("comum.ligado") if v in ("on", "true") else self._t("comum.desligado") if v in ("off", "false") \
+                    else self._t("cfg.padrao") if v == "" else v
             resumo.append(f"{o['nome']}: {nome_v}")
         for o in e["opcoes"]:
             if o["id"] in m:
                 enviados[o["id"]] = str(m[o["id"]])
         sudo = (e.get("retomar") or self._cmdTerminal("on", "login")) if e["sudo"] else None
+        if instancia:
+            args += ["--instancia", instancia]
+
+        def depois(codigo, resultado):
+            if not instancia:
+                return
+            if codigo not in (0, 4):
+                self._enviados.pop(chave, None)
+                return
+            nova = str(resultado.get("instancia") or instancia)
+            if nova != instancia:           # adotada: o id mudou
+                if chave in self._enviados:
+                    self._enviados[f"{eid}#{nova}"] = self._enviados.pop(chave)
+                self.instanciaMudou.emit(eid, instancia, nova)
         self._enfileirar(("rot.cfg", {"nome": e["nome"], "resumo": ", ".join(resumo)}), args + ["--json"],
-                         alvo="fx:" + eid, progresso=False, sudo=sudo)
+                         alvo="fx:" + eid, progresso=False, sudo=sudo, depois=depois)
         self._recomporEfeitos()     # a lista já mostra o valor enviado (até a leitura nova confirmar)
         if eid == "movimento" and "nivel" in mudancas:
             # o movimento do tema também comanda o "reduzir animações" do painel
@@ -1297,6 +1825,85 @@ class Painel(QObject):
     def status(self):
         return self._status
 
+    # ---- modo de edição do Plasma ("cyberkde edicao"; estado em status.edicao)
+    edicaoMudou = pyqtSignal()
+
+    @pyqtProperty(bool, notify=edicaoMudou)
+    def edicao(self):
+        if getattr(self, "_edicaoLocal", None) is not None:
+            return self._edicaoLocal
+        return self._status.get("edicao") is True
+
+    @pyqtProperty(bool, notify=edicaoMudou)
+    def edicaoOcupada(self):
+        return getattr(self, "_edicaoOcupada", False)
+
+    @pyqtSlot()
+    def alternarEdicao(self):
+        if getattr(self, "_edicaoOcupada", False):
+            return
+        self._edicaoOcupada = True
+        self.edicaoMudou.emit()
+
+        def fim(codigo, saida, erro):
+            self._edicaoOcupada = False
+            dados = json_da_saida(saida)
+            if codigo == 0 and isinstance(dados, dict) and isinstance(dados.get("edicao"), bool):
+                self._edicaoLocal = dados["edicao"]
+                self._status["edicao"] = dados["edicao"]
+                self._log("ok", "log.edicao", estado=self._t("comum.ligado") if dados["edicao"] else self._t("comum.desligado"))
+            else:
+                motivo = (erro or saida or "").strip().splitlines()[-1:] or [str(codigo)]
+                self.notificar.emit("erro", self._t("notif.falhou", nome=self._t("cfg.edicao"), motivo=motivo[0]).strip())
+            self.edicaoMudou.emit()
+        self._processo(["edicao", "alternar", "--json"], fim)
+
+    # ---- ocultar e exibir os widgets ("cyberkde widgets", modules/widgets/CONTRATO-CLI.md)
+    widgetsOcultarMudou = pyqtSignal()
+
+    @pyqtProperty("QVariantMap", notify=widgetsOcultarMudou)
+    def widgetsOcultar(self):
+        return getattr(self, "_wOcultar", {"suporte": False})
+
+    def _wOcultarLer(self, codigo, saida):
+        dados = json_da_saida(saida)
+        ok = codigo == 0 and isinstance(dados, dict) and "gesto" in dados
+        self._wOcultar = dict(dados, suporte=True, ocupado=False) if ok else {"suporte": False}
+        self.widgetsOcultarMudou.emit()
+        return ok
+
+    def _lerWidgetsOcultar(self):
+        self._processo(["widgets", "estado", "--json"], lambda c, s, e: self._wOcultarLer(c, s))
+
+    def _wOcultarPedir(self, args, depois=None):
+        self._wOcultar = dict(self.widgetsOcultar, ocupado=True)
+        self.widgetsOcultarMudou.emit()
+
+        def fim(codigo, saida, erro):
+            if not self._wOcultarLer(codigo, saida):
+                motivo = (erro or saida or "").strip().splitlines()[-1:] or [str(codigo)]
+                self.notificar.emit("erro", self._t("notif.falhou", nome=self._t("wg.ocTitulo"), motivo=motivo[0]).strip())
+            elif depois:
+                depois()
+        self._processo(["widgets"] + args + ["--json"], fim)
+
+    @pyqtSlot(bool)
+    def widgetsGesto(self, ligar):
+        self._wOcultarPedir(["gesto", "on" if ligar else "off"])
+
+    @pyqtSlot(bool)
+    def widgetsJunto(self, ligar):
+        self._wOcultarPedir(["junto", "on" if ligar else "off"])
+
+    @pyqtSlot(str)
+    def widgetsAnimacao(self, vid):
+        self._wOcultarPedir(["animacao", vid])
+
+    @pyqtSlot()
+    def widgetsTestar(self):
+        """Oculta e, depois da animação, mostra de novo."""
+        self._wOcultarPedir(["alternar"], lambda: QTimer.singleShot(2200, lambda: self._wOcultarPedir(["alternar"])))
+
     @pyqtProperty(bool, notify=statusMudou)
     def statusOk(self):
         return self._statusOk
@@ -1419,6 +2026,80 @@ class Painel(QObject):
     @pyqtProperty(str, notify=papelMudou)
     def papelCaminho(self):
         return self._papel
+
+    # ---- papel: ANIMADO (FUI) × ESTÁTICOS (A–D, corp, imagem própria). Opções e prévias do "efeito papel";
+    # o modo (fixo | corp) do status; os controles do FUI só se o CLI os expuser (estado.fui).
+    @pyqtProperty("QVariantMap", notify=efeitosMudou)
+    def papelInfo(self):
+        efs = self._fxListaCli or []
+        e = next((x for x in efs if isinstance(x, dict) and x.get("id") == "papel"), None) or {}
+        valores = []
+        for o in (e.get("opcoes") or [{}])[0].get("valores", []) if e.get("opcoes") else []:
+            valores.append({"id": o.get("id", ""), "nome": self._texto(o, "nome"),
+                            "previa": url_local(o["previa"]) if o.get("previa") else ""})
+        est = e.get("estado") or {}
+        st = (self._status or {}).get("papel") or {}
+        fui = est.get("fui") if isinstance(est.get("fui"), dict) else None
+        return {"suporte": bool(e), "valores": valores, "opcao": est.get("opcao") or st.get("opcao") or "",
+                "modo": st.get("modo", ""), "ligado": bool(est.get("ligado")), "imagemPropria": bool(est.get("imagemPropria") or st.get("imagemPropria")),
+                "corp": est.get("corp") or "", "fui": fui or {}, "fuiControles": fui is not None}
+
+    @pyqtSlot(str)
+    def escolherPapelOpcao(self, opcao):
+        """cyberkde efeito papel a|b|c|d|corp|fui (o modo segue: corp = acompanha a corporação; o resto = fixo)."""
+        if opcao in ("a", "b", "c", "d", "corp", "fui"):
+            self._enfileirar(("rot.papelOpcao", {"opcao": opcao.upper()}), ["efeito", "papel", opcao, "--json"],
+                             alvo="papel", progresso=False)
+
+    @pyqtSlot(str, "QVariant")
+    def ajustarFui(self, chave, valor):
+        """Controles do papel animado (só quando o CLI expõe estado.fui): cyberkde efeito papel fui --<chave> <valor>."""
+        if not self.papelInfo.get("fuiControles"):
+            return
+        v = ("on" if valor else "off") if isinstance(valor, bool) else str(int(valor))
+        self._enfileirar(("rot.papelFui", {"chave": chave, "valor": v}), ["efeito", "papel", "fui", "--" + chave, v, "--json"],
+                         alvo="papel", progresso=False)
+
+    # ---- GPU: dica "estático" para máquinas sem placa dedicada ou com renderização por software.
+    # /sys/class/drm (fabricante de cada placa) e, se houver, "glxinfo -B" (renderizador). Só leitura.
+    # (testes: CYBERKDE_PAINEL_GPU=dedicada|integrada|software força o resultado)
+    @pyqtProperty("QVariantMap", notify=gpuMudou)
+    def gpu(self):
+        if not hasattr(self, "_gpu"):
+            self._gpu = {"lido": False, "dedicada": False, "software": False, "nome": ""}
+            QTimer.singleShot(0, self._lerGpu)
+        return self._gpu
+
+    def _lerGpu(self):
+        forcado = os.environ.get("CYBERKDE_PAINEL_GPU", "")
+        if forcado in ("dedicada", "integrada", "software"):
+            self._gpu = {"lido": True, "dedicada": forcado == "dedicada", "software": forcado == "software",
+                         "nome": {"dedicada": "GPU dedicada (teste)", "integrada": "GPU integrada (teste)", "software": "llvmpipe (teste)"}[forcado]}
+            self.gpuMudou.emit()
+            return
+        fabricantes = set()
+        for v in Path("/sys/class/drm").glob("card*/device/vendor"):
+            try:
+                fabricantes.add(v.read_text().strip().lower())
+            except OSError:
+                pass
+        # NVIDIA e AMD contam como dedicadas (uma APU AMD também passa: é só uma dica)
+        dedicada = bool(fabricantes & {"0x10de", "0x1002"})
+        self._gpu = {"lido": True, "dedicada": dedicada, "software": not fabricantes, "nome": ""}
+        if shutil.which("glxinfo"):
+            p = QProcess(self)
+
+            def fim(codigo, _estado):
+                saida = bytes(p.readAllStandardOutput()).decode("utf-8", "replace")
+                ren = next((l.split(":", 1)[1].strip() for l in saida.splitlines() if "OpenGL renderer string" in l), "")
+                soft = bool(re.search(r"llvmpipe|softpipe|software", ren, re.I))
+                self._gpu = dict(self._gpu, nome=ren, software=soft or self._gpu["software"],
+                                 dedicada=self._gpu["dedicada"] and not soft)
+                self.gpuMudou.emit()
+                p.deleteLater()
+            p.finished.connect(fim)
+            p.start("glxinfo", ["-B"])
+        self.gpuMudou.emit()
 
     @pyqtProperty("QVariantList", notify=idiomaMudou)
     def papeisDoTema(self):
@@ -1704,7 +2385,7 @@ def montar(argv=None):
     """Cria app, backend e janela (separado do main para roteiros de teste)."""
     ap = argparse.ArgumentParser(description="Painel do CyberKDE")
     ap.add_argument("--sem-boot", action="store_true", help="pula a abertura")
-    ap.add_argument("--secao", type=int, default=0, help="seção inicial (0 a 5: status, corporação, config, papel, diagnóstico, registro)")
+    ap.add_argument("--secao", type=int, default=0, help="seção inicial (0 a 9: status, corporação, config, widgets, arquivos, cyber fence, ilha, papel, diagnóstico, registro)")
     ap.add_argument("--captura", help="salva a janela neste PNG e sai (para testes)")
     ap.add_argument("--espera", type=int, default=2500, help="ms antes da captura")
     ap.add_argument("--largura", type=int, default=0)
@@ -1712,6 +2393,8 @@ def montar(argv=None):
     ap.add_argument("--previa", default="", help="(testes) corporação em prévia, como se o mouse estivesse no cartão")
     args = ap.parse_args(argv)
 
+    from gpu_leve import preparar
+    preparar()
     QGuiApplication.setApplicationName("cyberkde-painel")
     QGuiApplication.setApplicationDisplayName("Painel do CyberKDE")
     QGuiApplication.setDesktopFileName("cyberkde-painel")

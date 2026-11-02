@@ -1,0 +1,568 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.cerca",
+        "Name": "Cyber Fence",
+        "Name[pt_BR]": "Cyber Fence",
+        "Name[en]": "Cyber Fence",
+        "Description": "Uma pasta na área de trabalho, numa moldura com título, que recolhe até só o título",
+        "Description[pt_BR]": "Uma pasta na área de trabalho, numa moldura com título, que recolhe até só o título",
+        "Description[en]": "A folder on the desktop, in a titled frame that rolls up to just the title",
+        "Icon": "folder",
+        "Category": "File System",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-2.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Cyber Fence",
+        "nome_en": "Cyber Fence",
+        "descricao": "Uma pasta na área de trabalho, numa moldura com título: mostra os arquivos e recolhe até só o título.",
+        "descricao_en": "A folder on the desktop in a titled frame: shows its files and rolls up to just the title.",
+        "categoria": "produtividade",
+        "tamanho": [
+            352,
+            256
+        ],
+        "ordem": 110,
+        "opcoes": [
+            {
+                "id": "pasta",
+                "chave": "url",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Pasta",
+                "nome_en": "Folder",
+                "dica": "Caminho da pasta (~/Documentos); vazio: Downloads",
+                "dica_en": "Folder path (~/Documents); empty: Downloads"
+            },
+            {
+                "id": "titulo",
+                "chave": "titulo",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Título",
+                "nome_en": "Title",
+                "dica": "Vazio: o nome da pasta",
+                "dica_en": "Empty: the folder name"
+            },
+            {
+                "id": "gatilho",
+                "chave": "gatilho",
+                "tipo": "escolha",
+                "padrao": "ctrl",
+                "valores": [
+                    {
+                        "id": "ctrl",
+                        "nome": "Ctrl+clique no título",
+                        "nome_en": "Ctrl+click on the title"
+                    },
+                    {
+                        "id": "clique",
+                        "nome": "Clique no título",
+                        "nome_en": "Click on the title"
+                    },
+                    {
+                        "id": "sair",
+                        "nome": "Ao sair o mouse",
+                        "nome_en": "When the mouse leaves"
+                    }
+                ],
+                "nome": "Recolher com",
+                "nome_en": "Roll up with",
+                "dica": "Ao sair o mouse: recolhe sozinho e abre ao passar pelo título (Ctrl+clique continua valendo)",
+                "dica_en": "When the mouse leaves: rolls up by itself and opens over the title (Ctrl+click still works)"
+            },
+            {
+                "id": "recolher",
+                "chave": "IsRolled",
+                "tipo": "escolha",
+                "padrao": "false",
+                "valores": [
+                    {
+                        "id": "false",
+                        "nome": "Não",
+                        "nome_en": "No"
+                    },
+                    {
+                        "id": "true",
+                        "nome": "Sim",
+                        "nome_en": "Yes"
+                    }
+                ],
+                "nome": "Recolhido",
+                "nome_en": "Rolled up",
+                "dica": "Recolhe ou abre agora, até só o título",
+                "dica_en": "Rolls up or opens now, down to just the title"
+            },
+            {
+                "id": "tipo",
+                "chave": "tipoCerca",
+                "tipo": "escolha",
+                "padrao": "pasta",
+                "valores": [
+                    {
+                        "id": "pasta",
+                        "nome": "Pasta",
+                        "nome_en": "Folder"
+                    },
+                    {
+                        "id": "lista",
+                        "nome": "Lista de atalhos e arquivos",
+                        "nome_en": "List of shortcuts and files"
+                    }
+                ],
+                "nome": "Tipo",
+                "nome_en": "Type",
+                "dica": "Lista: o que você solta vira atalho e nada sai do lugar",
+                "dica_en": "List: whatever you drop becomes a shortcut and nothing moves"
+            },
+            {
+                "id": "abas",
+                "chave": "abas",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Mais abas",
+                "nome_en": "More tabs",
+                "dica": "Outras pastas, separadas por ;",
+                "dica_en": "Other folders, separated by ;"
+            },
+            {
+                "id": "soltar",
+                "chave": "soltar",
+                "tipo": "escolha",
+                "padrao": "mover",
+                "valores": [
+                    {
+                        "id": "mover",
+                        "nome": "Mover direto",
+                        "nome_en": "Move right away"
+                    },
+                    {
+                        "id": "perguntar",
+                        "nome": "Perguntar",
+                        "nome_en": "Ask"
+                    }
+                ],
+                "nome": "Ao soltar arquivos",
+                "nome_en": "When dropping files",
+                "dica": "Mover direto: Ctrl copia, e dá para desfazer",
+                "dica_en": "Move right away: Ctrl copies, and it can be undone"
+            },
+            {
+                "id": "filtro",
+                "chave": "filtroTipo",
+                "tipo": "escolha",
+                "padrao": "todos",
+                "valores": [
+                    {
+                        "id": "todos",
+                        "nome": "Tudo",
+                        "nome_en": "Everything"
+                    },
+                    {
+                        "id": "imagens",
+                        "nome": "Imagens",
+                        "nome_en": "Images"
+                    },
+                    {
+                        "id": "documentos",
+                        "nome": "Documentos",
+                        "nome_en": "Documents"
+                    },
+                    {
+                        "id": "audio",
+                        "nome": "Áudio",
+                        "nome_en": "Audio"
+                    },
+                    {
+                        "id": "video",
+                        "nome": "Vídeo",
+                        "nome_en": "Video"
+                    },
+                    {
+                        "id": "pastas",
+                        "nome": "Pastas",
+                        "nome_en": "Folders"
+                    }
+                ],
+                "nome": "Mostrar só",
+                "nome_en": "Show only"
+            },
+            {
+                "id": "cor",
+                "chave": "cor",
+                "tipo": "escolha",
+                "padrao": "destaque",
+                "valores": [
+                    {
+                        "id": "destaque",
+                        "nome": "Destaque",
+                        "nome_en": "Accent"
+                    },
+                    {
+                        "id": "secundaria",
+                        "nome": "Secundária",
+                        "nome_en": "Secondary"
+                    },
+                    {
+                        "id": "alerta",
+                        "nome": "Alerta",
+                        "nome_en": "Alert"
+                    }
+                ],
+                "nome": "Cor",
+                "nome_en": "Color",
+                "dica": "Sempre da paleta da corporação",
+                "dica_en": "Always from the corporation palette"
+            },
+            {
+                "id": "animacaoIcones",
+                "chave": "animacaoIcones",
+                "tipo": "escolha",
+                "padrao": "explosao",
+                "global": true,
+                "valores": [
+                    {
+                        "id": "explosao",
+                        "nome": "Explosão de dados",
+                        "nome_en": "Data burst",
+                        "previa": "assets/previas/cerca/icones-explosao.webp"
+                    },
+                    {
+                        "id": "cascata",
+                        "nome": "Cascata",
+                        "nome_en": "Cascade",
+                        "previa": "assets/previas/cerca/icones-cascata.webp"
+                    },
+                    {
+                        "id": "decodificar",
+                        "nome": "Decodificação",
+                        "nome_en": "Decode",
+                        "previa": "assets/previas/cerca/icones-decodificar.webp"
+                    },
+                    {
+                        "id": "varredura",
+                        "nome": "Varredura",
+                        "nome_en": "Scan",
+                        "previa": "assets/previas/cerca/icones-varredura.webp"
+                    },
+                    {
+                        "id": "montagem",
+                        "nome": "Montagem",
+                        "nome_en": "Assembly",
+                        "previa": "assets/previas/cerca/icones-montagem.webp"
+                    },
+                    {
+                        "id": "glitch",
+                        "nome": "Glitch cromático",
+                        "nome_en": "Chromatic glitch",
+                        "previa": "assets/previas/cerca/icones-glitch.webp"
+                    },
+                    {
+                        "id": "pixel",
+                        "nome": "Mosaico",
+                        "nome_en": "Mosaic",
+                        "previa": "assets/previas/cerca/icones-pixel.webp"
+                    },
+                    {
+                        "id": "quickhack",
+                        "nome": "Quickhack",
+                        "nome_en": "Quickhack",
+                        "previa": "assets/previas/cerca/icones-quickhack.webp"
+                    },
+                    {
+                        "id": "braindance",
+                        "nome": "Braindance",
+                        "nome_en": "Braindance",
+                        "previa": "assets/previas/cerca/icones-braindance.webp"
+                    },
+                    {
+                        "id": "sandevistan",
+                        "nome": "Sandevistan",
+                        "nome_en": "Sandevistan",
+                        "previa": "assets/previas/cerca/icones-sandevistan.webp"
+                    },
+                    {
+                        "id": "nenhuma",
+                        "nome": "Nenhuma",
+                        "nome_en": "None",
+                        "previa": "assets/previas/cerca/icones-nenhuma.webp"
+                    }
+                ],
+                "nome": "Animação dos ícones",
+                "nome_en": "Icon animation",
+                "dica": "Ao exibir a cerca, abrir de recolhida e entrar numa pasta ou aba. Vale para todas",
+                "dica_en": "When showing a fence, opening it and entering a folder or tab. Applies to all"
+            },
+            {
+                "id": "animacao",
+                "chave": "animacao",
+                "tipo": "escolha",
+                "padrao": "tracado",
+                "global": true,
+                "valores": [
+                    {
+                        "id": "tracado",
+                        "nome": "Traçado em linhas",
+                        "nome_en": "Line draw",
+                        "previa": "assets/previas/cerca/tracado.webp"
+                    },
+                    {
+                        "id": "moldura",
+                        "nome": "Moldura traçada",
+                        "nome_en": "Traced frame",
+                        "previa": "assets/previas/cerca/moldura.webp"
+                    },
+                    {
+                        "id": "varredura",
+                        "nome": "Varredura",
+                        "nome_en": "Scan",
+                        "previa": "assets/previas/cerca/varredura.webp"
+                    },
+                    {
+                        "id": "glitch",
+                        "nome": "Glitch RGB",
+                        "nome_en": "RGB glitch",
+                        "previa": "assets/previas/cerca/glitch.webp"
+                    },
+                    {
+                        "id": "crt",
+                        "nome": "Boot de CRT",
+                        "nome_en": "CRT boot",
+                        "previa": "assets/previas/cerca/crt.webp"
+                    },
+                    {
+                        "id": "decodificar",
+                        "nome": "Decodificação",
+                        "nome_en": "Decode",
+                        "previa": "assets/previas/cerca/decodificar.webp"
+                    },
+                    {
+                        "id": "holograma",
+                        "nome": "Holograma",
+                        "nome_en": "Hologram",
+                        "previa": "assets/previas/cerca/holograma.webp"
+                    },
+                    {
+                        "id": "cacos",
+                        "nome": "Cacos",
+                        "nome_en": "Shards",
+                        "previa": "assets/previas/cerca/cacos.webp"
+                    },
+                    {
+                        "id": "desintegrar",
+                        "nome": "Desintegração",
+                        "nome_en": "Disintegrate",
+                        "previa": "assets/previas/cerca/desintegrar.webp"
+                    },
+                    {
+                        "id": "persiana",
+                        "nome": "Persiana",
+                        "nome_en": "Blinds",
+                        "previa": "assets/previas/cerca/persiana.webp"
+                    },
+                    {
+                        "id": "pixel",
+                        "nome": "Mosaico",
+                        "nome_en": "Mosaic",
+                        "previa": "assets/previas/cerca/pixel.webp"
+                    },
+                    {
+                        "id": "neon",
+                        "nome": "Neon",
+                        "nome_en": "Neon",
+                        "previa": "assets/previas/cerca/neon.webp"
+                    },
+                    {
+                        "id": "cascata",
+                        "nome": "Cascata",
+                        "nome_en": "Cascade",
+                        "previa": "assets/previas/cerca/cascata.webp"
+                    },
+                    {
+                        "id": "chanfro",
+                        "nome": "Cortina de chanfro",
+                        "nome_en": "Chamfer curtain",
+                        "previa": "assets/previas/cerca/chanfro.webp"
+                    },
+                    {
+                        "id": "empilhar",
+                        "nome": "Cascata em pilha",
+                        "nome_en": "Stacked cascade",
+                        "previa": "assets/previas/cerca/empilhar.webp"
+                    },
+                    {
+                        "id": "dissolucao",
+                        "nome": "Dissolução curta",
+                        "nome_en": "Short fade",
+                        "previa": "assets/previas/cerca/dissolucao.webp"
+                    }
+                ],
+                "nome": "Animação",
+                "nome_en": "Animation",
+                "dica": "Ao ocultar e exibir; vale para todas as cercas",
+                "dica_en": "When hiding and showing; applies to all fences"
+            },
+            {
+                "id": "blur",
+                "chave": "blur",
+                "tipo": "escolha",
+                "padrao": "false",
+                "valores": [
+                    {
+                        "id": "false",
+                        "nome": "Não",
+                        "nome_en": "No"
+                    },
+                    {
+                        "id": "true",
+                        "nome": "Sim",
+                        "nome_en": "Yes"
+                    }
+                ],
+                "nome": "Desfocar o fundo",
+                "nome_en": "Blur the background"
+            },
+            {
+                "id": "nao-ocultar",
+                "chave": "quickhideExcluir",
+                "tipo": "escolha",
+                "padrao": "false",
+                "valores": [
+                    {
+                        "id": "false",
+                        "nome": "Não",
+                        "nome_en": "No"
+                    },
+                    {
+                        "id": "true",
+                        "nome": "Sim",
+                        "nome_en": "Yes"
+                    }
+                ],
+                "nome": "Não ocultar",
+                "nome_en": "Do not hide",
+                "dica": "Esta cerca fica à vista quando as outras somem",
+                "dica_en": "This fence stays when the others hide"
+            },
+            {
+                "id": "popup",
+                "chave": "popups",
+                "tipo": "escolha",
+                "padrao": "false",
+                "valores": [
+                    {
+                        "id": "false",
+                        "nome": "Não",
+                        "nome_en": "No"
+                    },
+                    {
+                        "id": "true",
+                        "nome": "Sim",
+                        "nome_en": "Yes"
+                    }
+                ],
+                "nome": "Subpasta em popup",
+                "nome_en": "Subfolder in popup",
+                "dica": "A seta da subpasta abre o conteúdo sem sair da cerca",
+                "dica_en": "The subfolder arrow opens its contents without leaving the fence"
+            },
+            {
+                "id": "layout",
+                "chave": "layout",
+                "tipo": "escolha",
+                "padrao": "grade",
+                "valores": [
+                    { "id": "grade", "nome": "Grade", "nome_en": "Grid" },
+                    { "id": "dados", "nome": "Dados (lista)", "nome_en": "Data (list)" },
+                    { "id": "inventario", "nome": "Inventário", "nome_en": "Inventory" }
+                ],
+                "nome": "Layout",
+                "nome_en": "Layout",
+                "dica": "Dados: uma linha por item, com tipo e tamanho. Inventário: células, com o item no rodapé",
+                "dica_en": "Data: one row per item, with type and size. Inventory: cells, with the item in the footer"
+            },
+            {
+                "id": "densidade",
+                "chave": "densidade",
+                "tipo": "escolha",
+                "padrao": "grade",
+                "valores": [
+                    {
+                        "id": "grade",
+                        "nome": "Grade",
+                        "nome_en": "Grid"
+                    },
+                    {
+                        "id": "compacta",
+                        "nome": "Compacta",
+                        "nome_en": "Compact"
+                    }
+                ],
+                "nome": "Densidade",
+                "nome_en": "Density",
+                "dica": "Compacta: uma linha por item (o mesmo que o layout Dados), mais itens por cerca",
+                "dica_en": "Compact: one row per item (same as the Data layout), more items per fence"
+            },
+            {
+                "id": "cliques",
+                "chave": "cliques",
+                "tipo": "escolha",
+                "padrao": "sistema",
+                "valores": [
+                    {
+                        "id": "sistema",
+                        "nome": "Padrão do KDE",
+                        "nome_en": "KDE default"
+                    },
+                    {
+                        "id": "um",
+                        "nome": "1 clique",
+                        "nome_en": "1 click"
+                    },
+                    {
+                        "id": "dois",
+                        "nome": "2 cliques",
+                        "nome_en": "2 clicks"
+                    }
+                ],
+                "nome": "Abrir com",
+                "nome_en": "Open with",
+                "dica": "Com 2 cliques, um clique seleciona e Enter abre",
+                "dica_en": "With 2 clicks, one click selects and Enter opens"
+            },
+            {
+                "id": "gesto-ocultar",
+                "chave": "gestoOcultar",
+                "tipo": "escolha",
+                "padrao": "true",
+                "valores": [
+                    {
+                        "id": "false",
+                        "nome": "Não",
+                        "nome_en": "No"
+                    },
+                    {
+                        "id": "true",
+                        "nome": "Sim",
+                        "nome_en": "Yes"
+                    }
+                ],
+                "nome": "Duplo clique na mesa oculta",
+                "nome_en": "Double-click on the desktop hides",
+                "dica": "Desligado: só pelo atalho",
+                "dica_en": "Off: only with the shortcut"
+            }
+        ]
+    }
+}

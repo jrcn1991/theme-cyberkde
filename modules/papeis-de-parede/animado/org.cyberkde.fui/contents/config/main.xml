@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- id da corporação (tokens/corporacoes.json); o "cyberkde corp" troca -->
+    <entry name="Corporacao" type="String"><default>arasaka</default></entry>
+    <!-- brilho dos feixes, em % da referência -->
+    <entry name="Intensidade" type="Int"><default>100</default><min>30</min><max>200</max></entry>
+    <!-- velocidade dos pulsos e do ciclo, em % -->
+    <entry name="Velocidade" type="Int"><default>100</default><min>25</min><max>300</max></entry>
+    <entry name="MostrarLogo" type="Bool"><default>true</default></entry>
+    <entry name="MostrarTextos" type="Bool"><default>true</default></entry>
+    <!-- teto de quadros por segundo: 30 ou 60 -->
+    <entry name="FpsMax" type="Int"><default>30</default></entry>
+    <!-- congela com janela maximizada ou em tela cheia por cima -->
+    <entry name="PausarCoberto" type="Bool"><default>true</default></entry>
+    <!-- auto = segue o movimento do tema (fator de animação do KDE); completo | reduzido | minimo força -->
+    <entry name="Movimento" type="String"><default>auto</default></entry>
+  </group>
+</kcfg>

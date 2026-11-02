@@ -1,0 +1,35 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.docker",
+        "Name": "CyberKDE · Docker",
+        "Name[pt_BR]": "CyberKDE · Docker",
+        "Name[en]": "CyberKDE · Docker",
+        "Description": "Contêineres do Docker: estado, uptime, CPU e memória, com iniciar, parar e reiniciar",
+        "Description[pt_BR]": "Contêineres do Docker: estado, uptime, CPU e memória, com iniciar, parar e reiniciar",
+        "Description[en]": "Docker containers: state, uptime, CPU and memory, with start, stop and restart",
+        "Icon": "package-x-generic",
+        "Category": "System Information",
+        "Authors": [{ "Name": "CyberKDE" }],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": ["desktop", "panel"]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Docker", "nome_en": "Docker",
+        "descricao": "Contêineres do Docker com estado, uptime, CPU e memória; inicia, para e reinicia.",
+        "descricao_en": "Docker containers with state, uptime, CPU and memory; starts, stops and restarts them.",
+        "tamanho": [380, 320],
+        "ordem": 70,
+        "opcoes": [
+            {"id": "intervalo", "chave": "intervalo", "tipo": "inteiro", "min": 3, "max": 300, "padrao": 10, "unidade": "s",
+             "nome": "Atualizar a cada", "nome_en": "Refresh every",
+             "dica": "Segundos entre as leituras do Docker", "dica_en": "Seconds between Docker reads"},
+            {"id": "parados", "chave": "mostrarParados", "tipo": "escolha", "padrao": "true",
+             "valores": [{"id": "true", "nome": "Mostrar", "nome_en": "Show"}, {"id": "false", "nome": "Esconder", "nome_en": "Hide"}],
+             "nome": "Contêineres parados", "nome_en": "Stopped containers"}
+        ]
+    }
+}

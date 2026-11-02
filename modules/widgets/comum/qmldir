@@ -1,0 +1,19 @@
+singleton Cores 1.0 Cores.qml
+Chanfro 1.0 Chanfro.qml
+Cantoneiras 1.0 Cantoneiras.qml
+Codigo 1.0 Codigo.qml
+Rotulo 1.0 Rotulo.qml
+Leitura 1.0 Leitura.qml
+Moldura 1.0 Moldura.qml
+NumeroCintilante 1.0 NumeroCintilante.qml
+BarraSegmentada 1.0 BarraSegmentada.qml
+GraficoHud 1.0 GraficoHud.qml
+BotaoIcone 1.0 BotaoIcone.qml
+singleton Paleta 1.0 Paleta.qml
+Alca 1.0 Alca.qml
+CartaoCompacto 1.0 CartaoCompacto.qml
+SeletorTamanho 1.0 SeletorTamanho.qml
+Tamanhos 1.0 Tamanhos.qml
+Revelador 1.0 Revelador.qml
+Ocultacao 1.0 Ocultacao.qml
+AnimacaoWidget 1.0 AnimacaoWidget.qml

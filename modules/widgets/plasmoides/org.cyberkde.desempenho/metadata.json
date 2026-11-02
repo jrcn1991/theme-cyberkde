@@ -1,0 +1,73 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.desempenho",
+        "Name": "CyberKDE · Desempenho",
+        "Name[pt_BR]": "CyberKDE · Desempenho",
+        "Name[en]": "CyberKDE · Performance",
+        "Description": "CPU por núcleo, memória, GPU, temperaturas, rede e disco no visual do tema",
+        "Description[pt_BR]": "CPU por núcleo, memória, GPU, temperaturas, rede e disco no visual do tema",
+        "Description[en]": "Per-core CPU, memory, GPU, temperatures, network and disk in the theme style",
+        "Icon": "utilities-system-monitor",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Desempenho",
+        "nome_en": "Performance",
+        "descricao": "CPU por núcleo, memória, GPU, temperaturas, rede e disco em barras segmentadas, com alerta acima dos limiares.",
+        "descricao_en": "Per-core CPU, memory, GPU, temperatures, network and disk in segmented bars, with an alert above the thresholds.",
+        "tamanho": [
+            240,
+            96
+        ],
+        "ordem": 30,
+        "opcoes": [
+            {
+                "id": "intervalo",
+                "chave": "intervalo",
+                "tipo": "inteiro",
+                "min": 500,
+                "max": 10000,
+                "padrao": 1500,
+                "unidade": "ms",
+                "nome": "Ler os sensores a cada",
+                "nome_en": "Read sensors every"
+            },
+            {
+                "id": "limiar-cpu",
+                "chave": "limiarCpu",
+                "tipo": "inteiro",
+                "min": 10,
+                "max": 100,
+                "padrao": 85,
+                "unidade": "%",
+                "nome": "Alerta de CPU acima de",
+                "nome_en": "CPU alert above"
+            },
+            {
+                "id": "limiar-temp",
+                "chave": "limiarTemp",
+                "tipo": "inteiro",
+                "min": 40,
+                "max": 110,
+                "padrao": 85,
+                "unidade": "°C",
+                "nome": "Alerta de temperatura acima de",
+                "nome_en": "Temperature alert above"
+            }
+        ]
+    }
+}

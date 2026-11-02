@@ -1,0 +1,50 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.notas",
+        "Name": "CyberKDE · Notas",
+        "Name[pt_BR]": "CyberKDE · Notas",
+        "Name[en]": "CyberKDE · Notes",
+        "Description": "Quadro de notas no estilo datashard: várias notas, cores, fixar, reordenar e checklist",
+        "Description[pt_BR]": "Quadro de notas no estilo datashard: várias notas, cores, fixar, reordenar e checklist",
+        "Description[en]": "Datashard-style notes board: multiple notes, colors, pin, reorder and checklists",
+        "Icon": "knotes",
+        "Category": "Utilities",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Notas",
+        "nome_en": "Notes",
+        "descricao": "Quadro de notas no estilo datashard: cores, fixar, reordenar e checklist. As notas ficam ao desligar.",
+        "descricao_en": "Datashard-style notes board: colors, pin, reorder and checklists. Notes are kept when switched off.",
+        "tamanho": [
+            256,
+            112
+        ],
+        "ordem": 50,
+        "opcoes": [
+            {
+                "id": "quadro",
+                "chave": "quadro",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Nome do quadro",
+                "nome_en": "Board name",
+                "dica": "Vazio: \"Notas\"",
+                "dica_en": "Empty: \"Notes\""
+            }
+        ]
+    }
+}

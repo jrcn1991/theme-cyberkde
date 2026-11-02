@@ -1,0 +1,80 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.tarefas",
+        "Name": "CyberKDE · Gigs",
+        "Name[pt_BR]": "CyberKDE · Gigs",
+        "Name[en]": "CyberKDE · Gigs",
+        "Description": "Tarefas como contratos: prioridade, prazo, contratante e status",
+        "Description[pt_BR]": "Tarefas como contratos: prioridade, prazo, contratante e status",
+        "Description[en]": "Tasks as contracts: priority, deadline, client and status",
+        "Icon": "view-task",
+        "Category": "Utilities",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Gigs",
+        "nome_en": "Gigs",
+        "descricao": "Tarefas como contratos: prioridade, prazo, contratante e status, com filtros. Os contratos ficam ao desligar.",
+        "descricao_en": "Tasks as contracts: priority, deadline, client and status, with filters. Gigs are kept when switched off.",
+        "tamanho": [
+            256,
+            112
+        ],
+        "ordem": 55,
+        "opcoes": [
+            {
+                "id": "quadro",
+                "chave": "quadro",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Nome da lista",
+                "nome_en": "List name",
+                "dica": "Vazio: \"Gigs\"",
+                "dica_en": "Empty: \"Gigs\""
+            },
+            {
+                "id": "filtro",
+                "chave": "filtro",
+                "tipo": "escolha",
+                "padrao": "ativos",
+                "nome": "Mostrar",
+                "nome_en": "Show",
+                "valores": [
+                    {
+                        "id": "ativos",
+                        "nome": "Ativos",
+                        "nome_en": "Active"
+                    },
+                    {
+                        "id": "andamento",
+                        "nome": "Em andamento",
+                        "nome_en": "In progress"
+                    },
+                    {
+                        "id": "concluidos",
+                        "nome": "Concluídos",
+                        "nome_en": "Done"
+                    },
+                    {
+                        "id": "todos",
+                        "nome": "Todos",
+                        "nome_en": "All"
+                    }
+                ]
+            }
+        ]
+    }
+}

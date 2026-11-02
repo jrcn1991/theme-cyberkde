@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.rede",
+        "Name": "CyberKDE · Rede",
+        "Name[pt_BR]": "CyberKDE · Rede",
+        "Name[en]": "CyberKDE · Network",
+        "Description": "Interface ativa, IP local, gateway, velocidade, latência, perda de pacotes e VPN",
+        "Description[pt_BR]": "Interface ativa, IP local, gateway, velocidade, latência, perda de pacotes e VPN",
+        "Description[en]": "Active interface, local IP, gateway, speed, latency, packet loss and VPN",
+        "Icon": "network-wired",
+        "Category": "System Information",
+        "Authors": [{ "Name": "CyberKDE" }],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": ["desktop", "panel"]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Rede", "nome_en": "Network",
+        "descricao": "Interface ativa, IP, gateway, velocidade em tempo real, latência por ping, perda de pacotes e VPN. O IP público fica desligado por padrão.",
+        "descricao_en": "Active interface, IP, gateway, live speed, ping latency, packet loss and VPN. The public IP is off by default.",
+        "tamanho": [360, 320],
+        "ordem": 75,
+        "opcoes": [
+            {"id": "host", "chave": "host", "tipo": "texto", "padrao": "1.1.1.1",
+             "nome": "Medir a latência em", "nome_en": "Measure latency to",
+             "dica": "Endereço IP ou nome do host para o ping", "dica_en": "IP address or host name to ping"},
+            {"id": "intervalo-ping", "chave": "intervaloPing", "tipo": "inteiro", "min": 2, "max": 60, "padrao": 5, "unidade": "s",
+             "nome": "Ping a cada", "nome_en": "Ping every"},
+            {"id": "ip-publico", "chave": "ipPublico", "tipo": "escolha", "padrao": "false",
+             "valores": [{"id": "false", "nome": "Escondido", "nome_en": "Hidden"}, {"id": "true", "nome": "Mostrar", "nome_en": "Show"}],
+             "nome": "IP público", "nome_en": "Public IP",
+             "dica": "Desligado por padrão, por privacidade em capturas de tela", "dica_en": "Off by default, for privacy in screenshots"}
+        ]
+    }
+}

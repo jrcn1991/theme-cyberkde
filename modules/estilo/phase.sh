@@ -17,6 +17,16 @@ estilo_textura_cache="${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde/konsole"
 
 # Os 16 estados num Python só (status --json): "id<TAB>objeto" por linha.
 estilo_estados() { CYBERKDE_LANG=$cyberkde_lang python3 "$estilo_py" estados; }
+# Os itens do "efeito --lista" numa chamada só (DATA, 29/10: eram 16 Pythons, ~1 s do --lista). O mesmo
+# item() do "estilo.py json <id>", importado uma vez.
+estilo_jsons() {
+  CYBERKDE_LANG=$cyberkde_lang python3 -c 'import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("estilo", sys.argv[1]); m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+for e in list(m.EFEITOS) + ["estilo-preset"]:
+    print(e + "\t" + json.dumps(m.item(e), ensure_ascii=False))' "$estilo_py"
+}
+CYBERKDE_EFEITOS_JSON_LOTE+=('estilo_jsons:estilo-*')
 
 # Ids fixos aqui (sem rodar Python ao carregar); a lista é a mesma de "estilo.py ids".
 estilo_ids=(estilo-preset estilo-selecao estilo-brilho estilo-corte estilo-densidade estilo-abas estilo-progresso

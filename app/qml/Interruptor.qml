@@ -7,6 +7,7 @@ Item {
     id: s
     property var ligado: false          // true | false | null (desconhecido)
     property bool ocupado: false
+    property bool cliqueOcupado: false      // aceita clique mesmo ocupado (a intenção final; ex.: widgets)
     property bool habilitado: true
     property color cor: Tema.destaque
     signal alternado(bool novo)
@@ -19,7 +20,7 @@ Item {
     readonly property bool _on: ligado === true
     readonly property bool _desconhecido: ligado !== true && ligado !== false
 
-    function _acionar() { if (habilitado && !ocupado) s.alternado(!_on) }
+    function _acionar() { if (habilitado && (!ocupado || cliqueOcupado)) s.alternado(!_on) }
     Keys.onPressed: (e) => { if (e.key === Qt.Key_Space || e.key === Qt.Key_Return) { _acionar(); e.accepted = true } }
 
     // trilho
@@ -122,7 +123,7 @@ Item {
         id: area
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: s.habilitado && !s.ocupado ? Qt.PointingHandCursor : Qt.ArrowCursor
+        cursorShape: s.habilitado && (!s.ocupado || s.cliqueOcupado) ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: s._acionar()
     }
 }

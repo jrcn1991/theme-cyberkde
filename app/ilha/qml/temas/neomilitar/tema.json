@@ -1,0 +1,15 @@
+{
+  "id": "neomilitar",
+  "nome": "Neomilitar",
+  "nome_en": "Neomilitary",
+  "descricao": "Chanfro, cantoneiras, micro-dados e moldura traçada.",
+  "descricao_en": "Chamfer, corner brackets, micro-data and a traced frame.",
+  "ordem": 30,
+  "movimentos": [
+    {
+      "id": "traco",
+      "nome": "Traço",
+      "nome_en": "Trace"
+    }
+  ]
+}

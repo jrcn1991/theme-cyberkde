@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-es",
+        "Name": "CyberKDE · FUI E/S de disco",
+        "Name[pt_BR]": "CyberKDE · FUI E/S de disco",
+        "Name[en]": "CyberKDE · FUI Disk I/O",
+        "Description": "Leitura e escrita de cada disco agora.",
+        "Description[pt_BR]": "Leitura e escrita de cada disco agora.",
+        "Description[en]": "Read and write rate of each disk right now.",
+        "Icon": "drive-harddisk",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · E/S de disco",
+        "nome_en": "FUI · Disk I/O",
+        "descricao": "Leitura e escrita de cada disco agora. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "Read and write rate of each disk right now. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            432,
+            320
+        ],
+        "ordem": 206
+    }
+}

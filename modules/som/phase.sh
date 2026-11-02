@@ -81,8 +81,8 @@ off_som() {
 efeito_estado_som() {
   local ligado=false
   if fase_ligada som; then ligado=true; fi
-  printf '{"variante":"%s","ligado":%s,"aplicado":%s,"ligarCom":"cyberkde on som","desligarCom":"cyberkde off som"}' \
-    "$(som_variante)" "$ligado" "$(json_str "$(kreadconfig6 --file kdeglobals --group Sounds --key Theme --default ocean 2>/dev/null)")"
+  printf '{"variante":"%s","ligado":%s,"aplicado":%s,"ligarCom":"cyberkde efeito som %s","desligarCom":"cyberkde efeito som off"}' \
+    "$(som_variante)" "$ligado" "$(json_str "$(kreadconfig6 --file kdeglobals --group Sounds --key Theme --default ocean 2>/dev/null)")" "$(som_variante)"
 }
 
 # Lista de sons de uma variante em JSON: [{"evento","previaSom"}...] (os próprios arquivos).
@@ -107,31 +107,38 @@ efeito_json_som() {
   done
   printf '{"id":"som","nome":%s,"nome_en":%s,"descricao":%s,"descricao_en":%s,"tipo":"variante","opcoes":[{"id":"variante","nome":"Variante","nome_en":"Variant","tipo":"variante","padrao":"padrao","valores":[%s]}],"estado":%s}' \
     "$(json_str "Sons do tema")" "$(json_str "Theme sounds")" \
-    "$(json_str "Bipes e varreduras cyberpunk, baixos, para notificação, aviso, erro, login, dispositivos, lixeira e volume. Desligado por padrão; liga e desliga pela fase som.")" \
-    "$(json_str "Quiet cyberpunk beeps and sweeps for notifications, warnings, errors, login, devices, trash and volume. Off by default; turned on and off by the som part.")" \
+    "$(json_str "Bipes e varreduras cyberpunk, baixos, para notificação, aviso, erro, login, dispositivos, lixeira e volume. Desligado por padrão; escolher uma variante liga os sons (fase som), off devolve os de antes.")" \
+    "$(json_str "Quiet cyberpunk beeps and sweeps for notifications, warnings, errors, login, devices, trash and volume. Off by default; picking a variant turns them on (som part), off brings the previous ones back.")" \
     "$valores" "$(efeito_estado_som)"
 }
 
-#   cyberkde efeito som [padrao|discreto] [--json]   (sem variante: só lê)
+#   cyberkde efeito som [padrao|discreto|off] [--json]   (sem variante: só lê). Escolher uma variante
+#   liga a fase som, se estiver desligada; off a desliga (efeito_fase_alternar, no scripts/cyberkde).
 #   --json: {"efeito":"som",<estado>,"avisos":[...]}. Saída: 0 · 2 uso · 3 ocupado
 efeito_cmd_som() {
   local variante="" arg
   for arg in "$@"; do
     case $arg in
-      padrao | discreto) [[ -z $variante ]] && variante=$arg || variante=invalida ;;
+      padrao | discreto | off) [[ -z $variante ]] && variante=$arg || variante=invalida ;;
       *) variante=invalida ;;
     esac
   done
-  [[ $variante != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito som [padrao|discreto] [--json]" "usage: cyberkde efeito som [padrao|discreto] [--json]")"
+  [[ $variante != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito som [padrao|discreto|off] [--json]" "usage: cyberkde efeito som [padrao|discreto|off] [--json]")"
   local -a avisos=()
   if [[ -n $variante ]]; then
     take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
-    mkdir -p -- "$(dirname -- "$efeitos_file")"
-    kwriteconfig6 --file "$efeitos_file" --group som --key variante "$variante"
-    if fase_ligada som; then
-      (fase_atual=som; efeito_som_aplicar)
+    local rc=0
+    if [[ $variante == off ]]; then
+      if fase_ligada som; then efeito_fase_alternar off som || rc=$?; efeito_fase_erro "$rc" som; fi
     else
-      avisos+=("$(t "Os sons do tema estão desligados: a variante foi guardada; para usar, cyberkde on som." "Theme sounds are off: the variant was saved; to use it, cyberkde on som.")")
+      mkdir -p -- "$(dirname -- "$efeitos_file")"
+      kwriteconfig6 --file "$efeitos_file" --group som --key variante "$variante"
+      if fase_ligada som; then
+        (fase_atual=som; efeito_som_aplicar)
+      else
+        efeito_fase_alternar on som || rc=$?
+        efeito_fase_erro "$rc" som
+      fi
     fi
   fi
   local estado

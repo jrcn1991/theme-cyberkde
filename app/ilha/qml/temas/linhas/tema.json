@@ -1,0 +1,9 @@
+{
+  "id": "linhas",
+  "nome": "Linhas",
+  "nome_en": "Lines",
+  "descricao": "Suave: só linhas finas na cor do tema.",
+  "descricao_en": "Soft: just thin lines in the theme color.",
+  "ordem": 20,
+  "movimentos": []
+}

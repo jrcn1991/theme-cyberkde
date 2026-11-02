@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-estados",
+        "Name": "CyberKDE · FUI Estados",
+        "Name[pt_BR]": "CyberKDE · FUI Estados",
+        "Name[en]": "CyberKDE · FUI Status",
+        "Description": "Rede, som, microfone, energia, GPU e latência em ladrilhos.",
+        "Description[pt_BR]": "Rede, som, microfone, energia, GPU e latência em ladrilhos.",
+        "Description[en]": "Network, sound, microphone, power, GPU and latency as tiles.",
+        "Icon": "dialog-information",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Estados",
+        "nome_en": "FUI · Status",
+        "descricao": "Rede, som, microfone, energia, GPU e latência em ladrilhos. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "Network, sound, microphone, power, GPU and latency as tiles. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            240,
+            320
+        ],
+        "ordem": 214
+    }
+}

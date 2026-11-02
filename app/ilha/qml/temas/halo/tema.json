@@ -1,0 +1,4 @@
+{ "id": "halo", "nome": "Halo", "nome_en": "Halo",
+  "descricao": "A placa preta da ilha do Halo, com as molas e os três estilos.",
+  "descricao_en": "The Halo island's black plate, with its springs and three styles.",
+  "ordem": 10, "movimentos": [] }

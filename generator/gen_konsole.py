@@ -75,7 +75,7 @@ TABS = ("LocalTabTitleFormat=TTY-%# │ %d\nRemoteTabTitleFormat=NET-%# │ %u@%
         if ESTILO["konsole_abas"] == "tecnico" else "")
 
 # AlternatingBars=0: com a integração do shell (efeito konsole-erro), o Konsole desenharia uma barra
-# cinza alternada ao lado da saída de cada comando, que é só ruído (generator/PEDIDO-DO-CLI.md).
+# cinza alternada ao lado da saída de cada comando, que é só ruído.
 PROFILE = f"""[Appearance]
 AntiAliasFonts=true
 BoldIntense=true

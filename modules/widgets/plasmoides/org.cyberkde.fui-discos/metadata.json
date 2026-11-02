@@ -1,0 +1,51 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-discos",
+        "Name": "CyberKDE · FUI Discos",
+        "Name[pt_BR]": "CyberKDE · FUI Discos",
+        "Name[en]": "CyberKDE · FUI Drives",
+        "Description": "Ocupação das unidades mais cheias; clique abre a pasta.",
+        "Description[pt_BR]": "Ocupação das unidades mais cheias; clique abre a pasta.",
+        "Description[en]": "Usage of the fullest drives; click opens the folder.",
+        "Icon": "drive-harddisk",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Discos",
+        "nome_en": "FUI · Drives",
+        "descricao": "Ocupação das unidades mais cheias; clique abre a pasta. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "Usage of the fullest drives; click opens the folder. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            432,
+            320
+        ],
+        "ordem": 205,
+        "opcoes": [
+            {
+                "id": "limiar",
+                "chave": "limiar",
+                "tipo": "inteiro",
+                "min": 50,
+                "max": 99,
+                "padrao": 85,
+                "unidade": "%",
+                "nome": "Alerta acima de",
+                "nome_en": "Alert above"
+            }
+        ]
+    }
+}

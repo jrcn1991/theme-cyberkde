@@ -1,0 +1,123 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.painelfui",
+        "Name": "CyberKDE · Painel FUI",
+        "Name[pt_BR]": "CyberKDE · Painel FUI",
+        "Name[en]": "CyberKDE · FUI Dashboard",
+        "Description": "O painel FUI de Cyberpunk 2077 com dados reais: CPU, sensores, log, processos, discos, relógio, clima, memória e rede",
+        "Description[pt_BR]": "O painel FUI de Cyberpunk 2077 com dados reais: CPU, sensores, log, processos, discos, relógio, clima, memória e rede",
+        "Description[en]": "The Cyberpunk 2077 FUI dashboard with real data: CPU, sensors, log, processes, drives, clock, weather, memory and network",
+        "Icon": "utilities-system-monitor",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Painel FUI",
+        "nome_en": "FUI dashboard",
+        "descricao": "O painel de interface de Cyberpunk 2077, em grade 4×3, com dados reais do sistema. Escala sem mudar a proporção.",
+        "descricao_en": "The Cyberpunk 2077 interface dashboard, in a 4×3 grid, with real system data. Scales without changing its proportions.",
+        "tamanho": [
+            960,
+            816
+        ],
+        "ordem": 5,
+        "opcoes": [
+            {
+                "id": "ocultar",
+                "chave": "ocultos",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Esconder módulos",
+                "nome_en": "Hide modules",
+                "dica": "Ids separados por vírgula: bandas, log, canais, cpu, estados, processos, anel, discos, relogio, clima, memoria, sinal, ruido, rede, es",
+                "dica_en": "Ids separated by commas: bandas, log, canais, cpu, estados, processos, anel, discos, relogio, clima, memoria, sinal, ruido, rede, es"
+            },
+            {
+                "id": "slot2",
+                "chave": "slot2",
+                "tipo": "escolha",
+                "padrao": "log",
+                "valores": [
+                    {
+                        "id": "log",
+                        "nome": "Log do sistema",
+                        "nome_en": "System log"
+                    },
+                    {
+                        "id": "sistema",
+                        "nome": "Sistema (uptime, carga, atualizações, Docker)",
+                        "nome_en": "System (uptime, load, updates, Docker)"
+                    }
+                ],
+                "nome": "Ao lado dos núcleos",
+                "nome_en": "Next to the cores"
+            },
+            {
+                "id": "cidade",
+                "chave": "cidade",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Cidade do clima",
+                "nome_en": "Weather city",
+                "dica": "Vazia: São Paulo, ou a última resolvida",
+                "dica_en": "Empty: São Paulo, or the last one resolved"
+            },
+            {
+                "id": "log",
+                "chave": "logNivel",
+                "tipo": "escolha",
+                "padrao": "warning",
+                "valores": [
+                    {
+                        "id": "err",
+                        "nome": "Só erros",
+                        "nome_en": "Errors only"
+                    },
+                    {
+                        "id": "warning",
+                        "nome": "Avisos e erros",
+                        "nome_en": "Warnings and errors"
+                    },
+                    {
+                        "id": "notice",
+                        "nome": "Notas, avisos e erros",
+                        "nome_en": "Notices and up"
+                    },
+                    {
+                        "id": "info",
+                        "nome": "Tudo",
+                        "nome_en": "Everything"
+                    }
+                ],
+                "nome": "Log do sistema",
+                "nome_en": "System log"
+            },
+            {
+                "id": "glitch",
+                "chave": "glitchMin",
+                "tipo": "inteiro",
+                "min": 0,
+                "max": 120,
+                "padrao": 0,
+                "unidade": "min",
+                "nome": "Glitch a cada",
+                "nome_en": "Glitch every",
+                "dica": "0 = só na hora cheia",
+                "dica_en": "0 = only on the hour"
+            }
+        ]
+    }
+}

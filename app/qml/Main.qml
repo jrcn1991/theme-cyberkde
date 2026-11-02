@@ -18,7 +18,7 @@ Window {
     function indice(id) { return Math.max(0, secoes.findIndex(x => x.id === id)) }
     function irPara(id) {
         // "modulos" agora é a página "Partes do tema" da SYS.CONFIG
-        if (id === "modulos") { secaoConfig.irGrupo("partes"); id = "config" }
+        if (id === "modulos") { vConfig.vista = true; vConfig.item.irGrupo("partes"); id = "config" }
         secao = indice(id)
     }
     readonly property string secaoId: secoes[secao] ? secoes[secao].id : ""
@@ -36,6 +36,10 @@ Window {
         { id: "status", titulo: Txt.t("secao.status"), caminho: "STATUS" },
         { id: "corporacao", titulo: Txt.t("secao.corporacao"), caminho: "CORP" },
         { id: "config", titulo: Txt.t("secao.config"), caminho: "SYS.CONFIG" },
+        { id: "widgets", titulo: Txt.t("secao.widgets"), caminho: "DESK.WIDGETS" },
+        { id: "arquivos", titulo: Txt.t("secao.arquivos"), curto: Txt.t("secao.arquivosCurto"), caminho: "FILE.MANAGER" },
+        { id: "cerca", titulo: "Cyber Fence", caminho: "DESK.FENCES" },
+        { id: "ilha", titulo: Txt.t("secao.ilha"), caminho: "DESK.ISLAND" },
         { id: "papel", titulo: Txt.t("secao.papel"), caminho: "PAPEL" },
         { id: "diagnostico", titulo: Txt.t("secao.diagnostico"), caminho: "DIAG", alerta: painel.diagnostico.codigo > 0 },
         { id: "registro", titulo: Txt.t("secao.registro"), caminho: "LOG" }
@@ -129,6 +133,11 @@ Window {
     function pedirDesligar() { desliga.abrir() }
     function escolherLogo(corp) { dlgLogo.corp = corp; dlgLogo.open() }
     function escolherPapel() { dlgPapel.open() }
+    function escolherPasta(atual, f) {
+        dlgPasta.aoEscolher = f
+        if (atual && atual.charAt(0) === "/") dlgPasta.currentFolder = "file://" + atual
+        dlgPasta.open()
+    }
     function abrirSeletor(paleta) { seletor.abrir(paleta) }
 
     // ---------------------------------------------------------------- interface
@@ -167,12 +176,30 @@ Window {
                 id: area
                 anchors.top: cab.bottom; anchors.bottom: rod.top
                 width: parent.width
-                SecaoStatus { anchors.fill: parent; app: janela; ativa: janela.secaoId === "status" }
-                SecaoConfig { id: secaoConfig; anchors.fill: parent; app: janela; ativa: janela.secaoId === "config" }
-                SecaoCorporacao { anchors.fill: parent; app: janela; ativa: janela.secaoId === "corporacao" }
-                SecaoPapel { anchors.fill: parent; app: janela; ativa: janela.secaoId === "papel" }
-                SecaoDiagnostico { anchors.fill: parent; app: janela; ativa: janela.secaoId === "diagnostico" }
-                SecaoRegistro { anchors.fill: parent; app: janela; ativa: janela.secaoId === "registro" }
+                // cada seção nasce na primeira visita e fica (rolagem e estado continuam): as dez juntas custavam
+                // mais de 100 MB e centenas de imagens a decodificar antes do primeiro quadro. Nasce apagada e acende
+                // logo depois, pelo mesmo caminho de uma seção que já existia (onAtivaChanged, entrada, leituras).
+                component Vaga: Loader {
+                    property string sid
+                    property bool vista: false
+                    readonly property bool agora: janela.secaoId === sid
+                    property bool pronta: false
+                    anchors.fill: parent
+                    active: agora || vista
+                    onAgoraChanged: if (agora) vista = true
+                    onLoaded: pronta = true
+                    Component.onCompleted: if (agora) vista = true
+                }
+                Vaga { id: vStatus; sid: "status"; sourceComponent: SecaoStatus { app: janela; ativa: vStatus.pronta && vStatus.agora } }
+                Vaga { id: vConfig; sid: "config"; sourceComponent: SecaoConfig { app: janela; ativa: vConfig.pronta && vConfig.agora } }
+                Vaga { id: vCorp; sid: "corporacao"; sourceComponent: SecaoCorporacao { app: janela; ativa: vCorp.pronta && vCorp.agora } }
+                Vaga { id: vWidgets; sid: "widgets"; sourceComponent: SecaoWidgets { app: janela; ativa: vWidgets.pronta && vWidgets.agora } }
+                Vaga { id: vArquivos; sid: "arquivos"; sourceComponent: SecaoArquivos { app: janela; ativa: vArquivos.pronta && vArquivos.agora } }
+                Vaga { id: vCerca; sid: "cerca"; sourceComponent: SecaoCerca { app: janela; ativa: vCerca.pronta && vCerca.agora } }
+                Vaga { id: vIlha; sid: "ilha"; sourceComponent: SecaoIlha { app: janela; ativa: vIlha.pronta && vIlha.agora } }
+                Vaga { id: vPapel; sid: "papel"; sourceComponent: SecaoPapel { app: janela; ativa: vPapel.pronta && vPapel.agora } }
+                Vaga { id: vDiag; sid: "diagnostico"; sourceComponent: SecaoDiagnostico { app: janela; ativa: vDiag.pronta && vDiag.agora } }
+                Vaga { id: vRegistro; sid: "registro"; sourceComponent: SecaoRegistro { app: janela; ativa: vRegistro.pronta && vRegistro.agora } }
             }
 
             Rodape { id: rod; width: parent.width; anchors.bottom: parent.bottom }
@@ -181,12 +208,12 @@ Window {
         Varredura { id: varredura; anchors.fill: parent }
     }
 
-    // atalhos: Ctrl+1..6 trocam de seção, F5 atualiza
+    // atalhos: Ctrl+1..Ctrl+N trocam de seção (na ordem do menu), F5 atualiza
     Instantiator {
         model: janela.secoes.length
         delegate: Shortcut {
             required property int index
-            sequences: ["Ctrl+" + (index + 1)]
+            sequences: ["Ctrl+" + ((index + 1) % 10)]   // a décima seção é o Ctrl+0
             onActivated: janela.secao = index
         }
     }
@@ -294,6 +321,100 @@ Window {
         ]
     }
 
+    // ---- DATASHARD como gerenciador padrão: ligar pede confirmação (desligar não: devolve o Dolphin)
+    function pedirDatashard() { confirmaDs.abrir() }
+    Modal {
+        id: confirmaDs
+        titulo: Txt.t("ds.confTitulo")
+        codigo: "XDG.MIME // INODE/DIRECTORY → DATASHARD"
+        onCancelado: fechar()
+        Leitura { width: parent.width; color: Tema.texto; tamanho: 14; text: Txt.t("ds.confTexto") }
+        Leitura { width: parent.width; color: Tema.texto2; tamanho: 12; text: Txt.t("ds.confVolta") }
+        acoes: [
+            Botao { text: Txt.t("comum.cancelar"); tipo: "sutil"; onClicado: confirmaDs.fechar() },
+            Botao { text: Txt.t("ds.confLigar"); icone: "◆"; tipo: "primario"; onClicado: { confirmaDs.fechar(); painel.ligarDatashard(true) } }
+        ]
+    }
+
+    // ---- confirmação simples e escolha de arquivo (subpágina do Cyber Fence)
+    function confirmar(titulo, texto, rotulo, f) {
+        confirmaGeral.titulo = titulo; confirmaGeral.texto = texto; confirmaGeral.rotulo = rotulo; confirmaGeral.feito = f
+        confirmaGeral.abrir()
+    }
+    Modal {
+        id: confirmaGeral
+        property string texto: ""
+        property string rotulo: ""
+        property var feito: null
+        codigo: "CONFIRM"
+        cor: Tema.alerta
+        focoInicial: "cancelar"
+        onCancelado: fechar()
+        Leitura { width: parent.width; color: Tema.texto; tamanho: 14; text: confirmaGeral.texto }
+        acoes: [
+            Botao { text: Txt.t("comum.cancelar"); tipo: "sutil"; onClicado: confirmaGeral.fechar() },
+            Botao { text: confirmaGeral.rotulo; tipo: "primario"; cor: Tema.alerta; onClicado: { confirmaGeral.fechar(); if (confirmaGeral.feito) confirmaGeral.feito() } }
+        ]
+    }
+    function escolherArquivo(salvar, f) {
+        dlgArquivo.aoEscolher = f
+        dlgArquivo.fileMode = salvar ? FileDialog.SaveFile : FileDialog.OpenFile
+        dlgArquivo.open()
+    }
+
+    // ---- remover uma cerca (a pasta não é tocada)
+    function pedirRemoverCerca(efeito, instancia, nome) { confirmaCerca.efeito = efeito; confirmaCerca.instancia = instancia; confirmaCerca.nome = nome; confirmaCerca.abrir() }
+    Modal {
+        id: confirmaCerca
+        property string efeito: ""
+        property string instancia: ""
+        property string nome: ""
+        titulo: Txt.t("wg.confRemoverTitulo")
+        codigo: "DESK.MODULES // " + efeito + " // " + instancia
+        cor: Tema.alerta
+        focoInicial: "cancelar"
+        onCancelado: fechar()
+        Leitura { width: parent.width; color: Tema.texto; tamanho: 14; text: Txt.t("wg.confRemoverTexto", { n: confirmaCerca.nome }) }
+        Leitura { width: parent.width; color: Tema.texto2; tamanho: 13; text: Txt.t("wg.confRemoverPasta") }
+        acoes: [
+            Botao { text: Txt.t("comum.cancelar"); tipo: "sutil"; onClicado: confirmaCerca.fechar() },
+            Botao { text: Txt.t("wg.removerCerca"); tipo: "primario"; cor: Tema.alerta; onClicado: { confirmaCerca.fechar(); painel.removerInstancia(confirmaCerca.efeito, confirmaCerca.instancia) } }
+        ]
+    }
+
+    // ---- ligar / desligar todos os widgets (seção WIDGETS)
+    function pedirTodosWidgets(ligar) { confirmaWidgets.ligar = ligar; confirmaWidgets.abrir() }
+    Modal {
+        id: confirmaWidgets
+        property bool ligar: true
+        readonly property int n: (painel.widgets || []).filter(w => !w.multiInstancia && (w.ligado === true) !== ligar).length
+        titulo: ligar ? Txt.t("wg.confLigarTitulo") : Txt.t("wg.confDesligarTitulo")
+        codigo: "DESK.MODULES // " + (ligar ? "ALL.ON" : "ALL.OFF")
+        cor: ligar ? Tema.destaque : Tema.alerta
+        onCancelado: fechar()
+        Leitura {
+            width: parent.width
+            color: Tema.texto
+            tamanho: 14
+            text: (confirmaWidgets.ligar ? Txt.t("wg.confLigarTexto", { n: confirmaWidgets.n }) : Txt.t("wg.confDesligarTexto", { n: confirmaWidgets.n }))
+        }
+        Leitura {
+            visible: !confirmaWidgets.ligar
+            width: parent.width
+            color: Tema.texto2
+            tamanho: 12
+            text: Txt.t("wg.avisoDados")
+        }
+        acoes: [
+            Botao { text: Txt.t("comum.cancelar"); tipo: "sutil"; onClicado: confirmaWidgets.fechar() },
+            Botao {
+                text: confirmaWidgets.ligar ? Txt.t("wg.ligarTodos") : Txt.t("wg.desligarTodos"); icone: "⏻"; tipo: "primario"
+                cor: confirmaWidgets.ligar ? Tema.destaque : Tema.alerta
+                onClicado: { confirmaWidgets.fechar(); painel.todosWidgets(confirmaWidgets.ligar) }
+            }
+        ]
+    }
+
     Modal {
         id: desliga
         titulo: Txt.t("off.titulo")
@@ -396,7 +517,7 @@ Window {
         onCancelado: fechar()
         Repeater {
             model: [
-                { t: "Ctrl+1 … Ctrl+" + janela.secoes.length, d: Txt.t("atalhos.secao", { n: janela.secoes.length }) },
+                { t: "Ctrl+1 … Ctrl+" + (janela.secoes.length % 10), d: Txt.t("atalhos.secao", { n: janela.secoes.length }) },
                 { t: "Ctrl+Z", d: Txt.t("atalhos.desfazer") },
                 { t: "F5", d: Txt.t("atalhos.atualizar") },
                 { t: Txt.t("atalhos.tabTecla"), d: Txt.t("atalhos.tab") },
@@ -423,6 +544,19 @@ Window {
         title: Txt.t("dlg.logo")
         nameFilters: [Txt.t("dlg.filtroLogo")]
         onAccepted: painel.escolherLogo(corp, selectedFile.toString())
+    }
+    FolderDialog {
+        id: dlgPasta
+        property var aoEscolher: null
+        title: Txt.t("dlg.pasta")
+        onAccepted: if (aoEscolher) aoEscolher(decodeURIComponent(selectedFolder.toString().replace(/^file:\/\//, "")))
+    }
+    FileDialog {
+        id: dlgArquivo
+        property var aoEscolher: null
+        nameFilters: ["JSON (*.json)"]
+        defaultSuffix: "json"
+        onAccepted: if (aoEscolher) aoEscolher(decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, "")))
     }
     FileDialog {
         id: dlgPapel

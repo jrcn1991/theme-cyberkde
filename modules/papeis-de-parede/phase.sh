@@ -15,7 +15,8 @@ descreve_fase papeis-de-parede "Papel de parede" sistema nao "Papel de parede do
   "Wallpaper" "Theme wallpaper on the desktop and the lock screen."
 CYBERKDE_INSTALLS+=(install_papeis-de-parede)
 CYBERKDE_OFF_HOOKS+=(off_papeis-de-parede)
-CYBERKDE_EFEITOS+=(papel)  # "cyberkde efeito papel <a|b|c|d>": a opção de papel de parede (modules/CONTRATO.md)
+CYBERKDE_EFEITOS+=(papel)  # "cyberkde efeito papel <a|b|c|d|corp|fui>": a opção de papel de parede (modules/CONTRATO.md)
+CYBERKDE_INSTALLS+=(install_papel_fui)
 
 wallpapers_dir() { printf '%s\n' "$data/wallpapers/CyberKDE"; }
 wallpapers_record() { printf '%s\n' "$state/papeis-de-parede.tsv"; }  # id  tela  plugin  imagem
@@ -26,7 +27,94 @@ wallpapers_record() { printf '%s\n' "$state/papeis-de-parede.tsv"; }  # id  tela
 papel_opcao() {
   local v
   v=$(kreadconfig6 --file "$config/cyberkde/efeitos" --group papel --key opcao --default a 2>/dev/null)
-  case $v in a | b | c | d | corp) printf '%s\n' "$v" ;; *) echo a ;; esac
+  case $v in a | b | c | d | corp | fui) printf '%s\n' "$v" ;; *) echo a ;; esac
+}
+
+# ------------------------------------------------------------------ papel animado FUI (org.cyberkde.fui)
+# Plugin de papel de parede do Plasma 6 (modules/papeis-de-parede/animado, LEIAME.md lá). A área de
+# trabalho usa o plugin (chave Corporacao = a corporação do "cyberkde corp"); o bloqueio e o login
+# usam o quadro estático dele (gen_fui.py estatico, 3840x2160), da mesma corporação. Os .qsb vêm
+# compilados no pacote: a instalação não precisa do qsb.
+papel_fui_src="$project/modules/papeis-de-parede/animado"
+papel_fui_plugin=org.cyberkde.fui
+# Corporação do FUI: a do "cyberkde corp"; sem corporação (ou cor personalizada), a do próprio tema.
+papel_fui_corp() {
+  local id
+  id=$(corp_atual 2>/dev/null) || id=nenhuma
+  case $id in "" | personalizada) id=nenhuma ;; esac
+  printf '%s\n' "$id"
+}
+# O pacote em ~/.local/share/plasma/wallpapers (fica em "Papel de parede" das Configurações também
+# com outra opção escolhida; fora do registro, como os widgets: o uninstall remove).
+install_papel_fui() {
+  [[ -f $papel_fui_src/$papel_fui_plugin/metadata.json ]] || return 0
+  local tmp
+  tmp=$(mktemp -d)
+  cp -a -- "$papel_fui_src/$papel_fui_plugin/." "$tmp/"
+  chmod 755 "$tmp"
+  swap_dir "$tmp" "$data/plasma/wallpapers/$papel_fui_plugin"
+  rm -rf -- "$tmp"
+}
+# Controles do FUI (o painel, pelo contrato do Deckard): preferência em ~/.config/cyberkde/efeitos
+# [papel-fui] e gravados nas chaves do plugin em cada área de trabalho com ele. Sem escolha, os padrões
+# do main.xml do pacote.
+papel_fui_pref() { kreadconfig6 --file "$config/cyberkde/efeitos" --group papel-fui --key "$1" --default "$2" 2>/dev/null; }
+papel_fui_json() {  # -> {"intensidade":N,"velocidade":N,"fps":N,"logo":b,"textos":b,"pausar":b}
+  local v k i=() b=()
+  for k in intensidade:100 velocidade:100 fps:30; do
+    v=$(papel_fui_pref "${k%%:*}" "${k#*:}"); [[ $v =~ ^[0-9]+$ ]] || v=${k#*:}; i+=("$v")
+  done
+  for k in logo textos pausar; do
+    [[ $(papel_fui_pref "$k" true) == false ]] && b+=(false) || b+=(true)
+  done
+  printf '{"intensidade":%d,"velocidade":%d,"fps":%d,"logo":%s,"textos":%s,"pausar":%s}' "${i[@]}" "${b[@]}"
+}
+# As mesmas, com os nomes das chaves do plugin (objeto JS).
+papel_fui_chaves() {
+  local j
+  j=$(papel_fui_json)
+  python3 -c 'import json, sys; d = json.loads(sys.argv[1])
+print(json.dumps({"Intensidade": d["intensidade"], "Velocidade": d["velocidade"], "FpsMax": d["fps"],
+                  "MostrarLogo": d["logo"], "MostrarTextos": d["textos"], "PausarCoberto": d["pausar"]}))' "$j"
+}
+# Ao vivo: grava as chaves nas áreas de trabalho que estão com o FUI (o plugin lê a configuração na hora:
+# sem reiniciar o plasmashell). Sem plasmashell, nada (o próximo "on" grava pelo wallpapers_set).
+papel_fui_ao_vivo() {
+  qdbus6 org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 || return 0
+  qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
+    var c = $(papel_fui_chaves), ds = desktops(), n = 0;
+    for (var i = 0; i < ds.length; i++) { var d = ds[i]; if (d.wallpaperPlugin != 'org.cyberkde.fui') continue;
+      d.currentConfigGroup = ['Wallpaper', 'org.cyberkde.fui', 'General'];
+      for (var k in c) d.writeConfig(k, c[k]);
+      d.reloadConfig(); n++; }
+    print(n);" 2>/dev/null
+}
+
+# Quadro estático da corporação, em cache (refeito quando o gerador, a cena, as cores ou os logos mudam).
+# Renderiza num Xvfb (nada aparece na sessão); o QT_QPA_PLATFORM=xcb é obrigatório: na sessão Wayland o
+# Qt ignoraria o DISPLAY do Xvfb e abriria a janela na tela da pessoa. Sem Xvfb, usa a sessão (o
+# gerador abre uma janela fora da vista, que fecha sozinha).
+papel_fui_estatico() {  # id -> caminho do PNG
+  local id=$1 out="$project/modules/papeis-de-parede/build/fui/$1.png" gen="$papel_fui_src/gen_fui.py" f velho=0
+  if [[ -f $out ]]; then
+    for f in "$gen" "$papel_fui_src/$papel_fui_plugin/contents/ui/Cena.qml" "$project/tokens/corporacoes.json" \
+      "$project/assets/corporacoes/$id-logo.svg" "$project/assets/corporacoes/$id.svg"; do
+      [[ -f $f && $f -nt $out ]] && velho=1
+    done
+  else
+    velho=1
+  fi
+  if (( velho )); then
+    mkdir -p -- "$(dirname -- "$out")"
+    if command -v xvfb-run >/dev/null; then
+      env -u WAYLAND_DISPLAY -u DISPLAY QT_QPA_PLATFORM=xcb \
+        xvfb-run -a -s "-screen 0 3840x2160x24 +extension GLX" python3 "$gen" estatico "$id" "$out.novo.png" >/dev/null || return 1
+    else
+      python3 "$gen" estatico "$id" "$out.novo.png" >/dev/null || return 1
+    fi
+    mv -f -- "$out.novo.png" "$out"
+  fi
+  printf '%s\n' "$out"
 }
 # Corporação atual ("cyberkde corp") quando ela tem papel próprio (logo vetorial em assets/corporacoes);
 # senão falha, e a opção corp cai na A.
@@ -44,6 +132,17 @@ papel_sufixo() { local o; o=$(papel_opcao); [[ $o == a ]] || printf -- '-%s' "$o
 papel_origem() {  # opção
   local o=$1 gen="$project/modules/papeis-de-parede/generator/gen_opcao.py" dir id
   if [[ $o == a ]]; then printf '%s\n' "$project/assets/wallpapers"; return 0; fi
+  if [[ $o == fui ]]; then
+    # Os três (desktop, lockscreen, login) são o mesmo quadro estático; a área de trabalho usa o plugin,
+    # o desktop.png é a reserva (e o que o login usa com fundo=papel).
+    local png
+    png=$(papel_fui_estatico "$(papel_fui_corp)") || { papel_origem a; return; }
+    dir="$project/modules/papeis-de-parede/build/fui/opcao"
+    mkdir -p -- "$dir"
+    for f in desktop lockscreen login; do ln -sfn -- "$png" "$dir/$f.png"; done
+    printf '%s\n' "$dir"
+    return 0
+  fi
   if [[ $o == corp ]]; then
     # Papel da corporação atual (gen_corp.py), em cache; refaz só quando a paleta, o logo ou o gerador mudam.
     id=$(papel_corp_id) || { papel_origem a; return; }
@@ -66,9 +165,11 @@ papel_instalado() { printf '%s/%s%s.png\n' "$(wallpapers_dir)" "$1" "$(papel_suf
 
 install_papeis-de-parede() {
   local opcao src f cru=0
+  install_papel_fui
   opcao=$(papel_opcao)
   src=$(papel_origem "$opcao") || return 1
   [[ $opcao == corp && $src == */build/corp/* ]] && cru=1  # já sai na paleta da corporação
+  [[ $opcao == fui && $src == */build/fui/* ]] && cru=1
   for f in desktop lockscreen login; do
     [[ -f $src/$f.png ]] || { bash "$project/modules/papeis-de-parede/generator/gen_wallpapers.sh" >/dev/null; break; }
   done
@@ -104,7 +205,7 @@ papel_limpar() {
   dir=$(wallpapers_dir)
   for f in desktop lockscreen login; do
     keep=$f$(papel_sufixo).png
-    find "$dir" -maxdepth 1 \( -name "$f.png" -o -name "$f-[bcd].png" -o -name "$f-corp.png" \) 2>/dev/null | while IFS= read -r p; do
+    find "$dir" -maxdepth 1 \( -name "$f.png" -o -name "$f-[bcd].png" -o -name "$f-corp.png" -o -name "$f-fui.png" \) 2>/dev/null | while IFS= read -r p; do
       [[ $(basename -- "$p") == "$keep" ]] || rm -f -- "$p"
     done
   done
@@ -149,6 +250,7 @@ wallpapers_set() {
       js+="apply(\"$(wallpapers_js "$id")\", ${screen:--1}, \"$(wallpapers_js "$wp")\", \"$(wallpapers_js "$img")\");"
     done
     qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
+      var fuiChaves = $(papel_fui_chaves 2>/dev/null || echo '{}');
       function apply(id, screen, plugin, image) {
         var all = desktops(), hit = [];
         for (var i = 0; i < all.length; i++)
@@ -158,8 +260,15 @@ wallpapers_set() {
         for (var k = 0; k < hit.length; k++) {
           var d = hit[k];
           d.wallpaperPlugin = plugin;
-          d.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
-          d.writeConfig('Image', image);
+          if (plugin === 'org.cyberkde.fui') {
+            // papel animado: a imagem vem como corp:<id>
+            d.currentConfigGroup = ['Wallpaper', 'org.cyberkde.fui', 'General'];
+            d.writeConfig('Corporacao', image.replace(/^corp:/, ''));
+            for (var ch in fuiChaves) d.writeConfig(ch, fuiChaves[ch]);
+          } else {
+            d.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
+            d.writeConfig('Image', image);
+          }
           d.reloadConfig();
         }
       }
@@ -169,8 +278,13 @@ wallpapers_set() {
       IFS=$'\t' read -r id screen wp img <<<"$line"
       [[ $id != '*' ]] || continue  # "todas" só pelo script; sem Plasma rodando, só a volta por ID
       kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --key wallpaperplugin "$wp"
-      kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --group Wallpaper \
-        --group org.kde.image --group General --key Image "$img"
+      if [[ $wp == "$papel_fui_plugin" ]]; then
+        kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --group Wallpaper \
+          --group "$papel_fui_plugin" --group General --key Corporacao "${img#corp:}"
+      else
+        kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --group Wallpaper \
+          --group org.kde.image --group General --key Image "$img"
+      fi
     done
   else
     echo "papeis-de-parede: o plasmashell não respondeu; área de trabalho não alterada." >&2
@@ -181,6 +295,8 @@ wallpapers_set() {
 # Imagem própria escolhida com "cyberkde papel /caminho/imagem" (gravada em ~/.config/cyberkde/
 # papel-de-parede); CYBERKDE_WALLPAPER=/caminho/imagem vale por cima, só naquela execução.
 wallpapers_own() {
+  # Com o FUI escolhido, a imagem própria fica guardada (volta com outra opção), mas não vale.
+  [[ $(papel_opcao) != fui ]] || return 0
   local own=${CYBERKDE_WALLPAPER:-}
   if [[ -z $own && -s $config/cyberkde/papel-de-parede ]]; then own=$(<"$config/cyberkde/papel-de-parede"); fi
   printf '%s\n' "$own"
@@ -201,7 +317,11 @@ wallpapers_image() {  # desktop|lockscreen
 papel_aplicar() {
   # Área de trabalho (todas as telas): registra o original e troca.
   wallpapers_save
-  printf '*\t-1\torg.kde.image\tfile://%s\n' "$(wallpapers_image desktop)" | wallpapers_set
+  if [[ $(papel_opcao) == fui && -d $data/plasma/wallpapers/$papel_fui_plugin ]]; then
+    printf '*\t-1\t%s\tcorp:%s\n' "$papel_fui_plugin" "$(papel_fui_corp)" | wallpapers_set
+  else
+    printf '*\t-1\torg.kde.image\tfile://%s\n' "$(wallpapers_image desktop)" | wallpapers_set
+  fi
 
   # Tela de bloqueio: kscreenlockerrc [Greeter] e [Greeter][Wallpaper][org.kde.image][General].
   set_key kscreenlockerrc Greeter WallpaperPlugin org.kde.image
@@ -244,6 +364,7 @@ papel_nome() {  # id pt|en
     cpt) echo "C · Cidade" ;; cen) echo "C · City" ;;
     dpt) echo "D · Painéis" ;; den) echo "D · Panels" ;;
     corppt) echo "Corporação (a atual)" ;; corpen) echo "Corporation (the current one)" ;;
+    fuipt) echo "FUI animado (a corporação atual)" ;; fuien) echo "Animated FUI (the current corporation)" ;;
   esac
 }
 papel_previa() {  # id -> caminho absoluto da prévia, ou nada
@@ -251,6 +372,8 @@ papel_previa() {  # id -> caminho absoluto da prévia, ou nada
   if [[ $1 == corp ]]; then
     cid=$(papel_corp_id) || return 0
     f="$project/assets/previas/papel/corp-$cid.webp"
+  elif [[ $1 == fui ]]; then
+    f="$project/assets/previas/papel/fui-$(papel_fui_corp).webp"
   fi
   if [[ -f $f ]]; then printf '%s\n' "$f"; fi
 }
@@ -267,35 +390,68 @@ efeito_estado_papel() {
   [[ -n $(wallpapers_own) ]] && propria=true
   local cid=""
   cid=$(papel_corp_id 2>/dev/null) || cid=""
-  printf '{"opcao":"%s","corp":%s,"ligado":%s,"imagemPropria":%s,"ligarCom":"cyberkde on papeis-de-parede","desligarCom":"cyberkde off papeis-de-parede"}' \
-    "$(papel_opcao)" "$(json_caminho "$cid")" "$ligado" "$propria"
+  printf '{"opcao":"%s","corp":%s,"ligado":%s,"imagemPropria":%s,"fui":%s,"ligarCom":"cyberkde on papeis-de-parede","desligarCom":"cyberkde off papeis-de-parede"}' \
+    "$(papel_opcao)" "$(json_caminho "$cid")" "$ligado" "$propria" "$(papel_fui_json)"
 }
 
 efeito_json_papel() {
   local o valores=""
-  for o in a b c d corp; do
+  for o in a b c d corp fui; do
     valores+="${valores:+,}{\"id\":\"$o\",\"nome\":$(json_str "$(papel_nome "$o" pt)"),\"nome_en\":$(json_str "$(papel_nome "$o" en)"),\"previa\":$(json_caminho "$(papel_previa "$o")")}"
   done
   printf '{"id":"papel","nome":%s,"nome_en":%s,"descricao":%s,"descricao_en":%s,"tipo":"variante","opcoes":[{"id":"opcao","nome":"Opção","nome_en":"Option","tipo":"variante","padrao":"a","valores":[%s]}],"estado":%s}' \
     "$(json_str "Papel de parede")" "$(json_str "Wallpaper")" \
-    "$(json_str "Quatro papéis de parede do tema para a área de trabalho, o bloqueio e o login, todos na cor de destaque. Vale na hora com a fase papeis-de-parede ligada.")" \
-    "$(json_str "Four theme wallpapers for the desktop, the lock screen and the login, all in the accent color. Applies right away while the wallpaper part is on.")" \
+    "$(json_str "Papéis de parede do tema para a área de trabalho, o bloqueio e o login, na cor de destaque; o FUI é animado na área de trabalho (estático no bloqueio e no login) e segue a corporação. Vale na hora com a fase papeis-de-parede ligada.")" \
+    "$(json_str "Theme wallpapers for the desktop, the lock screen and the login, in the accent color; FUI is animated on the desktop (still on the lock screen and login) and follows the corporation. Applies right away while the wallpaper part is on.")" \
     "$valores" "$(efeito_estado_papel)"
 }
 
-#   cyberkde efeito papel [a|b|c|d|corp|padrao] [--json]   (sem opção: só lê)
+#   cyberkde efeito papel [a|b|c|d|corp|fui|padrao] [--json]   (sem opção: só lê)
+#   cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off]
+#                             [--textos on|off] [--pausar on|off] [--json]
+#   Os controles do FUI valem ao vivo nas telas com ele; com o FUI já escolhido, mudar só os controles
+#   não reaplica o papel (nem o bloqueio e o login).
 #   --json: {"efeito":"papel",<estado>,"avisos":[...]}. Saída: 0 · 1 falha · 2 uso · 3 ocupado
 efeito_cmd_papel() {
-  local opcao="" arg
-  for arg in "$@"; do
+  local opcao="" arg v
+  local -A fui=()
+  while (( $# )); do
+    arg=$1; shift
     case $arg in
-      a | b | c | d | corp) [[ -z $opcao ]] && opcao=$arg || opcao=invalida ;;
+      a | b | c | d | corp | fui) [[ -z $opcao ]] && opcao=$arg || opcao=invalida ;;
       padrao) [[ -z $opcao ]] && opcao=a || opcao=invalida ;;
+      --intensidade | --velocidade | --fps)
+        v=${1:-}; shift || true; v=${v%\%}
+        if [[ $v =~ ^[0-9]{1,3}$ ]]; then v=$((10#$v)); else opcao=invalida; continue; fi
+        case $arg in
+          --intensidade) (( v >= 30 && v <= 200 )) || opcao=invalida ;;
+          --velocidade) (( v >= 25 && v <= 300 )) || opcao=invalida ;;
+          --fps) (( v == 30 || v == 60 )) || opcao=invalida ;;
+        esac
+        fui[${arg#--}]=$v ;;
+      --logo | --textos | --pausar)
+        case ${1:-} in on | true) fui[${arg#--}]=true ;; off | false) fui[${arg#--}]=false ;; *) opcao=invalida ;; esac
+        shift || true ;;
       *) opcao=invalida ;;
     esac
   done
-  [[ $opcao != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito papel [a|b|c|d|corp|padrao] [--json]" "usage: cyberkde efeito papel [a|b|c|d|corp|padrao] [--json]")"
+  # Os controles são do FUI: com outra opção na mesma chamada (ou escolhida antes, sem "fui"), não valem.
+  if (( ${#fui[@]} )) && [[ $opcao != invalida ]]; then
+    [[ ${opcao:-$(papel_opcao)} == fui ]] || opcao=invalida
+  fi
+  [[ $opcao != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito papel [a|b|c|d|corp|fui|padrao] [--json]; o FUI: cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off] [--textos on|off] [--pausar on|off]" "usage: cyberkde efeito papel [a|b|c|d|corp|fui|padrao] [--json]; FUI: cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off] [--textos on|off] [--pausar on|off]")"
   local -a avisos=()
+  if (( ${#fui[@]} )); then
+    take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
+    mkdir -p -- "$config/cyberkde"
+    local k
+    for k in "${!fui[@]}"; do kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel-fui --key "$k" "${fui[$k]}"; done
+    # Já no FUI: só os controles, ao vivo (sem reaplicar papel, bloqueio e login).
+    if [[ $(papel_opcao) == fui ]] && fase_ligada papeis-de-parede; then
+      [[ $(papel_fui_ao_vivo) =~ ^[1-9] ]] || avisos+=("$(t "Nenhuma tela está com o FUI agora: os controles foram guardados e valem quando ele for aplicado." "No screen is showing FUI right now: the controls were saved and apply when it is applied.")")
+      [[ $opcao == fui ]] && opcao=""
+    fi
+  fi
   if [[ -n $opcao ]]; then
     take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
     mkdir -p -- "$config/cyberkde"
@@ -327,7 +483,7 @@ efeito_cmd_papel() {
 # Para o DATA: chamar depois de trocar a corporação ("cyberkde corp") ou a cor, para o papel "corp" seguir a
 # corporação nova. Não faz nada se a opção escolhida não é corp ou se a fase está desligada.
 papel_corp_seguir() {
-  [[ $(papel_opcao) == corp ]] || return 0
+  [[ $(papel_opcao) == corp || $(papel_opcao) == fui ]] || return 0  # o FUI troca a Corporacao e o estático
   fase_ligada papeis-de-parede || return 0
   (fase_atual=papeis-de-parede; efeito_papel_aplicar)
 }

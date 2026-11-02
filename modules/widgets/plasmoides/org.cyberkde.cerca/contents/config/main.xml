@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- último preset de tamanho: "pequeno", "medio" ou "grande" (o tamanho real é a geometria do applet) -->
+    <entry name="modo" type="String"><default>medio</default></entry>
+    <!-- interno: o preset de "modo" já foi aplicado uma vez -->
+    <entry name="ajustado" type="Bool"><default>false</default></entry>
+    <!-- opacidade da superfície, em % -->
+    <entry name="opacidade" type="Int"><default>85</default><min>60</min><max>100</max></entry>
+
+    <!-- a pasta da cerca: caminho, ~/… ou file:///…; vazio = Downloads. desktop:/ vira a pasta da área de trabalho -->
+    <entry name="url" type="String"><default></default></entry>
+    <!-- título; vazio = o nome da pasta -->
+    <entry name="titulo" type="String"><default></default></entry>
+    <!-- ao soltar arquivos: "mover" (direto; Ctrl copia) ou "perguntar" (o menu da KDE) -->
+    <entry name="soltar" type="String"><default>mover</default></entry>
+    <!-- onde nascem as pastas das cercas novas; vazio = Documentos/Cercas -->
+    <entry name="base" type="String"><default></default></entry>
+    <!-- "pasta" mostra uma pasta real; "lista" guarda atalhos e arquivos avulsos (links) em pastaLista -->
+    <entry name="tipoCerca" type="String"><default>pasta</default></entry>
+    <entry name="pastaLista" type="String"><default></default></entry>
+    <!-- abas: outras pastas, separadas por ";" (a primeira aba é a pasta da cerca) -->
+    <entry name="abas" type="String"><default></default></entry>
+    <entry name="abaAtual" type="Int"><default>0</default></entry>
+    <!-- papel da Paleta: destaque, secundaria ou alerta -->
+    <entry name="cor" type="String"><default>destaque</default></entry>
+    <!-- ao ocultar e exibir; vale para todas as cercas (ver "animacao." no main.qml) -->
+    <entry name="animacao" type="String"><default>tracado</default></entry>
+    <!-- dos ícones, ao exibir, abrir e entrar em pasta ou aba; vale para todas (ver "animicones." no main.qml) -->
+    <entry name="animacaoIcones" type="String"><default>explosao</default></entry>
+    <!-- desfoca o papel de parede atrás da cerca -->
+    <entry name="blur" type="Bool"><default>false</default></entry>
+    <!-- esta cerca não some ao ocultar todas -->
+    <entry name="quickhideExcluir" type="Bool"><default>false</default></entry>
+    <!-- todos, imagens, documentos, audio, video ou pastas -->
+    <entry name="filtroTipo" type="String"><default>todos</default></entry>
+    <!-- "grade" (ícones) ou "compacta" (lista: ícone pequeno e nome ao lado) -->
+    <entry name="densidade" type="String"><default>grade</default></entry>
+    <!-- grade, dados (uma linha por item, com tipo e tamanho) ou inventario (células, com o item no rodapé) -->
+    <entry name="layout" type="String"><default>grade</default></entry>
+    <!-- abrir itens: "sistema" (o padrão do KDE), "um" clique ou "dois" -->
+    <entry name="cliques" type="String"><default>sistema</default></entry>
+    <!-- duplo clique na mesa vazia oculta e exibe as cercas -->
+    <entry name="gestoOcultar" type="Bool"><default>true</default></entry>
+    <!-- a cerca acabou de ser criada: nasce com o título em edição e sem pasta; limpa ao confirmar -->
+    <entry name="novaCerca" type="Bool"><default>false</default></entry>
+    <!-- recolher: estado e altura aberta, separados (a geometria guardada pelo Plasma é a de agora) -->
+    <entry name="IsRolled" type="Bool"><default>false</default></entry>
+    <entry name="UnrolledHeight" type="Int"><default>0</default></entry>
+    <!-- y da cerca recolhida: ao restaurar, o Plasma impõe a altura mínima e pode empurrá-la -->
+    <entry name="RolledY" type="Int"><default>-1</default></entry>
+    <!-- gatilho: "ctrl" (Ctrl+clique no título), "clique" (clique simples) ou "sair" (recolhe ao sair o mouse e
+         abre ao passar pelo título; Ctrl+clique continua valendo) -->
+    <entry name="gatilho" type="String"><default>ctrl</default></entry>
+
+    <!-- as chaves abaixo são as que o FolderView da KDE lê (mesmos nomes e padrões do Folder View) -->
+    <entry name="iconSize" type="Int"><default>2</default></entry>
+    <entry name="labelWidth" type="Int"><default>1</default></entry>
+    <entry name="textLines" type="Int"><default>2</default></entry>
+    <entry name="previews" type="Bool"><default>true</default></entry>
+    <entry name="previewPlugins" type="StringList"><default></default></entry>
+    <entry name="sortMode" type="Int"><default>1</default></entry>
+    <entry name="sortDesc" type="Bool"><default>false</default></entry>
+    <entry name="sortDirsFirst" type="Bool"><default>true</default></entry>
+    <entry name="arrangement" type="Int"><default>0</default></entry>
+    <entry name="alignment" type="Int"><default>0</default></entry>
+    <entry name="locked" type="Bool"><default>false</default></entry>
+    <entry name="toolTips" type="Bool"><default>false</default></entry>
+    <entry name="selectionMarkers" type="Bool"><default>true</default></entry>
+    <entry name="renameInline" type="Bool"><default>true</default></entry>
+    <entry name="popups" type="Bool"><default>false</default></entry>
+    <entry name="viewMode" type="Int"><default>1</default></entry>
+    <entry name="filterMode" type="Int"><default>0</default></entry>
+    <entry name="filterPattern" type="String"><default>*</default></entry>
+    <entry name="filterMimeTypes" type="StringList"><default></default></entry>
+    <entry name="showHiddenFiles" type="Bool"><default>false</default></entry>
+  </group>
+</kcfg>

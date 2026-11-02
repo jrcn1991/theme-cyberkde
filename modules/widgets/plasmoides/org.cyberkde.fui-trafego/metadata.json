@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-trafego",
+        "Name": "CyberKDE · FUI Tráfego",
+        "Name[pt_BR]": "CyberKDE · FUI Tráfego",
+        "Name[en]": "CyberKDE · FUI Traffic",
+        "Description": "Tráfego de rede dos últimos 26 s, com descida e subida.",
+        "Description[pt_BR]": "Tráfego de rede dos últimos 26 s, com descida e subida.",
+        "Description[en]": "Network traffic for the last 26 s, with download and upload.",
+        "Icon": "network-wired",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Tráfego",
+        "nome_en": "FUI · Traffic",
+        "descricao": "Tráfego de rede dos últimos 26 s, com descida e subida. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "Network traffic for the last 26 s, with download and upload. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            256,
+            320
+        ],
+        "ordem": 208
+    }
+}

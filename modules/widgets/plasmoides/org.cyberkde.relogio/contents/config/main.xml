@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="modo" type="String"><default>pequeno</default></entry>
+    <entry name="opacidade" type="Int"><default>95</default><min>30</min><max>100</max></entry>
+    <entry name="ajustado" type="Bool"><default>false</default></entry>
+    <!-- formato da hora: "auto" (o do idioma), "24" ou "12" -->
+    <entry name="formato" type="String"><default>auto</default></entry>
+    <entry name="mostrarSegundos" type="Bool"><default>true</default></entry>
+    <!-- segundo fuso: nome IANA (ex.: "America/New_York"); vazio = desligado. rotulo2 vazio = a cidade do fuso -->
+    <entry name="fuso2" type="String"><default></default></entry>
+    <entry name="rotulo2" type="String"><default></default></entry>
+    <!-- plugins de eventos do calendário do Plasma: pimevents (agenda do KDE), holidaysevents, astronomicalevents -->
+    <entry name="pluginsEventos" type="StringList"><default>pimevents</default></entry>
+  </group>
+</kcfg>

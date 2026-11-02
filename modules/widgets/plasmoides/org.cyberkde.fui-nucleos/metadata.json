@@ -1,0 +1,51 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-nucleos",
+        "Name": "CyberKDE · FUI Núcleos",
+        "Name[pt_BR]": "CyberKDE · FUI Núcleos",
+        "Name[en]": "CyberKDE · FUI Cores",
+        "Description": "A CPU em 6 grupos de núcleos, com o % de cada um; o mais carregado fica destacado.",
+        "Description[pt_BR]": "A CPU em 6 grupos de núcleos, com o % de cada um; o mais carregado fica destacado.",
+        "Description[en]": "The CPU in 6 groups of cores, with each one's %; the busiest is highlighted.",
+        "Icon": "cpu",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Núcleos",
+        "nome_en": "FUI · Cores",
+        "descricao": "A CPU em 6 grupos de núcleos, com o % de cada um; o mais carregado fica destacado. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "The CPU in 6 groups of cores, with each one's %; the busiest is highlighted. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            624,
+            320
+        ],
+        "ordem": 201,
+        "opcoes": [
+            {
+                "id": "limiar",
+                "chave": "limiar",
+                "tipo": "inteiro",
+                "min": 50,
+                "max": 99,
+                "padrao": 85,
+                "unidade": "%",
+                "nome": "Alerta acima de",
+                "nome_en": "Alert above"
+            }
+        ]
+    }
+}

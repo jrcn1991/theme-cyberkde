@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-sistema",
+        "Name": "CyberKDE · FUI Sistema",
+        "Name[pt_BR]": "CyberKDE · FUI Sistema",
+        "Name[en]": "CyberKDE · FUI System",
+        "Description": "Ligado há, carga média, atualizações, Docker, falhas e baterias de periféricos.",
+        "Description[pt_BR]": "Ligado há, carga média, atualizações, Docker, falhas e baterias de periféricos.",
+        "Description[en]": "Uptime, load average, updates, Docker, failed units and peripheral batteries.",
+        "Icon": "computer",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Sistema",
+        "nome_en": "FUI · System",
+        "descricao": "Ligado há, carga média, atualizações, Docker, falhas e baterias de periféricos. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "Uptime, load average, updates, Docker, failed units and peripheral batteries. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            368,
+            320
+        ],
+        "ordem": 211
+    }
+}

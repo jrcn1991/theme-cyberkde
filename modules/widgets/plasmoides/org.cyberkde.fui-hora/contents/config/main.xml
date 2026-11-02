@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- último preset de tamanho: "pequeno" (cartão), "medio" (650×550) ou "grande" (866×732, a referência) -->
+    <entry name="modo" type="String"><default>grande</default></entry>
+    <!-- interno: o preset de "modo" já foi aplicado uma vez -->
+    <entry name="ajustado" type="Bool"><default>false</default></entry>
+    <!-- opacidade do fundo atrás da grade, em % (0 = só as linhas, como na referência) -->
+    <entry name="opacidade" type="Int"><default>55</default><min>0</min><max>100</max></entry>
+    <!-- módulos escondidos, ids separados por vírgula: bandas, log, canais, cpu, estados, processos, anel,
+         discos, relogio, clima, memoria, sinal, ruido, rede, es -->
+    <entry name="ocultos" type="String"><default></default></entry>
+    <!-- módulos escondidos pelo "cyberkde efeito widget-layout fui" (repetem um widget ao lado); o "livre" esvazia -->
+    <entry name="ocultosLayout" type="String"><default></default></entry>
+    <!-- módulo da faixa 1 ao lado dos núcleos: "log" (journal) ou "sistema" (uptime, carga, atualizações, Docker) -->
+    <entry name="slot2" type="String"><default>log</default></entry>
+    <!-- alerta acima disto (CPU, memória, discos, processos), em % -->
+    <entry name="limiar" type="Int"><default>85</default><min>50</min><max>99</max></entry>
+    <!-- leitura dos sensores de CPU, em ms -->
+    <entry name="intervalo" type="Int"><default>1500</default><min>500</min><max>10000</max></entry>
+    <!-- log do sistema: prioridade mínima do journal do usuário (err, warning, notice, info) -->
+    <entry name="logNivel" type="String"><default>warning</default></entry>
+    <!-- rede: alvos PÚBLICOS do ping (o gateway entra sozinho; endereço privado é recusado) -->
+    <entry name="alvos" type="String"><default>1.1.1.1, 9.9.9.9</default></entry>
+    <!-- intervalo entre sondagens da rede, em segundos -->
+    <entry name="pingSeg" type="Int"><default>60</default><min>15</min><max>600</max></entry>
+    <!-- glitch periódico, em minutos (0 = só na hora cheia) -->
+    <entry name="glitchMin" type="Int"><default>0</default><min>0</min><max>120</max></entry>
+    <!-- clima: as mesmas chaves do widget de clima (cidade só pelo nome: o widget resolve as coordenadas) -->
+    <entry name="cidade" type="String"><default></default></entry>
+    <entry name="cidadeResolvida" type="String"><default>São Paulo</default></entry>
+    <entry name="latitude" type="Double"><default>-23.5475</default></entry>
+    <entry name="longitude" type="Double"><default>-46.63611</default></entry>
+    <!-- logo do canto (caminho de imagem; vazio = o emblema da referência com o nome da corporação) -->
+    <entry name="logo" type="String"><default></default></entry>
+  </group>
+</kcfg>

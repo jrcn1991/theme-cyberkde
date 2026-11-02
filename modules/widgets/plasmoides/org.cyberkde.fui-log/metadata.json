@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-log",
+        "Name": "CyberKDE · FUI Log",
+        "Name[pt_BR]": "CyberKDE · FUI Log",
+        "Name[en]": "CyberKDE · FUI Log",
+        "Description": "Os últimos eventos do journal do seu usuário.",
+        "Description[pt_BR]": "Os últimos eventos do journal do seu usuário.",
+        "Description[en]": "The latest events from your user journal.",
+        "Icon": "view-history",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Log",
+        "nome_en": "FUI · Log",
+        "descricao": "Os últimos eventos do journal do seu usuário. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "The latest events from your user journal. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            432,
+            320
+        ],
+        "ordem": 210
+    }
+}

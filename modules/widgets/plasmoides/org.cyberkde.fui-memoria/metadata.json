@@ -1,0 +1,51 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-memoria",
+        "Name": "CyberKDE · FUI Memória",
+        "Name[pt_BR]": "CyberKDE · FUI Memória",
+        "Name[en]": "CyberKDE · FUI Memory",
+        "Description": "RAM e swap usadas, em barra hachurada, com os valores e o total.",
+        "Description[pt_BR]": "RAM e swap usadas, em barra hachurada, com os valores e o total.",
+        "Description[en]": "RAM and swap in use, in a hatched bar, with the values and the total.",
+        "Icon": "memory",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Memória",
+        "nome_en": "FUI · Memory",
+        "descricao": "RAM e swap usadas, em barra hachurada, com os valores e o total. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "RAM and swap in use, in a hatched bar, with the values and the total. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            496,
+            320
+        ],
+        "ordem": 203,
+        "opcoes": [
+            {
+                "id": "limiar",
+                "chave": "limiar",
+                "tipo": "inteiro",
+                "min": 50,
+                "max": 99,
+                "padrao": 85,
+                "unidade": "%",
+                "nome": "Alerta acima de",
+                "nome_en": "Alert above"
+            }
+        ]
+    }
+}

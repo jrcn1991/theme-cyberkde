@@ -53,7 +53,7 @@ Item {
                 required property var modelData
                 required property int index
                 readonly property bool sel: n.atual === index
-                width: lista.width; height: 46
+                width: lista.width; height: n.height < 760 ? 38 : 46   // dez seções, sem invadir as preferências
                 activeFocusOnTab: true
                 Keys.onReturnPressed: n.escolher(index)
                 Keys.onSpacePressed: n.escolher(index)
@@ -84,7 +84,7 @@ Item {
                     x: 56; anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, item.width - x - 18)
                     elide: Text.ElideRight
-                    text: item.modelData.titulo
+                    text: item.modelData.curto || item.modelData.titulo     // "curto": nome do menu, quando o título não cabe
                     tamanho: 17
                     color: item.sel ? Tema.texto : (ma.containsMouse ? Tema.texto : Tema.texto2)
                     Behavior on color { ColorAnimation { duration: Tema.micro } }
@@ -96,7 +96,7 @@ Item {
                     visible: rot.x + rot.implicitWidth + 10 <= x
                     anchors.right: parent.right; anchors.rightMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
-                    tecla: "^" + (item.index + 1)
+                    tecla: "^" + ((item.index + 1) % 10)
                     cor: item.sel ? Tema.destaque : Tema.texto3
                     opacity: item.sel || ma.containsMouse ? 1 : 0.55
                 }

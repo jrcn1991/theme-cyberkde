@@ -1,0 +1,95 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.relogio",
+        "Name": "CyberKDE · Relógio",
+        "Name[pt_BR]": "CyberKDE · Relógio",
+        "Name[en]": "CyberKDE · Clock",
+        "Description": "Relógio HUD com data, segundo fuso, calendário do mês e próximos eventos",
+        "Description[pt_BR]": "Relógio HUD com data, segundo fuso, calendário do mês e próximos eventos",
+        "Description[en]": "HUD clock with date, second time zone, month calendar and upcoming events",
+        "Icon": "preferences-system-time",
+        "Category": "Date and Time",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Relógio",
+        "nome_en": "Clock",
+        "descricao": "Hora HUD com segundos e data, um segundo fuso, o calendário do mês e os próximos eventos da agenda.",
+        "descricao_en": "HUD time with seconds and date, a second time zone, the month calendar and upcoming calendar events.",
+        "tamanho": [
+            240,
+            96
+        ],
+        "ordem": 10,
+        "opcoes": [
+            {
+                "id": "fuso2",
+                "chave": "fuso2",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Segundo fuso",
+                "nome_en": "Second time zone",
+                "dica": "Nome do fuso (ex.: Asia/Tokyo, America/New_York); vazio desliga",
+                "dica_en": "Time zone name (e.g. Asia/Tokyo, America/New_York); empty turns it off"
+            },
+            {
+                "id": "formato",
+                "chave": "formato",
+                "tipo": "escolha",
+                "padrao": "auto",
+                "nome": "Formato da hora",
+                "nome_en": "Time format",
+                "valores": [
+                    {
+                        "id": "auto",
+                        "nome": "Do idioma",
+                        "nome_en": "From the language"
+                    },
+                    {
+                        "id": "24",
+                        "nome": "24 h",
+                        "nome_en": "24 h"
+                    },
+                    {
+                        "id": "12",
+                        "nome": "12 h",
+                        "nome_en": "12 h"
+                    }
+                ]
+            },
+            {
+                "id": "segundos",
+                "chave": "mostrarSegundos",
+                "tipo": "escolha",
+                "padrao": "true",
+                "nome": "Segundos",
+                "nome_en": "Seconds",
+                "valores": [
+                    {
+                        "id": "true",
+                        "nome": "Mostrar",
+                        "nome_en": "Show"
+                    },
+                    {
+                        "id": "false",
+                        "nome": "Esconder",
+                        "nome_en": "Hide"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="modo" type="String"><default>pequeno</default></entry>
+    <entry name="opacidade" type="Int"><default>95</default><min>30</min><max>100</max></entry>
+    <entry name="ajustado" type="Bool"><default>false</default></entry>
+    <!-- feeds RSS/Atom: endereços separados por espaço, quebra de linha ou | (a mesma chave do CLI) -->
+    <entry name="feeds" type="String"><default>https://g1.globo.com/rss/g1/tecnologia/ https://tecnoblog.net/feed/ https://feeds.arstechnica.com/arstechnica/index</default></entry>
+    <!-- minutos entre as leituras dos feeds -->
+    <entry name="intervaloMin" type="Int"><default>30</default><min>5</min><max>240</max></entry>
+    <!-- interno: notícias lidas (JSON com os endereços das notícias; guarda as 400 últimas) -->
+    <entry name="lidas" type="String"><default>[]</default></entry>
+  </group>
+</kcfg>

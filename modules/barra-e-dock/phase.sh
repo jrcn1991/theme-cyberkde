@@ -492,11 +492,65 @@ phase_barra-e-dock() {
 latte_religar=""
 pre_off_barra-e-dock() {
   [[ -e $latte_iniciado || -e $appletsrc_orig ]] || return 0
+  # Os widgets do tema ficam (o off devolve só os painéis), mas a configuração deles é copiada antes, e
+  # um que suma no caminho conta como remoção do tema (volta no próximo on, com os dados).
+  if declare -F widgets_salvar_todos >/dev/null; then widgets_salvar_todos || true; fi
   if [[ -n $(latte_pids) ]]; then
     [[ -e $latte_iniciado ]] || latte_religar=1
     latte_stop
   fi
   rm -f -- "$latte_iniciado"
+}
+
+# Devolve os PAINÉIS do appletsrc guardado e mantém as áreas de trabalho como estão agora: a cópia é
+# de antes dos widgets (os do tema e os da pessoa) e de qualquer outra mudança na mesa. Uma área de
+# trabalho é uma contenção sem formfactor de painel (2 horizontal, 3 vertical) que não é a bandeja de
+# um painel; ela vem do atual com todos os subgrupos (applets, papel de parede). O resto (painéis,
+# bandejas, ScreenMapping) vem do guardado. Escreve em "destino".
+appletsrc_mesclar() {  # guardado atual destino
+  python3 - "$@" <<'PY'
+import re, sys
+orig, atual, dest = sys.argv[1:4]
+def ler(f):
+    """[(cabeçalho, [linhas])] na ordem do arquivo (KConfig: grupos aninhados como [A][B][C])."""
+    grupos, cab, linhas = [], None, []
+    try:
+        texto = open(f, encoding="utf-8", errors="surrogateescape").read().splitlines()
+    except OSError:
+        texto = []
+    for l in texto:
+        if l.startswith("[") and l.rstrip().endswith("]"):
+            grupos.append((cab, linhas)); cab, linhas = l.rstrip(), []
+        else:
+            linhas.append(l)
+    grupos.append((cab, linhas))
+    return grupos
+def contencao(cab):
+    m = re.match(r"^\[Containments\]\[(\d+)\]", cab or "")
+    return m.group(1) if m else None
+def mesas(grupos):
+    chaves = {}
+    for cab, linhas in grupos:
+        c = contencao(cab)
+        if c and cab == "[Containments][%s]" % c:
+            chaves[c] = dict(l.split("=", 1) for l in linhas if "=" in l)
+    return {c for c, k in chaves.items()
+            if k.get("formfactor", "0") not in ("2", "3") and "systemtray" not in k.get("plugin", "")
+            and k.get("plugin", "") != "org.kde.panel"}
+go, ga = ler(orig), ler(atual)
+m = mesas(ga)
+saida = []
+for cab, linhas in go:
+    if contencao(cab) in m:
+        continue
+    if cab is not None:
+        saida.append(cab)
+    saida.extend(linhas)
+for cab, linhas in ga:
+    if contencao(cab) in m:
+        saida.append(cab); saida.extend(linhas)
+open(dest, "w", encoding="utf-8", errors="surrogateescape").write("\n".join(saida).rstrip("\n") + "\n")
+PY
 }
 
 # O "off" já devolveu as configurações do Latte (put_file). Aqui: Latte da pessoa e painéis do Plasma.
@@ -506,7 +560,12 @@ off_barra-e-dock() {
   [[ -e $appletsrc_orig ]] || return 0
   # Com o plasmashell no ar, ele regravaria o arquivo ao sair. O "off" o reinicia logo depois.
   plasmashell_parar
-  if [[ -s $appletsrc_orig ]]; then
+  # Só os painéis voltam: as áreas de trabalho (widgets do tema e da pessoa, papel) ficam como estão.
+  # Antes a cópia inteira voltava, e com ela sumiam todos os widgets (inclusive num "efeito layout").
+  if [[ -s $appletsrc_orig && -s $appletsrc ]]; then
+    appletsrc_mesclar "$appletsrc_orig" "$appletsrc" "$appletsrc.cyberkde-novo" &&
+      mv -f -- "$appletsrc.cyberkde-novo" "$appletsrc"
+  elif [[ -s $appletsrc_orig ]]; then
     cp -a -- "$appletsrc_orig" "$appletsrc"
   else
     rm -f -- "$appletsrc"  # não havia painéis salvos: o Plasma recria o padrão

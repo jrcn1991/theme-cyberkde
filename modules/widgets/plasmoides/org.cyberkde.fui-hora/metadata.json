@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-hora",
+        "Name": "CyberKDE · FUI Hora",
+        "Name[pt_BR]": "CyberKDE · FUI Hora",
+        "Name[en]": "CyberKDE · FUI Time",
+        "Description": "A hora grande da referência, com o dia e o tempo ligado.",
+        "Description[pt_BR]": "A hora grande da referência, com o dia e o tempo ligado.",
+        "Description[en]": "The big reference clock, with the day and uptime.",
+        "Icon": "clock",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Hora",
+        "nome_en": "FUI · Time",
+        "descricao": "A hora grande da referência, com o dia e o tempo ligado. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "The big reference clock, with the day and uptime. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            624,
+            320
+        ],
+        "ordem": 212
+    }
+}

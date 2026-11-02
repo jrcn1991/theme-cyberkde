@@ -1,0 +1,51 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-sensores",
+        "Name": "CyberKDE · FUI Sensores",
+        "Name[pt_BR]": "CyberKDE · FUI Sensores",
+        "Name[en]": "CyberKDE · FUI Sensors",
+        "Description": "Oito medidores: temperatura da CPU e da GPU, uso da GPU, VRAM, RAM, swap, disco do sistema e rede.",
+        "Description[pt_BR]": "Oito medidores: temperatura da CPU e da GPU, uso da GPU, VRAM, RAM, swap, disco do sistema e rede.",
+        "Description[en]": "Eight gauges: CPU and GPU temperature, GPU load, VRAM, RAM, swap, system disk and network.",
+        "Icon": "temperature-normal",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Sensores",
+        "nome_en": "FUI · Sensors",
+        "descricao": "Oito medidores: temperatura da CPU e da GPU, uso da GPU, VRAM, RAM, swap, disco do sistema e rede. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "Eight gauges: CPU and GPU temperature, GPU load, VRAM, RAM, swap, system disk and network. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            480,
+            320
+        ],
+        "ordem": 202,
+        "opcoes": [
+            {
+                "id": "limiar",
+                "chave": "limiar",
+                "tipo": "inteiro",
+                "min": 50,
+                "max": 99,
+                "padrao": 85,
+                "unidade": "%",
+                "nome": "Alerta acima de",
+                "nome_en": "Alert above"
+            }
+        ]
+    }
+}

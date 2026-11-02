@@ -13,9 +13,10 @@ Secao {
     readonly property var grupos: painel.fxGrupos || []
     readonly property string q: consulta.trim() === "" ? "" : painel.normalizar(consulta.trim())
     readonly property var itens: {
-        if (q !== "") return efeitos.filter(e => e.id !== "movimento" && e.busca.indexOf(q) >= 0)
+        // os widgets da área de trabalho têm seção própria (WIDGETS)
+        if (q !== "") return efeitos.filter(e => e.id !== "movimento" && !e.widget && e.busca.indexOf(q) >= 0)
         if (grupo === "geral") return []
-        return efeitos.filter(e => e.grupo === grupo && e.id !== "movimento")
+        return efeitos.filter(e => e.grupo === grupo && e.id !== "movimento" && !e.widget)
     }
     readonly property var infoGrupo: grupos.find(g => g.id === grupo) || null
     readonly property var preset: efeitos.find(e => e.id === "estilo-preset") || null
@@ -116,6 +117,31 @@ Secao {
         }
     }
 
+    // ---- área de trabalho: os widgets (e o modo de edição) têm seção própria; daqui, um atalho
+    Bloco {
+        id: blocoWidgets
+        visible: s.q === "" && s.grupo === "area-de-trabalho"
+        width: s.corpo.width
+        titulo: Txt.t("secao.widgets").toUpperCase()
+        codigo: "DESK.MODULES // " + ("0" + (painel.widgets || []).filter(w => w.ligado).length).slice(-2) + "/" + ("0" + (painel.widgets || []).length).slice(-2)
+        Cascata { ativo: s.entrando && blocoWidgets.visible; ordem: 1; alvo: blocoWidgets }
+        Item {
+            width: parent.width; height: 34
+            Leitura {
+                width: parent.width - irW.width - 16
+                anchors.verticalCenter: parent.verticalCenter
+                tamanho: 12; color: Tema.texto2
+                text: Txt.t("wg.atalhoConfig")
+            }
+            Botao {
+                id: irW
+                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                text: Txt.t("wg.gerenciar"); tipo: "primario"; tamanho: 12
+                onClicado: s.app.irPara("widgets")
+            }
+        }
+    }
+
     // ---- efeitos do grupo (ou da busca), cada um pelo tipo
     Repeater {
         model: s.itens
@@ -126,7 +152,9 @@ Secao {
             width: s.corpo.width
             sourceComponent: modelData.especial === "janelas" ? compJanelas
                 : modelData.especial === "konsole-cascata" ? compCascata
-                : modelData.id === "estilo-preset" ? compPreset : compOpcao
+                : modelData.id === "estilo-preset" ? compPreset
+                : modelData.id === "datashard" ? compDatashard
+                : modelData.id === "papel" ? compPapel : compOpcao
             Component {
                 id: compOpcao
                 CartaoOpcao {
@@ -135,6 +163,48 @@ Secao {
                     dados: ld.modelData
                     numero: ld.index + 1
                     Cascata { ativo: s.entrando; ordem: 1 + ld.index; alvo: co }
+                }
+            }
+            // o DATASHARD tem seção própria (GERENCIADOR DE ARQUIVOS): aqui fica só o atalho
+            Component {
+                id: compDatashard
+                Bloco {
+                    id: bds
+                    width: ld.width
+                    titulo: "DATASHARD"
+                    codigo: "FILE.MANAGER // " + ((ld.modelData.estado || {}).ligado ? "DEFAULT" : "STANDBY")
+                    Cascata { ativo: s.entrando; ordem: 1 + ld.index; alvo: bds }
+                    Item {
+                        width: parent.width; height: 34
+                        Leitura {
+                            width: parent.width - irDs.width - 16
+                            anchors.verticalCenter: parent.verticalCenter
+                            tamanho: 12; color: Tema.texto2
+                            text: Txt.t("ds.atalhoConfig")
+                        }
+                        Botao {
+                            id: irDs
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            text: Txt.t("ds.irSecao"); tipo: "primario"; tamanho: 12
+                            onClicado: s.app.irPara("arquivos")
+                        }
+                    }
+                }
+            }
+            // o papel de parede tem seção própria (animado × estático): aqui fica só o atalho
+            Component {
+                id: compPapel
+                Bloco {
+                    id: bpp
+                    width: ld.width
+                    titulo: Txt.t("secao.papel").toUpperCase()
+                    codigo: "WALLPAPER // " + (((ld.modelData.estado || {}).opcao || "") === "fui" ? "ANIMATED" : "STATIC")
+                    Cascata { ativo: s.entrando; ordem: 1 + ld.index; alvo: bpp }
+                    Item {
+                        width: parent.width; height: 34
+                        Leitura { width: parent.width - irP.width - 16; anchors.verticalCenter: parent.verticalCenter; tamanho: 12; color: Tema.texto2; text: Txt.t("papel.atalhoConfig") }
+                        Botao { id: irP; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: Txt.t("papel.irSecao"); tipo: "primario"; tamanho: 12; onClicado: s.app.irPara("papel") }
+                    }
                 }
             }
             Component {

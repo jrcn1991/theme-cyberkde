@@ -1,0 +1,163 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.midia",
+        "Name": "CyberKDE · Mídia",
+        "Name[pt_BR]": "CyberKDE · Mídia",
+        "Name[en]": "CyberKDE · Media",
+        "Description": "Controle do Spotify (ou de qualquer player MPRIS) no visual do tema",
+        "Description[pt_BR]": "Controle do Spotify (ou de qualquer player MPRIS) no visual do tema",
+        "Description[en]": "Spotify (or any MPRIS player) controls in the theme style",
+        "Icon": "media-playback-start",
+        "Category": "Multimedia",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Mídia",
+        "nome_en": "Media",
+        "descricao": "O que está tocando (Spotify primeiro, ou qualquer player MPRIS), com capa, progresso e controles.",
+        "descricao_en": "What is playing (Spotify first, or any MPRIS player), with cover, progress and controls.",
+        "tamanho": [
+            304,
+            80
+        ],
+        "ordem": 40,
+        "opcoes": [
+            {
+                "id": "estilo",
+                "chave": "estilo",
+                "tipo": "escolha",
+                "padrao": "hud",
+                "valores": [
+                    {
+                        "id": "hud",
+                        "nome": "HUD",
+                        "nome_en": "HUD"
+                    },
+                    {
+                        "id": "jukebox",
+                        "nome": "Jukebox",
+                        "nome_en": "Jukebox"
+                    },
+                    {
+                        "id": "mini",
+                        "nome": "Jukebox mini",
+                        "nome_en": "Jukebox mini"
+                    },
+                    {
+                        "id": "eq",
+                        "nome": "Só equalizador",
+                        "nome_en": "Equalizer only"
+                    },
+                    {
+                        "id": "neon",
+                        "nome": "Rádio neon",
+                        "nome_en": "Neon radio"
+                    }
+                ],
+                "nome": "Estilo",
+                "nome_en": "Style",
+                "dica": "HUD, a tela grande do jukebox (EQ de 12 bandas, now playing, knob de volume), as telas pequenas, só o equalizador ou o rádio de néon",
+                "dica_en": "HUD, the jukebox big screen (12-band EQ, now playing, volume knob), the small screens, equalizer only or the neon radio"
+            },
+            {
+                "id": "espectroReal",
+                "chave": "espectroReal",
+                "tipo": "escolha",
+                "padrao": "false",
+                "valores": [
+                    {
+                        "id": "false",
+                        "nome": "Sintético",
+                        "nome_en": "Synthetic"
+                    },
+                    {
+                        "id": "true",
+                        "nome": "Real",
+                        "nome_en": "Real"
+                    }
+                ],
+                "nome": "Equalizador",
+                "nome_en": "Equalizer",
+                "dica": "Real: lê o som que está tocando (PipeWire + numpy) e gasta CPU; sintético: anima só tocando, sem ler o áudio",
+                "dica_en": "Real: reads what is playing (PipeWire + numpy) and uses CPU; synthetic: animates only while playing, without reading audio"
+            },
+            {
+                "id": "paletaJukebox",
+                "chave": "paletaJukebox",
+                "tipo": "escolha",
+                "padrao": "false",
+                "valores": [
+                    {
+                        "id": "false",
+                        "nome": "Da corporação",
+                        "nome_en": "Corporation"
+                    },
+                    {
+                        "id": "true",
+                        "nome": "Do jukebox",
+                        "nome_en": "Jukebox"
+                    }
+                ],
+                "nome": "Cores",
+                "nome_en": "Colors",
+                "dica": "Nos estilos novos: as cores da corporação ou o laranja e verde-água do jukebox do jogo",
+                "dica_en": "In the new styles: the corporation colors or the game jukebox orange and teal"
+            },
+            {
+                "id": "preferir",
+                "chave": "preferir",
+                "tipo": "texto",
+                "padrao": "spotify",
+                "nome": "Player preferido",
+                "nome_en": "Preferred player",
+                "dica": "Nome do player no MPRIS (spotify, vlc, elisa…); sem ele, o player ativo",
+                "dica_en": "Player name in MPRIS (spotify, vlc, elisa…); without it, the active player"
+            },
+            {
+                "id": "ignorarNavegadores",
+                "chave": "ignorarNavegadores",
+                "tipo": "escolha",
+                "padrao": "true",
+                "valores": [
+                    {
+                        "id": "true",
+                        "nome": "Ignorar",
+                        "nome_en": "Ignore"
+                    },
+                    {
+                        "id": "false",
+                        "nome": "Mostrar",
+                        "nome_en": "Show"
+                    }
+                ],
+                "nome": "Mídia dos navegadores",
+                "nome_en": "Browser media",
+                "dica": "Ignorar: só players de verdade (Spotify, VLC, Elisa…); aba tocando no navegador não aparece",
+                "dica_en": "Ignore: only real players (Spotify, VLC, Elisa…); a tab playing in the browser does not show"
+            },
+            {
+                "id": "ignorados",
+                "chave": "ignorados",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Players ignorados",
+                "nome_en": "Ignored players",
+                "dica": "Outros players a esconder, separados por vírgula (ex.: kdeconnect, mpv)",
+                "dica_en": "Other players to hide, separated by commas (e.g. kdeconnect, mpv)"
+            }
+        ]
+    }
+}

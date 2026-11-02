@@ -5,7 +5,10 @@ import QtQuick
 //   60–340      a moldura se traça a partir do canto, com quadrados piscando
 //   200–340     a superfície aparece
 //   300–440     o conteúdo acende com flicker de liga e desliga; a borda pisca; título decodifica
-// Esc ou clique fora cancelam. O conteúdo vai no corpo; os botões, em "acoes".
+// Esc ou clique fora cancelam (o Esc vale com o foco em qualquer lugar da caixa, inclusive num botão).
+// O conteúdo vai no corpo; os botões, em "acoes". focoInicial: "cancelar" (o primeiro botão; para ações
+// destrutivas) ou "principal" (o último); vazio = nenhum. tituloNatural: o título é um NOME (de arquivo,
+// por exemplo) e sai como está, na fonte do sistema, sem caixa alta nem decodificação.
 Item {
     id: m
     property string titulo: ""
@@ -13,6 +16,8 @@ Item {
     property color cor: Tema.destaque
     property real largura: 520
     property bool aberto: false
+    property string focoInicial: ""
+    property bool tituloNatural: false
     default property alias corpo: corpo.data
     property alias acoes: acoes.data
     signal cancelado()
@@ -27,6 +32,7 @@ Item {
     onAbertoChanged: {
         if (!aberto) return
         foco.forceActiveFocus()
+        if (focoInicial) focarDepois.restart()        // (no 1º quadro o modal ainda está invisível)
         montagem.stop()
         if (Tema.reduzir) { caixa.traco = 1; caixa.superficie = 1; caixa.acender = 1; caixa.realce = 0; return }
         caixa.traco = 0; caixa.superficie = 0; caixa.acender = 0; caixa.realce = 0
@@ -65,6 +71,12 @@ Item {
         }
     }
     function fechar() { aberto = false }
+    Timer { id: focarDepois; interval: 60; onTriggered: m._focarBotao() }
+    function _focarBotao() {
+        const bs = Array.prototype.filter.call(acoes.children, b => b.visible && b.activeFocusOnTab)
+        const b = focoInicial === "cancelar" ? bs[0] : bs[bs.length - 1]
+        if (b && m.aberto) b.forceActiveFocus()
+    }
 
     Rectangle { anchors.fill: parent; color: Tema.escurecer; opacity: 0.72 }
     MouseArea { anchors.fill: parent; onClicked: m.cancelado(); hoverEnabled: true; onWheel: (w) => w.accepted = true }
@@ -85,6 +97,8 @@ Item {
         property real acender: 1
         property real realce: 0
         MouseArea { anchors.fill: parent }   // não deixa o clique atravessar
+        // Esc com o foco num botão ou campo da caixa: o evento sobe até aqui
+        Keys.onEscapePressed: (e) => { if (m.aberto) { m.cancelado(); e.accepted = true } }
 
         Chanfro {
             anchors.fill: parent
@@ -112,7 +126,16 @@ Item {
                 Codigo { text: m.codigo; color: m.cor; anchors.verticalCenter: parent.verticalCenter }
                 Rectangle { width: 30; height: 1; color: Tema.alfa(m.cor, 0.5); anchors.verticalCenter: parent.verticalCenter }
             }
+            Text {
+                visible: m.tituloNatural
+                width: parent.width
+                text: m.titulo
+                elide: Text.ElideMiddle
+                font.family: Tema.fTexto; font.pixelSize: 21; font.weight: Font.DemiBold
+                color: Tema.texto
+            }
             TextoGlitch {
+                visible: !m.tituloNatural
                 text: m.aberto && caixa.traco >= 1 ? m.titulo : ""
                 ocioso: false
                 font.family: Tema.fRotulo; font.pixelSize: 26; font.weight: Font.Bold

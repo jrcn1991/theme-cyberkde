@@ -1,0 +1,51 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-processos",
+        "Name": "CyberKDE · FUI Processos",
+        "Name[pt_BR]": "CyberKDE · FUI Processos",
+        "Name[en]": "CyberKDE · FUI Processes",
+        "Description": "Os 6 processos que mais usam CPU, com CPU% e MEM%.",
+        "Description[pt_BR]": "Os 6 processos que mais usam CPU, com CPU% e MEM%.",
+        "Description[en]": "The 6 processes using the most CPU, with CPU% and MEM%.",
+        "Icon": "view-process-system",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Processos",
+        "nome_en": "FUI · Processes",
+        "descricao": "Os 6 processos que mais usam CPU, com CPU% e MEM%. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "The 6 processes using the most CPU, with CPU% and MEM%. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            432,
+            320
+        ],
+        "ordem": 209,
+        "opcoes": [
+            {
+                "id": "limiar",
+                "chave": "limiar",
+                "tipo": "inteiro",
+                "min": 50,
+                "max": 99,
+                "padrao": 85,
+                "unidade": "%",
+                "nome": "Alerta acima de",
+                "nome_en": "Alert above"
+            }
+        ]
+    }
+}

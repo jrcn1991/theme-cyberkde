@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- último preset de tamanho escolhido: "pequeno", "medio" ou "grande" (seletor P/M/G no modo de
+         edição, ou mudado por fora). O tamanho real é a geometria do applet, livre depois do preset.
+         Valores antigos: "compacto" = pequeno, "completo" = grande -->
+    <entry name="modo" type="String"><default>pequeno</default></entry>
+    <!-- interno: o preset de "modo" já foi aplicado uma vez (depois disso, só a pedido) -->
+    <entry name="ajustado" type="Bool"><default>false</default></entry>
+    <!-- opacidade da superfície dos cartões, em % -->
+    <entry name="opacidade" type="Int"><default>95</default><min>30</min><max>100</max></entry>
+    <!-- cidade: pode chegar só com o nome (o CLI grava com "cyberkde efeito widget-clima &#45;&#45;cidade X";
+         aceita "Nome, Estado/País"). Quando cidade != cidadeResolvida, o widget busca o nome no
+         geocoding do Open-Meteo e grava latitude, longitude, região e cidadeResolvida. -->
+    <entry name="cidade" type="String"><default>São Paulo</default></entry>
+    <entry name="cidadeResolvida" type="String"><default>São Paulo</default></entry>
+    <entry name="regiao" type="String"><default>São Paulo, Brasil</default></entry>
+    <entry name="latitude" type="Double"><default>-23.5475</default></entry>
+    <entry name="longitude" type="Double"><default>-46.63611</default></entry>
+    <entry name="intervaloMin" type="Int"><default>30</default><min>10</min><max>180</max></entry>
+    <entry name="mostrarHoras" type="Bool"><default>true</default></entry>
+  </group>
+</kcfg>

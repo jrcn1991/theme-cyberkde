@@ -1,0 +1,50 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-clima",
+        "Name": "CyberKDE · FUI Clima",
+        "Name[pt_BR]": "CyberKDE · FUI Clima",
+        "Name[en]": "CyberKDE · FUI Weather",
+        "Description": "O tempo agora na cidade escolhida.",
+        "Description[pt_BR]": "O tempo agora na cidade escolhida.",
+        "Description[en]": "The weather now in the chosen city.",
+        "Icon": "weather-few-clouds",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Clima",
+        "nome_en": "FUI · Weather",
+        "descricao": "O tempo agora na cidade escolhida. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "The weather now in the chosen city. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            336,
+            320
+        ],
+        "ordem": 213,
+        "opcoes": [
+            {
+                "id": "cidade",
+                "chave": "cidade",
+                "tipo": "texto",
+                "padrao": "",
+                "nome": "Cidade",
+                "nome_en": "City",
+                "dica": "Vazia: São Paulo, ou a última resolvida",
+                "dica_en": "Empty: São Paulo, or the last one resolved"
+            }
+        ]
+    }
+}

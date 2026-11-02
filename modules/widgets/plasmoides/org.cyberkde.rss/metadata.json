@@ -1,0 +1,35 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.rss",
+        "Name": "CyberKDE · Notícias",
+        "Name[pt_BR]": "CyberKDE · Notícias",
+        "Name[en]": "CyberKDE · News",
+        "Description": "Manchetes de feeds RSS e Atom no estilo de um noticiário de Night City",
+        "Description[pt_BR]": "Manchetes de feeds RSS e Atom no estilo de um noticiário de Night City",
+        "Description[en]": "Headlines from RSS and Atom feeds in the style of a Night City newscast",
+        "Icon": "application-rss+xml",
+        "Category": "Online Services",
+        "Authors": [{ "Name": "CyberKDE" }],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": ["desktop", "panel"]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Notícias", "nome_en": "News",
+        "descricao": "Manchetes dos feeds RSS/Atom escolhidos, com fonte e hora; clique abre a notícia no navegador.",
+        "descricao_en": "Headlines from the chosen RSS/Atom feeds, with source and time; a click opens the story in the browser.",
+        "tamanho": [380, 340],
+        "ordem": 80,
+        "opcoes": [
+            {"id": "feeds", "chave": "feeds", "tipo": "texto",
+             "padrao": "https://g1.globo.com/rss/g1/tecnologia/ https://tecnoblog.net/feed/ https://feeds.arstechnica.com/arstechnica/index",
+             "nome": "Feeds", "nome_en": "Feeds",
+             "dica": "Endereços RSS ou Atom, separados por espaço ou |", "dica_en": "RSS or Atom addresses, separated by spaces or |"},
+            {"id": "intervalo", "chave": "intervaloMin", "tipo": "inteiro", "min": 5, "max": 240, "padrao": 30, "unidade": "min",
+             "nome": "Atualizar a cada", "nome_en": "Refresh every"}
+        ]
+    }
+}

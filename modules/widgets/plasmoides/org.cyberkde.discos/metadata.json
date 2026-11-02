@@ -1,0 +1,35 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.discos",
+        "Name": "CyberKDE · Discos",
+        "Name[pt_BR]": "CyberKDE · Discos",
+        "Name[en]": "CyberKDE · Drives",
+        "Description": "Espaço das unidades montadas em barras segmentadas, leitura e escrita em tempo real e temperatura",
+        "Description[pt_BR]": "Espaço das unidades montadas em barras segmentadas, leitura e escrita em tempo real e temperatura",
+        "Description[en]": "Space on the mounted drives in segmented bars, live read and write and temperature",
+        "Icon": "drive-harddisk",
+        "Category": "System Information",
+        "Authors": [{ "Name": "CyberKDE" }],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": ["desktop", "panel"]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Discos", "nome_en": "Drives",
+        "descricao": "Espaço de cada unidade montada, com alerta quando enche, e leitura e escrita em tempo real. Clique numa unidade para abrir a pasta.",
+        "descricao_en": "Space on each mounted drive, with an alert when it fills up, and live read and write. Click a drive to open its folder.",
+        "tamanho": [360, 340],
+        "ordem": 70,
+        "opcoes": [
+            {"id": "montagens", "chave": "montagens", "tipo": "texto", "padrao": "",
+             "nome": "Unidades", "nome_en": "Drives",
+             "dica": "Pontos de montagem separados por vírgula (/, /home, /mnt/hd). Vazio: detecta as unidades reais.",
+             "dica_en": "Mount points separated by commas (/, /home, /mnt/hd). Empty: detects the real drives."},
+            {"id": "limiar", "chave": "limiar", "tipo": "inteiro", "min": 50, "max": 99, "padrao": 90, "unidade": "%",
+             "nome": "Alerta acima de", "nome_en": "Alert above"}
+        ]
+    }
+}

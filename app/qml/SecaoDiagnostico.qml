@@ -11,7 +11,7 @@ Secao {
         if (d.codigo < 0 && d.hora) return { txt: Txt.t("diag.falha"), cor: Tema.erro, nota: Txt.t("diag.falhaNota") }
         return { txt: Txt.t("diag.aguardando"), cor: Tema.texto2, nota: Txt.t("diag.aguardandoNota") }
     }
-    onAtivaChanged: if (ativa && !d.hora && !d.rodando) painel.checar()
+    onAtivaChanged: if (ativa && !d.hora && !d.rodando) Qt.callLater(painel.checar)
 
     Item {
         id: topo

@@ -167,6 +167,19 @@ else
   avisos+=("Esta versão não traz o painel gráfico (app/cyberkde-painel.desktop); use os comandos.")
 fi
 
+# --- Lançador do DATASHARD -----------------------------------------------------------------------
+# O gerenciador de arquivos do tema (app/arquivos), fora do registro como o painel: no menu como
+# "DATASHARD"; o "cyberkde uninstall" remove. Ser o padrão das pastas é escolha à parte (desligada):
+# cyberkde efeito datashard on.
+if [[ -f $dest/app/arquivos/cyberkde-arquivos.py ]]; then
+  "$dest/scripts/cyberkde" arquivos --lancador || avisos+=("O lançador do DATASHARD não foi criado; abra com: cyberkde arquivos")
+  if ! falta_ds=$("$dest/scripts/cyberkde" arquivos --checar 2>/dev/null); then
+    avisos+=("O DATASHARD (gerenciador de arquivos) precisa de pacotes que faltam: $falta_ds")
+  fi
+  opc_ds=$("$dest/scripts/cyberkde" arquivos --checar 2>&1 >/dev/null | sed -n 's/.*sudo apt install //p' | paste -sd' ' -)
+  [[ -z $opc_ds ]] || avisos+=("Opcional para o DATASHARD (miniaturas de vídeo e PDF, 7z): sudo apt install $opc_ds")
+fi
+
 # --- Arquivos do tema -----------------------------------------------------------------------------
 echo "Gerando e instalando os arquivos do tema (pode levar um minuto)…"
 "$dest/scripts/cyberkde" install

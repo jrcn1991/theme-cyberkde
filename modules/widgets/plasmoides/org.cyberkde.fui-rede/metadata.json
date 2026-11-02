@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.fui-rede",
+        "Name": "CyberKDE · FUI Rede",
+        "Name[pt_BR]": "CyberKDE · FUI Rede",
+        "Name[en]": "CyberKDE · FUI Network",
+        "Description": "Até onde a conexão chega: LAN, gateway e internet, com as latências.",
+        "Description[pt_BR]": "Até onde a conexão chega: LAN, gateway e internet, com as latências.",
+        "Description[en]": "How far the connection gets: LAN, gateway and internet, with latencies.",
+        "Icon": "network-wired",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "FUI · Rede",
+        "nome_en": "FUI · Network",
+        "descricao": "Até onde a conexão chega: LAN, gateway e internet, com as latências. Um módulo do Painel FUI, sozinho.",
+        "descricao_en": "How far the connection gets: LAN, gateway and internet, with latencies. One module of the FUI dashboard, on its own.",
+        "tamanho": [
+            640,
+            320
+        ],
+        "ordem": 207
+    }
+}

@@ -7,6 +7,7 @@ import QtQuick
 //   opção com prévias            → miniaturas
 //   opção de escolha             → botões em grupo
 //   opção inteira                → deslizador
+//   opção de texto               → campo com "Aplicar" (Enter)
 // Mais a linha de ajuda (descrição), a prévia do efeito, os selos SUDO e PERSONALIZADO e o aviso de
 // senha pendente (o comando "retomar" aparece no aviso do painel). Clique aplica na hora; os
 // deslizadores esperam 450 ms parados.
@@ -213,12 +214,12 @@ Bloco {
                 visible: !!atual && (atual.sons || []).length > 0
                 width: parent.width
                 spacing: 6
-                Codigo { text: Txt.t("som.lista", { n: parent.atual ? parent.atual.sons.length : 0 }); tamanho: 9 }
+                Codigo { text: Txt.t("som.lista", { n: parent.atual ? (parent.atual.sons || []).length : 0 }); tamanho: 9 }
                 Flow {
                     width: parent.width
                     spacing: 6
                     Repeater {
-                        model: parent.parent.atual ? parent.parent.atual.sons : []
+                        model: parent.parent.atual ? (parent.parent.atual.sons || []) : []
                         BotaoSom { required property var modelData; arquivo: modelData.arquivo; rotulo: modelData.nome }
                     }
                 }
@@ -249,6 +250,19 @@ Bloco {
                 tamanho: 11
                 color: Tema.texto3
                 text: (op.modelData.valores.find(x => x.id === op.valor) || {}).descricao || ""
+            }
+            // texto livre (ex.: a cidade do widget-clima)
+            CampoTexto {
+                visible: op.modelData.forma === "texto"
+                valor: op.valor
+                dica: op.modelData.padrao !== "" ? Txt.t("cfg.padraoEh", { v: op.modelData.padrao }) : Txt.t("cfg.padrao")
+                habilitado: !b.naFila
+                onConfirmado: (t) => b.mudar(op.modelData.id, t, true)
+            }
+            Leitura {
+                visible: op.modelData.forma === "texto"
+                width: parent.width; tamanho: 11; color: Tema.texto3
+                text: Txt.t("cfg.textoDica")
             }
             // inteiro
             Deslizador {

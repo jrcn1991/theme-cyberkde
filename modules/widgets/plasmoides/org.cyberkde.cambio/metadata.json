@@ -1,0 +1,38 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.cambio",
+        "Name": "CyberKDE · Câmbio",
+        "Name[pt_BR]": "CyberKDE · Câmbio",
+        "Name[en]": "CyberKDE · Exchange",
+        "Description": "Cotações das moedas escolhidas no visual dos eddies: valor, variação do dia e gráfico de 7 ou 30 dias",
+        "Description[pt_BR]": "Cotações das moedas escolhidas no visual dos eddies: valor, variação do dia e gráfico de 7 ou 30 dias",
+        "Description[en]": "Rates for the chosen currencies in eddies style: value, daily change and a 7 or 30 day chart",
+        "Icon": "view-financial-account-investment",
+        "Category": "Online Services",
+        "Authors": [{ "Name": "CyberKDE" }],
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": ["desktop", "panel"]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Câmbio", "nome_en": "Exchange",
+        "descricao": "Cotações das moedas escolhidas, no visual dos eddies, com a variação do dia e um gráfico.",
+        "descricao_en": "Rates for the chosen currencies, in eddies style, with the daily change and a chart.",
+        "tamanho": [360, 330],
+        "ordem": 60,
+        "opcoes": [
+            {"id": "moedas", "chave": "moedas", "tipo": "texto", "padrao": "USD-BRL, EUR-BRL, BTC-BRL",
+             "nome": "Moedas", "nome_en": "Currencies",
+             "dica": "Pares separados por vírgula (USD-BRL, EUR-USD…); só o código vale contra o real (USD = USD-BRL). A primeira é a principal.",
+             "dica_en": "Pairs separated by commas (USD-BRL, EUR-USD…); a bare code is against the real (USD = USD-BRL). The first one is the main one."},
+            {"id": "intervalo", "chave": "intervaloMin", "tipo": "inteiro", "min": 5, "max": 60, "padrao": 10, "unidade": "min",
+             "nome": "Atualizar a cada", "nome_en": "Refresh every"},
+            {"id": "periodo", "chave": "periodo", "tipo": "escolha", "padrao": "30",
+             "valores": [{"id": "7", "nome": "7 dias", "nome_en": "7 days"}, {"id": "30", "nome": "30 dias", "nome_en": "30 days"}],
+             "nome": "Gráfico", "nome_en": "Chart"}
+        ]
+    }
+}

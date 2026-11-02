@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- último preset de tamanho escolhido: "pequeno", "medio" ou "grande" (seletor P/M/G no modo de
+         edição, ou mudado por fora). O tamanho real é a geometria do applet, livre depois do preset.
+         Valores antigos: "compacto" = pequeno, "completo" = grande -->
+    <entry name="modo" type="String"><default>pequeno</default></entry>
+    <!-- interno: o preset de "modo" já foi aplicado uma vez (depois disso, só a pedido) -->
+    <entry name="ajustado" type="Bool"><default>false</default></entry>
+    <!-- opacidade da superfície dos cartões, em % -->
+    <entry name="opacidade" type="Int"><default>95</default><min>30</min><max>100</max></entry>
+    <!-- player preferido (DesktopEntry do MPRIS); sem ele, o player ativo do sistema -->
+    <entry name="preferir" type="String"><default>spotify</default></entry>
+    <!-- não mostrar a mídia dos navegadores (abas tocando): só players de verdade (Spotify, VLC, Elisa…) -->
+    <entry name="ignorarNavegadores" type="Bool"><default>true</default></entry>
+    <!-- outros players a ignorar: nomes separados por vírgula ou espaço (DesktopEntry, Identity ou serviço) -->
+    <entry name="ignorados" type="String"><default></default></entry>
+    <!-- estilo: "hud" (o padrão), "jukebox", "mini" (jukebox mini), "eq" (só o equalizador), "neon" (rádio neon) -->
+    <entry name="estilo" type="String"><default>hud</default></entry>
+    <!-- equalizador com o espectro de verdade (helper contents/code/espectro.py; gasta CPU): desligado por padrão -->
+    <entry name="espectroReal" type="Bool"><default>false</default></entry>
+    <!-- cores do jukebox do jogo (laranja e verde-água) em vez das da corporação, nos estilos novos -->
+    <entry name="paletaJukebox" type="Bool"><default>false</default></entry>
+    <entry name="mostrarVisualizador" type="Bool"><default>true</default></entry>
+    <entry name="mostrarVolume" type="Bool"><default>true</default></entry>
+  </group>
+</kcfg>

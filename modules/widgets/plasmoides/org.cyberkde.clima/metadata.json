@@ -1,0 +1,55 @@
+{
+    "KPlugin": {
+        "Id": "org.cyberkde.clima",
+        "Name": "CyberKDE · Clima",
+        "Name[pt_BR]": "CyberKDE · Clima",
+        "Name[en]": "CyberKDE · Weather",
+        "Description": "Tempo atual e previsão (Open-Meteo), no visual do tema CyberKDE",
+        "Description[en]": "Current weather and forecast (Open-Meteo), in the CyberKDE theme style",
+        "Icon": "weather-few-clouds",
+        "Category": "Environment and Weather",
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde",
+        "FormFactors": [
+            "desktop",
+            "panel"
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-CyberKDE": {
+        "nome": "Clima",
+        "nome_en": "Weather",
+        "descricao": "Tempo agora, próximas horas e previsão de até 5 dias na cidade escolhida (Open-Meteo, sem conta).",
+        "descricao_en": "Current weather, the next hours and up to a 5-day forecast for the chosen city (Open-Meteo, no account).",
+        "tamanho": [
+            224,
+            80
+        ],
+        "ordem": 20,
+        "opcoes": [
+            {
+                "id": "cidade",
+                "chave": "cidade",
+                "tipo": "texto",
+                "padrao": "São Paulo",
+                "nome": "Cidade",
+                "nome_en": "City",
+                "dica": "Nome da cidade; aceita \"Cidade, Estado\" ou \"Cidade, País\"",
+                "dica_en": "City name; accepts \"City, State\" or \"City, Country\""
+            },
+            {
+                "id": "intervalo",
+                "chave": "intervaloMin",
+                "tipo": "inteiro",
+                "min": 10,
+                "max": 180,
+                "padrao": 30,
+                "unidade": "min",
+                "nome": "Atualizar a cada",
+                "nome_en": "Refresh every"
+            }
+        ]
+    }
+}
