@@ -370,6 +370,14 @@ cyberkde efeito papel fui        # animated; a | b | c | d = fixed static ones; 
 
 **Icons.** Folders, places, file types and a cyborg dolphin for Dolphin; six icons have a second style you can pick one by one (`cyberkde efeito icones`). Everything else inherits Breeze Dark.
 
+**App icons.** The favorite apps get their own icon: the logo comes from the app installed on your machine (no brand logo is shipped in the repository), inside the theme's chamfered frame, and the frame follows the corporation. There are 3 styles: `marca` (the original logo in its brand colors), `recolorido` (the logo in the accent tones) and `silhueta` (the theme's drawn silhouette). An app with no installed icon falls back to the silhouette.
+
+<p align="center"><img src="assets/readme/icones-apps.gif" width="90%" alt="App icons in the brand style with the frame changing color from Segotari to Arasaka, Militech and Biotechnica, then the recolored and silhouette styles"></p>
+
+```bash
+cyberkde efeito icones-apps marca      # marca | recolorido | silhueta
+```
+
 <p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
 
 ## What it themes
@@ -381,7 +389,7 @@ cyberkde efeito papel fui        # animated; a | b | c | d = fixed static ones; 
 | Layout | bar on top and a dock at the bottom; also two screens, compact and side (`cyberkde layout`) |
 | Windows | Aurorae decoration and 21 open/close animations (KWin) |
 | Plasma | Plasma style (panel, menus, popups, notifications), app menu as a list, a grid or full screen |
-| Icons | folders, places, file types and the Dolphin dolphin; six alternative icons |
+| Icons | folders, places, file types and the Dolphin dolphin; six alternative icons; favorite apps with their own logo in the theme frame (3 styles) |
 | Konsole | color scheme and profile; in the animated Konsole, the data cascade and 8 more effects |
 | Login | SDDM, startup splash and lock screen, with selectable animations |
 | Wallpaper | four options in the accent color, the corporation's own, the animated FUI or your own image |
@@ -489,6 +497,7 @@ cyberkde efeito widget-relogio on    # one widget: widget-<name> [on|off]; widge
 cyberkde efeito splash curto         # startup splash: completo | curto | nenhum
 cyberkde efeito login --fundo papel  # login and lock screen: --entrada, --painel, --sucesso on|off, --fundo
 cyberkde efeito icones alt           # alternative folder and trash icons (or <group>=alt)
+cyberkde efeito icones-apps marca    # app icons: marca | recolorido | silhueta
 cyberkde efeito menu grade           # app menu: lista | grade | tela-cheia
 cyberkde efeito dock --indicador ponto --zoom off    # Latte Dock indicator, zoom and launch bounce
 cyberkde efeito areas 4              # virtual desktops named as modules (off | 4 | 6, --nomes cyber|simples)

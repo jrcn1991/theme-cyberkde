@@ -371,6 +371,14 @@ cyberkde efeito papel fui        # animado; a | b | c | d = estáticos fixos; co
 
 **Ícones.** Pastas, locais, tipos de arquivo e um golfinho ciborgue para o Dolphin; seis ícones têm um segundo estilo para escolher um a um (`cyberkde efeito icones`). O resto herda o Breeze Escuro.
 
+**Ícones dos apps.** Os apps favoritos ganham ícone próprio: o logo vem do app instalado na sua máquina (nenhum logo de marca vai no repositório), dentro da moldura chanfrada do tema, e a moldura acompanha a corporação. São 3 estilos: `marca` (o logo original, nas cores da marca), `recolorido` (o logo nos tons do destaque) e `silhueta` (a silhueta desenhada pelo tema). App sem ícone instalado cai na silhueta.
+
+<p align="center"><img src="assets/readme/icones-apps.gif" width="90%" alt="Ícones dos apps no estilo marca, com a moldura mudando de cor de Segotari para Arasaka, Militech e Biotechnica, e depois os estilos recolorido e silhueta"></p>
+
+```bash
+cyberkde efeito icones-apps marca      # marca | recolorido | silhueta
+```
+
 <p align="center"><img src="assets/readme/divisor.svg" width="100%" alt=""></p>
 
 ## O que ele muda
@@ -382,7 +390,7 @@ cyberkde efeito papel fui        # animado; a | b | c | d = estáticos fixos; co
 | Arranjo | barra em cima e dock embaixo; também duas telas, compacto e lateral (`cyberkde layout`) |
 | Janelas | moldura Aurorae e 21 animações de abrir e fechar (KWin) |
 | Plasma | estilo do Plasma (painel, menus, popups, notificações), menu em lista, grade ou tela cheia |
-| Ícones | pastas, locais, tipos de arquivo e o golfinho do Dolphin; seis ícones alternativos |
+| Ícones | pastas, locais, tipos de arquivo e o golfinho do Dolphin; seis ícones alternativos; apps favoritos com o próprio logo na moldura do tema (3 estilos) |
 | Konsole | esquema de cores e perfil; no Konsole animado, a cascata de dados e mais 8 efeitos |
 | Login | SDDM, tela de abertura e tela de bloqueio, com animações escolhíveis |
 | Papel de parede | quatro opções na cor de destaque, o da corporação, o animado FUI ou uma imagem sua |
@@ -490,6 +498,7 @@ cyberkde efeito widget-relogio on    # um widget: widget-<nome> [on|off]; widget
 cyberkde efeito splash curto         # tela de abertura: completo | curto | nenhum
 cyberkde efeito login --fundo papel  # login e bloqueio: --entrada, --painel, --sucesso on|off, --fundo
 cyberkde efeito icones alt           # ícones alternativos de pastas e lixeira (ou <grupo>=alt)
+cyberkde efeito icones-apps marca    # ícones dos apps: marca | recolorido | silhueta
 cyberkde efeito menu grade           # menu: lista | grade | tela-cheia
 cyberkde efeito dock --indicador ponto --zoom off    # indicador, zoom e pulo ao abrir, no Latte Dock
 cyberkde efeito areas 4              # áreas de trabalho como módulos (off | 4 | 6, --nomes cyber|simples)
