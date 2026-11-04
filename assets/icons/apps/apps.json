@@ -121,13 +121,6 @@
    "kate-symbolic-app"
   ]
  },
- "spectacle": {
-  "nome": "Spectacle",
-  "nomes": [
-   "spectacle",
-   "org.kde.spectacle"
-  ]
- },
  "systemsettings": {
   "nome": "Configurações do sistema",
   "nomes": [

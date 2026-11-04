@@ -82,15 +82,56 @@ def g_database():
     return o + circ(70, 49, 3.5, C) + circ(70, 69, 3.5, C)
 
 
-def g_steam():
-    """Steam: disco da marca com a biela vazada (anel grande em cima à direita, disco pequeno embaixo à
-    esquerda, ligados por uma haste inclinada) e o recorte do braço no canto inferior esquerdo."""
-    dx, dy = 62 - 32, 39 - 68
-    n = math.hypot(dx, dy)
-    nx, ny = -dy / n * 5.5, dx / n * 5.5
-    haste = P([(32 + nx, 68 + ny), (62 + nx, 39 + ny), (62 - nx, 39 - ny), (32 - nx, 68 - ny)], D)
-    return (circ(50, 50, 39) + haste + ring(62, 39, 16, 8, D) + circ(62, 39, 5.5, C) + circ(32, 68, 12.5, D) + circ(32, 68, 4.5, C)
-            + L("M14,56 Q17,74 34,80", 4.5, D))
+def emblema_json(nome):
+    """Silhueta real da marca vetorizada por generator/vetorizar_emblema.py."""
+    return json.loads((OUT / "emblemas" / f"{nome}.json").read_text())
+
+
+def g_steam(estilo="anel"):
+    """Steam: a silhueta REAL do ícone que o app instala (disco, haste e os dois anéis da biela), vetorizada.
+    estilo "disco": disco vermelho com a biela vazada em escuro; "anel": disco escuro com filete e biela vermelha."""
+    e = emblema_json("steam")
+    cx, cy, r = e["disco"]
+    k = 39 / r
+    tr = f'transform="translate(50 50) scale({k:.5f}) translate({-cx:g} {-cy:g})"'
+    glifo = lambda cor: f'<path d="{e["d"]}" fill="{cor}" fill-rule="evenodd" {tr}/>'
+    if estilo == "disco":
+        return circ(50, 50, 39) + glifo(D)
+    return circ(50, 50, 37.5, D, f'stroke="{R}" stroke-width="4.5"') + glifo(R)
+
+
+# PyCharm: as formas e o "PC" do ícone que o app instala (/snap/pycharm/current/bin/pycharm.svg), com as
+# formas coloridas reduzidas a dois tons e o quadrado escuro, o "PC" e a barra (o que identifica) mantidos.
+def g_jetbrains_real(nome):
+    """PyCharm/DataGrip: formas, quadrado, letras e barra do SVG que o app instala (em emblemas/<nome>.json), com
+    as formas coloridas reduzidas a dois tons e o quadrado escuro, as letras e a barra mantidos."""
+    e = emblema_json(nome)
+    tr = 'transform="translate(50 50) scale(1.5) translate(-32 -32)"'
+    f1, f2, f3 = e["formas"]
+    formas = F(f3, R, tr) + F(f1, R2, tr) + F(f2, R2, tr)
+    return (formas + F(e["quadrado"], D, tr + ' stroke="#FFFFFF" stroke-opacity=".45" stroke-width="0.7"')
+            + F(e["letras"], "#FFFFFF", tr) + F(e["barra"], C, tr))
+
+
+def g_pycharm():
+    return g_jetbrains_real("pycharm")
+
+
+def g_datagrip():
+    return g_jetbrains_real("datagrip")
+
+
+COR_MESTRE = {"R": R, "R2": R2, "R3": R3, "C": C, "D": D, "W": "#FFFFFF"}
+
+
+def g_real(aid, extra=""):
+    """Silhueta real do ícone que o app instala, vetorizada em camadas de cor-mestre
+    (generator/vetorizar_apps.py → emblemas/<id>.json), ajustada para caber na placa."""
+    e = emblema_json(aid)
+    x0, y0, x1, y1 = e["caixa"]
+    k = 78 / max(x1 - x0, y1 - y0)
+    tr = f'transform="translate(50 50) scale({k:.5f}) translate({-(x0 + x1) / 2:g} {-(y0 + y1) / 2:g})"'
+    return "".join(F(c["d"], COR_MESTRE[c["cor"]], f'fill-rule="evenodd" {tr}') for c in e["camadas"] if c["d"]) + extra
 
 
 def g_chrome():
@@ -217,29 +258,28 @@ def g_calc():
 
 # id → (nome legível, nomes do ícone (o primeiro é o arquivo), emblema)
 APPS = {
-    "pycharm": ("PyCharm", ["jetbrains-pycharm", "pycharm", "pycharm-community", "pycharm-professional", "pycharm-edu", "jetbrains-pycharm-ce", "pycharm_pycharm"], lambda: g_jetbrains("PC")),
-    "datagrip": ("DataGrip", ["datagrip", "jetbrains-datagrip"], lambda: g_jetbrains("DG")),
-    "dbeaver": ("DBeaver", ["dbeaver", "dbeaver-ce", "io.dbeaver.DBeaverCommunity", "dbeaver_dbeaver"], g_database),
+    "pycharm": ("PyCharm", ["jetbrains-pycharm", "pycharm", "pycharm-community", "pycharm-professional", "pycharm-edu", "jetbrains-pycharm-ce", "pycharm_pycharm"], g_pycharm),
+    "datagrip": ("DataGrip", ["datagrip", "jetbrains-datagrip"], g_datagrip),
+    "dbeaver": ("DBeaver", ["dbeaver", "dbeaver-ce", "io.dbeaver.DBeaverCommunity", "dbeaver_dbeaver"], lambda: g_real("dbeaver")),
     "steam": ("Steam", ["steam", "steam_icon_steam", "com.valvesoftware.Steam", "steam-launcher"], g_steam),
-    "google-chrome": ("Google Chrome", ["google-chrome", "google-chrome-stable", "google-chrome-beta", "chromium", "chromium-browser", "com.google.Chrome"], g_chrome),
-    "claude-desktop": ("Claude", ["claude-desktop", "com.anthropic.Claude", "claude", "claude-ai"], g_claude),
-    "spotify": ("Spotify", ["spotify-client", "spotify", "com.spotify.Client"], g_spotify),
-    "1password": ("1Password", ["1password", "com.onepassword.OnePassword", "onepassword"], g_1password),
-    "telegram": ("Telegram", ["telegram", "org.telegram.desktop", "telegram-desktop", "org.telegram.desktop.desktop", "telegramdesktop"], g_telegram),
-    "obs-studio": ("OBS Studio", ["com.obsproject.Studio", "obs", "obs-studio"], g_obs),
-    "remmina": ("Remmina", ["org.remmina.Remmina", "remmina", "remmina-main"], g_remmina),
-    "filezilla": ("FileZilla", ["filezilla", "org.filezilla_project.Filezilla"], g_filezilla),
-    "virtualbox": ("VirtualBox", ["virtualbox", "org.virtualbox.VirtualBox", "virtualbox-ose"], g_virtualbox),
-    "kate": ("Kate", ["kate", "org.kde.kate", "kate-symbolic-app"], g_kate),
-    "spectacle": ("Spectacle", ["spectacle", "org.kde.spectacle"], g_spectacle),
+    "google-chrome": ("Google Chrome", ["google-chrome", "google-chrome-stable", "google-chrome-beta", "chromium", "chromium-browser", "com.google.Chrome"], lambda: g_real("google-chrome")),
+    "claude-desktop": ("Claude", ["claude-desktop", "com.anthropic.Claude", "claude", "claude-ai"], lambda: g_real("claude-desktop", circ(50, 50, 5.5, C))),
+    "spotify": ("Spotify", ["spotify-client", "spotify", "com.spotify.Client"], lambda: g_real("spotify")),
+    "1password": ("1Password", ["1password", "com.onepassword.OnePassword", "onepassword"], lambda: g_real("1password")),
+    "telegram": ("Telegram", ["telegram", "org.telegram.desktop", "telegram-desktop", "org.telegram.desktop.desktop", "telegramdesktop"], lambda: g_real("telegram")),
+    "obs-studio": ("OBS Studio", ["com.obsproject.Studio", "obs", "obs-studio"], lambda: g_real("obs-studio")),
+    "remmina": ("Remmina", ["org.remmina.Remmina", "remmina", "remmina-main"], lambda: g_real("remmina")),
+    "filezilla": ("FileZilla", ["filezilla", "org.filezilla_project.Filezilla"], lambda: g_real("filezilla")),
+    "virtualbox": ("VirtualBox", ["virtualbox", "org.virtualbox.VirtualBox", "virtualbox-ose"], lambda: g_real("virtualbox")),
+    "kate": ("Kate", ["kate", "org.kde.kate", "kate-symbolic-app"], lambda: g_real("kate")),
     "systemsettings": ("Configurações do sistema", ["systemsettings", "org.kde.systemsettings"], g_gear),
     "plasma-systemmonitor": ("Monitor do sistema", ["org.kde.plasma-systemmonitor", "org.kde.plasma.systemmonitor"], g_monitor),
-    "libreoffice": ("LibreOffice", ["libreoffice-startcenter", "libreoffice-main", "libreoffice"], g_doc),
-    "software": ("Loja de programas", ["kubuntu-manage-software", "org.kubuntu.manage-software", "snap-store", "org.gnome.Software", "org.kde.discover", "plasmadiscover"], g_bag),
-    "vscode": ("Visual Studio Code", ["vscode", "code", "visual-studio-code", "com.visualstudio.code", "com.visualstudio.code.oss"], g_vscode),
-    "shotcut": ("Shotcut", ["org.shotcut.Shotcut", "shotcut"], g_film),
-    "cura": ("Ultimaker Cura", ["cura-icon", "com.ultimaker.cura", "cura"], g_layers),
-    "meshmixer": ("Meshmixer", ["meshmixer"], g_mesh),
+    "libreoffice": ("LibreOffice", ["libreoffice-startcenter", "libreoffice-main", "libreoffice"], lambda: g_real("libreoffice")),
+    "software": ("Loja de programas", ["kubuntu-manage-software", "org.kubuntu.manage-software", "snap-store", "org.gnome.Software", "org.kde.discover", "plasmadiscover"], lambda: g_real("software")),
+    "vscode": ("Visual Studio Code", ["vscode", "code", "visual-studio-code", "com.visualstudio.code", "com.visualstudio.code.oss"], lambda: g_real("vscode")),
+    "shotcut": ("Shotcut", ["org.shotcut.Shotcut", "shotcut"], lambda: g_real("shotcut")),
+    "cura": ("Ultimaker Cura", ["cura-icon", "com.ultimaker.cura", "cura"], lambda: g_real("cura")),
+    "meshmixer": ("Meshmixer", ["meshmixer"], lambda: g_real("meshmixer")),
     "text-editor": ("Editor de texto", ["org.gnome.TextEditor", "accessories-text-editor"], g_editor),
     "calculator": ("Calculadora", ["org.gnome.Calculator", "accessories-calculator", "org.kde.kcalc", "kcalc"], g_calc),
 }
