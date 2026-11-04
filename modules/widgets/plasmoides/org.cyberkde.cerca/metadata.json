@@ -239,6 +239,18 @@
                         "previa": "assets/previas/cerca/icones-explosao.webp"
                     },
                     {
+                        "id": "explosao-limpa",
+                        "nome": "Explosão de dados · sem estouro",
+                        "nome_en": "Data burst · no blast",
+                        "previa": "assets/previas/cerca/icones-explosao-limpa.webp"
+                    },
+                    {
+                        "id": "explosao-toxica",
+                        "nome": "Explosão tóxica",
+                        "nome_en": "Toxic burst",
+                        "previa": "assets/previas/cerca/icones-explosao-toxica.webp"
+                    },
+                    {
                         "id": "cascata",
                         "nome": "Cascata",
                         "nome_en": "Cascade",

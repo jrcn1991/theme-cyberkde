@@ -12,6 +12,7 @@
   cair no genérico, e o tipo continuaria com cara de Breeze.
 Tudo o que não está aqui é herdado do breeze-dark.
 """
+import json
 import os
 import pathlib
 import shutil
@@ -137,6 +138,14 @@ ICONS = {
         "application-x-php", "text-css", "text-x-sass", "text-x-scss", "text-x-qml", "text-x-cmake",
         "text-x-makefile", "text-xml", "application-xml", "text-x-sql", "text-x-patch", "text-dockerfile"]),
 }
+# Apps favoritos desenhados em generator/gen_apps_icons.py (assets/icons/apps/<id>.png + apps.json):
+# cada um atende todos os nomes de ícone listados no apps.json (o primeiro é o arquivo real).
+APPS_SRC = ROOT / "assets" / "icons" / "apps"
+APPS_NOVOS = set()
+if (APPS_SRC / "apps.json").is_file():
+    for _id, _m in json.loads((APPS_SRC / "apps.json").read_text()).items():
+        ICONS[_id] = ("apps", _m["nomes"])
+        APPS_NOVOS.add(_id)
 EXTRA = {"inode-directory": ("mimetypes", "folder")}  # pastas no Dolphin usam o ícone do tipo MIME
 # Nomes de contexto exatos da especificação; o KDE ignora grafias como "Mimetypes".
 CONTEXTS = {"places": "Places", "devices": "Devices", "mimetypes": "MimeTypes", "apps": "Applications"}
@@ -238,6 +247,8 @@ def passthrough(defined):
 
 def fonte(base, alt):
     """Arquivo de origem de um ícone: o alternativo, se o grupo dele foi escolhido; senão, o do ai-final."""
+    if base in APPS_NOVOS:
+        return APPS_SRC / f"{base}.png"
     if base in alt:
         return ALT_SRC / f"{base}.png"
     return SRC / f"{base}.png"

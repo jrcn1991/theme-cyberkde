@@ -361,7 +361,9 @@ cmd_cor() {
     # O login e o bloqueio acompanham o papel ("login --fundo papel"), sem precisar de um "on login".
     # O que ficar sem sudo (a tela do SDDM) entra nas pendências do login, no laço abaixo.
     if declare -F login_fundo_seguir >/dev/null; then login_fundo_seguir || true; fi
-    # Tema ligado: reaplica as fases com a cor nova.
+    # Tema ligado: reaplica as fases com a cor nova. Só a cor: nenhuma fase recoloca nem recria nada
+    # (a fase widgets, por exemplo, refazia o layout fui e tirava cercas do lugar).
+    export CYBERKDE_TROCA_COR=1
     for p in "${fases[@]}"; do
       progress fase "$p"
       : >"$sem_sudo_pendentes"
@@ -385,7 +387,7 @@ cmd_cor() {
     for p in "${fases[@]}"; do chaves_reafirmar "$p"; done
     progress kwin
     reload_kwin
-    unset CYBERKDE_ADIAR_PLASMA
+    unset CYBERKDE_ADIAR_PLASMA CYBERKDE_TROCA_COR
     rm -f -- "$plasma_adiar_marca"
     progress painel  # o painel guarda cache do tema e dos ícones
     if restart_plasmashell; then reiniciado=true; fi
@@ -1051,6 +1053,7 @@ cmd_efeito() {
   for arg in "$@"; do
     case $arg in
       --json) cor_json=1 ;;
+      --sem-sudo) export CYBERKDE_SEM_SUDO=1 ;;  # vale para todo efeito (o que pedir sudo fica pendente)
       --lista) if [[ -z $id ]]; then lista=1; else resto+=("$arg"); fi ;;
       *) if [[ -z $id && $lista == 0 ]]; then id=$arg; else resto+=("$arg"); fi ;;
     esac
@@ -2102,8 +2105,9 @@ papel_modo_gravar() { mkdir -p -- "$(dirname -- "$efeitos_file")"; kwriteconfig6
 # O módulo de papel sabe fazer o papel da corporação? (a opção "corp" no papel_opcao dele)
 papel_corp_suportado() { declare -F papel_opcao >/dev/null && [[ $(declare -f papel_opcao) == *corp* ]]; }
 papel_status_json() {
-  printf '{"modo":"%s","opcao":%s,"imagemPropria":%s,"corpSuportado":%s}' "$(papel_modo)" \
+  printf '{"modo":"%s","opcao":%s,"imagemPropria":%s,"imagemGuardada":%s,"corpSuportado":%s}' "$(papel_modo)" \
     "$(json_caminho "$(kreadconfig6 --file "$efeitos_file" --group papel --key opcao 2>/dev/null)")" \
+    "$([[ -s $config/cyberkde/papel-de-parede && $(kreadconfig6 --file "$efeitos_file" --group papel --key propria --default true 2>/dev/null) != false ]] && echo true || echo false)" \
     "$([[ -s $config/cyberkde/papel-de-parede ]] && echo true || echo false)" \
     "$(papel_corp_suportado && echo true || echo false)"
 }
@@ -2124,6 +2128,8 @@ if declare -F efeito_cmd_papel >/dev/null; then
     if [[ -n $modo ]]; then papel_modo_gravar "$modo"; fi
     local escolheu=0
     for arg in "$@"; do [[ $arg == a || $arg == b || $arg == c || $arg == d || $arg == corp || $arg == fui || $arg == padrao ]] && escolheu=1; done
+    # Escolha explícita vence a imagem própria, que fica guardada (cyberkde papel <imagem> a traz de volta).
+    if (( escolheu )); then mkdir -p -- "$(dirname -- "$efeitos_file")"; kwriteconfig6 --file "$efeitos_file" --group papel --key propria false; fi
     # "fui" de novo, com o FUI já escolhido e a fase ligada: só os controles (ao vivo), nada a seguir no login.
     if [[ " $* " == *" fui "* && $(kreadconfig6 --file "$efeitos_file" --group papel --key opcao 2>/dev/null) == fui ]] && fase_ligada papeis-de-parede; then
       escolheu=0
@@ -3385,6 +3391,7 @@ cmd_papel() {
     [[ -f $img ]] || { echo "Imagem não encontrada: $img" >&2; exit 2; }
     mkdir -p -- "$(dirname -- "$file")"
     readlink -f -- "$img" >"$file"
+    kwriteconfig6 --file "$efeitos_file" --group papel --key propria true
     papel_modo_gravar fixo  # escolha da pessoa: a corporação não sobrescreve
     # Com o FUI escolhido, a imagem própria não valeria: escolher uma imagem sai do FUI.
     if [[ $(kreadconfig6 --file "$efeitos_file" --group papel --key opcao 2>/dev/null) == fui ]]; then

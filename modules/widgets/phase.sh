@@ -739,6 +739,9 @@ widget_aplicar() {  # efeito [refazer|ligar]
 phase_widgets() {
   local e algum=0
   mkdir -p -- "$state"; : >"$widgets_marca_fase"
+  # "cyberkde cor"/"corp": a paleta nova já foi para a Paleta.qml (install_widgets), e o reinício do
+  # plasmashell do fim a carrega. Nada se move, nada é recriado.
+  [[ ${CYBERKDE_TROCA_COR:-0} != 1 ]] || return 0
   if declare -F cerca_atalhos_aplicar >/dev/null; then cerca_atalhos_aplicar; cerca_unidades_aplicar; cerca_orfas_limpar; fi
   for e in $(widgets_lista); do
     [[ $(widget_pref "$e" ligado false) == true || -n $(widget_applets "$e") ]] && algum=1

@@ -806,7 +806,9 @@ FocusScope {
                             listItemSvg.margins.top + listItemSvg.margins.bottom)) / 2) * 2;
                     } else {
                         // the smallSpacings are for padding
-                        const iconHeight = iconSize + (Kirigami.Units.gridUnit * Plasmoid.configuration.textLines) + (Kirigami.Units.smallSpacing * 3);
+                        // a altura cabe o nome inteiro, nas linhas que ele pode usar (o rótulo nunca fica cortado na
+                        // vertical; se a cerca não comporta, ela rola)
+                        const iconHeight = iconSize + (Math.ceil(medidaNome.lineSpacing) * gridView.linhasNome) + Kirigami.Units.smallSpacing + (Kirigami.Units.smallSpacing * 3);
                         if (root.isContainment && isRootView && scrollArea.viewportHeight > 0) {
                             let extraHeight = calcExtraSpacing(iconHeight, scrollArea.viewportHeight);
                             return iconHeight + extraHeight;
@@ -818,6 +820,8 @@ FocusScope {
 
                 readonly property Item animIcones: animIconesItem
                 readonly property alias medida: medidaNome
+                // linhas do nome na grade: as da configuração, e pelo menos 3
+                readonly property int linhasNome: Math.min(4, Math.max(3, Plasmoid.configuration.textLines))
                 FontMetrics { id: medidaNome }
 
                 delegate: FolderItemDelegate {

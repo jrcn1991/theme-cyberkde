@@ -22,8 +22,14 @@ Item {
     property Item pasta: null             // o FolderView
     property string variante: "explosao"
     property color cor: Cores.destaque
-    readonly property color cor2: Qt.colorEqual(cor, Cores.secundaria) ? Cores.destaque : Cores.secundaria
+    readonly property color _cor2: Qt.colorEqual(cor, Cores.secundaria) ? Cores.destaque : Cores.secundaria
+    // a tóxica pede um tom saturado: a secundária, ou o alerta quando ela é quase branca (Arasaka, MooreTech…)
+    readonly property color corToxica: _cor2.hslSaturation >= 0.45 && _cor2.hslLightness < 0.8 ? _cor2 : Cores.alerta
+    readonly property color cor2: v.id === "explosao-toxica" ? corToxica : _cor2
     readonly property color corAlerta: Cores.alerta
+    // o cartão atrás de cada ícone e o fio: alerta na explosão, a cor da cerca na limpa, a secundária na tóxica
+    readonly property color corCartao: v.id === "explosao-limpa" ? cor : v.id === "explosao-toxica" ? corToxica : corAlerta
+    readonly property int modoDeco: v.id === "explosao-toxica" ? 2 : 0
     property real velocidade: 1           // só para testes e prévias (> 1 = mais lento)
     enabled: false
     clip: true
@@ -56,7 +62,8 @@ Item {
     readonly property var _oculto: ({ o: 0, ol: 0 })
     // ms: antes do 1º ícone, de cada ícone, depois do último, e a defasagem máxima entre vezes
     readonly property var _tempos: ({
-        explosao: { pre: 200, d: 470, pos: 340, st: 8 }, cascata: { d: 300, st: 40 },
+        explosao: { pre: 200, d: 470, pos: 340, st: 8 }, "explosao-limpa": { pre: 170, d: 470, pos: 290, st: 8 },
+        "explosao-toxica": { pre: 200, d: 470, pos: 340, st: 8 }, cascata: { d: 300, st: 40 },
         decodificar: { d: 300, st: 12 }, varredura: { d: 620, st: 0 }, montagem: { d: 320, st: 12 },
         glitch: { d: 320, st: 12 }, pixel: { d: 300, st: 12 }, quickhack: { d: 440, st: 12 },
         sandevistan: { d: 500, st: 10 }, braindance: { d: 900, st: 0 }, dissolucao: { d: 160, st: 0 }
@@ -143,6 +150,8 @@ Item {
         const k = id === "cascata" ? linha + col * 0.22 : id === "montagem" || id === "glitch" || id === "pixel" ? rank : Math.floor(_hash(rank) * n)
         const ini = _pre + _st * k, q = _lim((t - ini) / _d)
         if (id === "explosao") return saindo ? _explosaoSai(rank) : _explosao(rank, dx, dy, t, ini, q)
+        if (id === "explosao-limpa") return saindo ? _limpaSai(rank) : _limpa(rank, dx, dy, t, ini, q)
+        if (id === "explosao-toxica") return saindo ? _toxicaSai(rank) : _toxica(rank, dx, dy, t, ini, q)
         if (id === "quickhack") return _quickhack(q)
         if (id === "sandevistan") return saindo ? _sandevistanSai(rank, linha) : _sandevistan(q, linha)
         const ol = _lim((q - 0.55) / 0.45), acesa = q > 0 ? 1 : 0
@@ -179,6 +188,34 @@ Item {
         const v = _lim(((1 - p) - _hash(rank) * 0.35) / 0.65)
         return { o: v < 1 ? 1 : 0, sy: Math.max(0.04, 1 - v * v), c: v < 1 ? 1 : 0, fl: 1, fio: 0, rasgo: 0, q: 1,
                  ol: Math.max(0, 1 - v * 3), quadro: 0 }
+    }
+
+    // limpa: o mesmo voo, sem pisca, rasgo, alerta nem franjas; o cartão na cor da cerca só apaga
+    function _limpa(rank, dx, dy, t, ini, q) {
+        const s = 1 - Math.pow(1 - q, 2.2), a = t - ini - _d - _hash(rank + 7) * 60
+        const dec = _lim((t - ini - _d - 40) / 220)
+        return { o: q > 0 ? 1 : 0, x: dx * (1 - s), y: dy * (1 - s), c: q > 0 ? 0.75 * (a < 0 ? 1 : Math.max(0, 1 - a / 170)) : 0,
+                 fl: 0, rasgo: 0, quadro: 0, fio: q <= 0 ? 0 : Math.min(1, q * 5) * 0.7 * (a < 0 ? 1 - s * 0.5 : Math.max(0, 0.5 - a / 200)),
+                 ol: dec > 0 ? 1 : 0, dec: dec }
+    }
+    function _limpaSai(rank) {
+        const v = _lim(((1 - p) - _hash(rank) * 0.35) / 0.65)
+        return { o: v < 1 ? 1 : 0, sy: Math.max(0.04, 1 - v * v), c: v < 1 ? 0.75 : 0, fl: 0, fio: 0, rasgo: 0, quadro: 0,
+                 ol: Math.max(0, 1 - v * 3) }
+    }
+    // tóxica: voam já contaminados; ao assentar, a corrosão come o cartão, as gotas escorrem e o ícone se limpa de cima
+    function _toxica(rank, dx, dy, t, ini, q) {
+        const s = 1 - Math.pow(1 - q, 2.2), a = t - ini - _d - _hash(rank + 7) * 80, limpo = a < 0 ? 0 : _lim(a / 240)
+        const dec = _lim((t - ini - _d - 40) / 220)
+        return { o: q > 0 ? 1 : 0, x: dx * (1 - s), y: dy * (1 - s), q: q > 0 ? limpo : 0,
+                 c: q > 0 ? 1 - _lim((limpo - 0.6) / 0.4) : 0, fl: _lim(q * 1.6 - 0.2), rasgo: limpo, quadro: Math.floor(t / 47) + rank,
+                 fio: q <= 0 ? 0 : Math.min(1, q * 5) * (a < 0 ? 1 : Math.max(0, 1 - a / 120)), ol: dec > 0 ? 1 : 0, dec: dec }
+    }
+    // a saída: o ícone recontamina e a corrosão o come no lugar, junto com o cartão
+    function _toxicaSai(rank) {
+        const v = _lim(((1 - p) - _hash(rank) * 0.35) / 0.65)
+        return { o: v < 1 ? 1 : 0, q: 1 - _lim(v * 2.2), q2: 1 - _lim(v * 1.6 - 0.5), c: v < 1 ? 1 : 0, fl: 1, rasgo: _lim(v * 1.4 - 0.3),
+                 quadro: Math.floor((1 - p) * 20) + rank, fio: 0, ol: Math.max(0, 1 - v * 3) }
     }
 
     // a posição da linha é global: o ícone se revela onde ela está, e não por conta própria
@@ -225,7 +262,7 @@ Item {
     // o que é da cerca inteira, num quad só (anim/camada.frag)
     ShaderEffect {
         anchors.fill: parent
-        visible: a.ligado && !a.preparando && a.modoCamada >= 0 && (!a.saindo || a.modoCamada === 0)
+        visible: a.ligado && !a.preparando && a.modoCamada >= 0 && (!a.saindo || a.modoCamada === 0 || a.modoCamada >= 4)
         readonly property size tam: Qt.size(width, height)
         readonly property real t: a.p * a._T
         readonly property real total: a._T

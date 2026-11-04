@@ -1,0 +1,211 @@
+{
+ "pycharm": {
+  "nome": "PyCharm",
+  "nomes": [
+   "jetbrains-pycharm",
+   "pycharm",
+   "pycharm-community",
+   "pycharm-professional",
+   "pycharm-edu",
+   "jetbrains-pycharm-ce",
+   "pycharm_pycharm"
+  ]
+ },
+ "datagrip": {
+  "nome": "DataGrip",
+  "nomes": [
+   "datagrip",
+   "jetbrains-datagrip"
+  ]
+ },
+ "dbeaver": {
+  "nome": "DBeaver",
+  "nomes": [
+   "dbeaver",
+   "dbeaver-ce",
+   "io.dbeaver.DBeaverCommunity",
+   "dbeaver_dbeaver"
+  ]
+ },
+ "steam": {
+  "nome": "Steam",
+  "nomes": [
+   "steam",
+   "steam_icon_steam",
+   "com.valvesoftware.Steam",
+   "steam-launcher"
+  ]
+ },
+ "google-chrome": {
+  "nome": "Google Chrome",
+  "nomes": [
+   "google-chrome",
+   "google-chrome-stable",
+   "google-chrome-beta",
+   "chromium",
+   "chromium-browser",
+   "com.google.Chrome"
+  ]
+ },
+ "claude-desktop": {
+  "nome": "Claude",
+  "nomes": [
+   "claude-desktop",
+   "com.anthropic.Claude",
+   "claude",
+   "claude-ai"
+  ]
+ },
+ "spotify": {
+  "nome": "Spotify",
+  "nomes": [
+   "spotify-client",
+   "spotify",
+   "com.spotify.Client"
+  ]
+ },
+ "1password": {
+  "nome": "1Password",
+  "nomes": [
+   "1password",
+   "com.onepassword.OnePassword",
+   "onepassword"
+  ]
+ },
+ "telegram": {
+  "nome": "Telegram",
+  "nomes": [
+   "telegram",
+   "org.telegram.desktop",
+   "telegram-desktop",
+   "org.telegram.desktop.desktop",
+   "telegramdesktop"
+  ]
+ },
+ "obs-studio": {
+  "nome": "OBS Studio",
+  "nomes": [
+   "com.obsproject.Studio",
+   "obs",
+   "obs-studio"
+  ]
+ },
+ "remmina": {
+  "nome": "Remmina",
+  "nomes": [
+   "org.remmina.Remmina",
+   "remmina",
+   "remmina-main"
+  ]
+ },
+ "filezilla": {
+  "nome": "FileZilla",
+  "nomes": [
+   "filezilla",
+   "org.filezilla_project.Filezilla"
+  ]
+ },
+ "virtualbox": {
+  "nome": "VirtualBox",
+  "nomes": [
+   "virtualbox",
+   "org.virtualbox.VirtualBox",
+   "virtualbox-ose"
+  ]
+ },
+ "kate": {
+  "nome": "Kate",
+  "nomes": [
+   "kate",
+   "org.kde.kate",
+   "kate-symbolic-app"
+  ]
+ },
+ "spectacle": {
+  "nome": "Spectacle",
+  "nomes": [
+   "spectacle",
+   "org.kde.spectacle"
+  ]
+ },
+ "systemsettings": {
+  "nome": "Configurações do sistema",
+  "nomes": [
+   "systemsettings",
+   "org.kde.systemsettings"
+  ]
+ },
+ "plasma-systemmonitor": {
+  "nome": "Monitor do sistema",
+  "nomes": [
+   "org.kde.plasma-systemmonitor",
+   "org.kde.plasma.systemmonitor"
+  ]
+ },
+ "libreoffice": {
+  "nome": "LibreOffice",
+  "nomes": [
+   "libreoffice-startcenter",
+   "libreoffice-main",
+   "libreoffice"
+  ]
+ },
+ "software": {
+  "nome": "Loja de programas",
+  "nomes": [
+   "kubuntu-manage-software",
+   "org.kubuntu.manage-software",
+   "snap-store",
+   "org.gnome.Software",
+   "org.kde.discover",
+   "plasmadiscover"
+  ]
+ },
+ "vscode": {
+  "nome": "Visual Studio Code",
+  "nomes": [
+   "vscode",
+   "code",
+   "visual-studio-code",
+   "com.visualstudio.code",
+   "com.visualstudio.code.oss"
+  ]
+ },
+ "shotcut": {
+  "nome": "Shotcut",
+  "nomes": [
+   "org.shotcut.Shotcut",
+   "shotcut"
+  ]
+ },
+ "cura": {
+  "nome": "Ultimaker Cura",
+  "nomes": [
+   "cura-icon",
+   "com.ultimaker.cura",
+   "cura"
+  ]
+ },
+ "meshmixer": {
+  "nome": "Meshmixer",
+  "nomes": [
+   "meshmixer"
+  ]
+ },
+ "text-editor": {
+  "nome": "Editor de texto",
+  "nomes": [
+   "org.gnome.TextEditor",
+   "accessories-text-editor"
+  ]
+ },
+ "calculator": {
+  "nome": "Calculadora",
+  "nomes": [
+   "org.gnome.Calculator",
+   "accessories-calculator",
+   "org.kde.kcalc",
+   "kcalc"
+  ]
+ }
+}

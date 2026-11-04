@@ -25,7 +25,7 @@ import sys
 import time
 from pathlib import Path
 
-from PyQt6.QtCore import (QLocale, QObject, QProcess, QProcessEnvironment, QTimer, Qt, QUrl, pyqtProperty,
+from PyQt6.QtCore import (QSize, QLocale, QObject, QProcess, QProcessEnvironment, QTimer, Qt, QUrl, pyqtProperty,
                           pyqtSignal, pyqtSlot)
 from PyQt6.QtGui import QFontDatabase, QGuiApplication, QIcon, QImage
 from PyQt6 import sip
@@ -2403,7 +2403,12 @@ def montar(argv=None):
 
     binario = os.environ.get("CYBERKDE_BIN") or str(REPO / "scripts" / "cyberkde")
     painel = Painel(binario)
-    app.setWindowIcon(QIcon(str(APP_DIR / "cyberkde-painel.svg")))
+    app.setWindowIcon(icone_do_lancador("cyberkde-painel", APP_DIR / "cyberkde-painel.svg"))
+    # o "cyberkde corp" troca o ícone do lançador (logo da corporação): a janela acompanha
+    _vigia_icone = QTimer(app)
+    _vigia_icone.setInterval(5000)
+    _vigia_icone.timeout.connect(lambda: app.setWindowIcon(icone_do_lancador("cyberkde-painel", APP_DIR / "cyberkde-painel.svg")))
+    _vigia_icone.start()
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
@@ -2422,6 +2427,38 @@ def montar(argv=None):
     painel.atualizar()
     return app, engine, janela, painel, args
 
+
+
+def icone_do_lancador(desktop, reserva):
+    """O ícone que o lançador instalado usa hoje (o CLI grava um nome novo a cada corporação: logo dela);
+    sem lançador, o ícone neutro do pacote."""
+    bases = [os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local/share")]
+    bases += (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    for base in bases:
+        arq = Path(base) / "applications" / f"{desktop}.desktop"
+        try:
+            for linha in arq.read_text(encoding="utf-8").splitlines():
+                if linha.startswith("Icon="):
+                    nome = linha[5:].strip()
+                    if nome.startswith("/"):
+                        return QIcon(nome)
+                    # o CLI instala o ícone gerado no hicolor do usuário: monta o QIcon com todos os
+                    # tamanhos direto dos arquivos (o fromTheme depende do tema da plataforma)
+                    ic = QIcon()
+                    for raiz in bases:
+                        for f in sorted((Path(raiz) / "icons" / "hicolor").glob(f"*/apps/{nome}.*")):
+                            lado = f.parent.parent.name.split("x")[0]
+                            if not lado.isdigit():
+                                continue   # o SVG "scalable" usa <svg> aninhado, que o QtSvg não desenha
+                            ic.addFile(str(f), QSize(int(lado), int(lado)) if lado.isdigit() else QSize())
+                    if ic.isNull():
+                        ic = QIcon.fromTheme(nome)
+                    if not ic.isNull():
+                        return ic
+                    break
+        except OSError:
+            continue
+    return QIcon(str(reserva))
 
 def main():
     app, engine, janela, painel, args = montar()

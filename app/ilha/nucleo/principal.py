@@ -100,7 +100,16 @@ class Ilha(QObject):
         self._barras = {}
         self._barra_cores = {}
         self._barra_lida = False
-        self.paletaMudou.connect(self._medir_barra)    # trocar de corporação troca as cores da barra
+        # trocar de corporação troca as cores da barra, mas o tema do Plasma é regravado DEPOIS da paleta (o CLI
+        # gera o SVG em seguida): vigia a pasta do tema e o plasmarc, e ainda relê umas vezes depois da troca
+        self.paletaMudou.connect(self._barra_depois_da_paleta)
+        self._obs_barra = QFileSystemWatcher(self)
+        self._atraso_barra = QTimer(self, singleShot=True, interval=400)
+        self._atraso_barra.timeout.connect(self._reler_barra)
+        self._obs_barra.directoryChanged.connect(self._atraso_barra.start)
+        self._obs_barra.fileChanged.connect(self._atraso_barra.start)
+        self._releituras = []
+        self._vigiar_barra()
         self._halo_kwin = False
         self._letra = None
         self._letra_chave = None
@@ -312,6 +321,47 @@ class Ilha(QObject):
         except (OSError, AttributeError, IndexError):
             return {}
 
+    def _pastas_barra(self):
+        dados = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+        conf = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+        try:
+            m = re.search(r"^name=(.+)$", (conf / "plasmarc").read_text(encoding="utf-8", errors="replace"), re.M)
+        except OSError:
+            m = None
+        tema = dados / "plasma/desktoptheme" / (m.group(1).strip() if m else "CyberKDE")
+        # pastas, não arquivos: a escrita atômica troca o inode e o observador perderia o arquivo
+        return [str(x) for x in (conf, tema, tema / "widgets") if x.is_dir()]
+
+    def _vigiar_barra(self):
+        atuais = set(self._obs_barra.directories())
+        alvos = self._pastas_barra()
+        velhas = [d for d in atuais if d not in alvos]
+        if velhas:
+            self._obs_barra.removePaths(velhas)
+        novas = [d for d in alvos if d not in atuais]
+        if novas:
+            self._obs_barra.addPaths(novas)
+
+    def _reler_barra(self):
+        self._vigiar_barra()            # o plasmarc pode ter trocado de tema
+        if not self._barra_lida:
+            return
+        cores = self._ler_cores_barra()
+        if cores != self._barra_cores:
+            self._barra_cores = cores
+            self.telasMudou.emit()
+
+    def _barra_depois_da_paleta(self):
+        self._medir_barra()
+        for t in self._releituras:
+            t.stop()
+        self._releituras = []
+        for ms in (1500, 4000, 9000):     # o tema do Plasma termina de ser gerado alguns segundos depois
+            t = QTimer(self, singleShot=True, interval=ms)
+            t.timeout.connect(self._reler_barra)
+            t.start()
+            self._releituras.append(t)
+
     def _medir_barra(self):
         js = ("var o='';panels().forEach(function(p){if(p.location=='top'&&!p.floating&&p.hiding=='none'){"
               "var g=screenGeometry(p.screen);o+=g.x+','+g.y+','+p.height+';'}});print(o)")
@@ -402,7 +452,9 @@ class Ilha(QObject):
         return {"rodando": True, "pid": os.getpid(), "telas": [x["nome"] for x in self.telas], "oculta": self.oculta,
                 "motivoOculta": self.motivoOculta, "halo": self._halo_ativo, "telaCheia": self._tela_cheia,
                 "api": caminho_api() if self.api.ouvindo else "", "vigiaKwin": self.kwin.vigia,
-                "avisosOuvindo": self.avisos.ouvindo, "espectroOuvindo": self.espectro_.ouvindo}
+                "avisosOuvindo": self.avisos.ouvindo, "espectroOuvindo": self.espectro_.ouvindo,
+                # a paleta EM USO na instância aberta (a que ela leu por último de cor/corp/paleta)
+                "paleta": dict(self._tema.paleta)}
 
     # ---- eventos
     @pyqtSlot("QVariantMap")

@@ -87,6 +87,9 @@ def comandos(a):
         r = consultar("Estado")
         e = json.loads(r[0]) if r else {"rodando": False}
         e["config"] = C.ler()
+        # A paleta que o tema pede agora; "paleta" (com a ilha aberta) é a que ela está mostrando.
+        from nucleo.tema import ler_paleta
+        e["paletaTema"] = ler_paleta()
         print(json.dumps(e, ensure_ascii=False))
         return 0
     if a.sair:

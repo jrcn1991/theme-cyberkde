@@ -62,6 +62,8 @@ WallpaperItem {
         corLuz: raiz.corp.luz; corNevoa: raiz.corp.nevoa; corBase: raiz.corp.base; corTexto: raiz.corp.texto
         logo: raiz.corp.logo ? Qt.resolvedUrl("../images/corp/" + raiz.corp.logo) : ""
         emblema: raiz.corp.emblema ? Qt.resolvedUrl("../images/corp/" + raiz.corp.emblema) : ""
+        tonsLogo: raiz.corp.tonsLogo || [0, 0]
+        tonsEmblema: raiz.corp.tonsEmblema || [0, 0]
         nome: raiz.corp.nome; lema: raiz.corp.lema; codigo: raiz.corp.codigo
         intensidade: (raiz.cfg.Intensidade ?? 100) / 100
         velocidade: (raiz.cfg.Velocidade ?? 100) / 100

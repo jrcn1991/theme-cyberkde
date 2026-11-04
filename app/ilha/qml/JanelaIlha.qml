@@ -48,15 +48,19 @@ Window {
         let c = Qt.createComponent("temas/" + id + "/Tema.qml")
         if (c.status !== Component.Ready) { console.warn("ilha: tema indisponível:", id, c.errorString()); id = "halo"; c = Qt.createComponent("temas/halo/Tema.qml") }
         const t = c.createObject(j, { paleta: Qt.binding(() => ilha.paleta), reduzir: Qt.binding(() => ilha.reduzir), estilo: Qt.binding(() => ilha.config.estilo || "preto") })
-        // "cor": um papel da paleta no lugar da cor de ação do tema
-        const acaoDoTema = t.acao
-        t.acao = Qt.binding(() => { const c = ilha.config.cor; return c && c !== "tema" && ilha.paleta[c] ? ilha.paleta[c] : acaoDoTema })
+        // "cor": um papel da paleta no lugar da cor de ação do tema. Só substitui quando pedida: guardar a cor do
+        // tema aqui a congelaria na paleta da hora em que a ilha subiu (a troca de corporação não chegava)
+        const c0 = ilha.config.cor
+        if (c0 && c0 !== "tema") t.acao = Qt.binding(() => ilha.paleta[ilha.config.cor] || ilha.paleta.destaque)
         const velho = tema
         temaId = id
         tema = t
         if (velho) velho.destroy()
     }
     onTemaPedidoChanged: carregarTema()
+    // voltar para "do tema" pede o tema de novo, com as ligações dele
+    readonly property bool corPropria: !!ilha.config.cor && ilha.config.cor !== "tema"
+    onCorPropriaChanged: carregarTema()
     Component.onCompleted: carregarTema()
 
     Item {

@@ -13,6 +13,24 @@ var LISTA = [
   "modoCamada": 0
  },
  {
+  "id": "explosao-limpa",
+  "nome": "Explosão de dados · sem estouro",
+  "nome_en": "Data burst · no blast",
+  "descricao": "A mesma coreografia da explosão, sem o estouro: o cartão abre de uma fenda no centro e os ícones saem dele em voo reto, freando, com fios finos que se apagam; o nome aparece por colunas. Sem anel, faíscas nem alerta. Ao sair, cada cartão esmaga em fenda no lugar e o central fecha por último.",
+  "descricao_en": "The same choreography as the burst, without the blast: a card opens from a slit at the center and icons fly straight out of it, braking, with thin wires that fade; the name appears in columns. No ring, sparks or alert. On exit each card collapses into a slit in place and the central card closes last.",
+  "modoShader": -1,
+  "modoCamada": 4
+ },
+ {
+  "id": "explosao-toxica",
+  "nome": "Explosão tóxica",
+  "nome_en": "Toxic burst",
+  "descricao": "O cartão central borbulha e solta um gás que se espalha da cerca, com bolhas e brilho que pulsa irregular. Os ícones voam já contaminados; ao assentar, a corrosão come o cartão de cada um, gotas escorrem e o ícone se limpa de cima para baixo. Ao sair, recontaminam e se desfazem no lugar.",
+  "descricao_en": "The central card bubbles and releases a gas that spreads across the fence, with bubbles and an irregular, pulsing glow. Icons fly out already contaminated; as they settle, corrosion eats each card, drops run down and the icon cleans itself from the top down. On exit they get recontaminated and dissolve in place.",
+  "modoShader": 11,
+  "modoCamada": 5
+ },
+ {
   "id": "cascata",
   "nome": "Cascata",
   "nome_en": "Cascade",

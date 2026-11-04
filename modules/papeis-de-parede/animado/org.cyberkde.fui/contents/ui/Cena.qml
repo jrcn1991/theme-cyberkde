@@ -17,6 +17,8 @@ Item {
     property color corTexto: "#EEEEEE"
     property url logo: ""
     property url emblema: ""
+    property var tonsLogo: [0, 0]          // [escura, clara] do SVG (gen_fui.py), para a tinta em dois tons
+    property var tonsEmblema: [0, 0]
     property string nome: "ARASAKA"
     property string lema: ""
     property string codigo: "ARS-54"
@@ -98,6 +100,9 @@ Item {
     component Tingida: ShaderEffect {
         property alias fonteUrl: img.source
         property color cor: c.corTexto
+        property var tons: [0, 0]
+        readonly property real lo: tons[0] || 0
+        readonly property real hi: tons[1] || 0
         readonly property var fonte: img
         fragmentShader: Qt.resolvedUrl("../shaders/tingir.frag.qsb")
         Image { id: img; visible: false; sourceSize.height: Math.ceil(parent.height * 2); fillMode: Image.PreserveAspectFit; smooth: true }
@@ -140,6 +145,7 @@ Item {
         Tingida {
             id: logoT
             fonteUrl: c.logo
+            tons: c.tonsLogo
             height: c.alt * 0.04
             width: Math.min(c.alt * 0.34, height * proporcao)
         }
@@ -212,7 +218,7 @@ Item {
         width: c.alt * 0.06
         height: emb.height + rotEmb.height + c.alt * 0.006
         x: c.width - width - c.alt * 0.07; y: c.height - height - c.alt * 0.07
-        Tingida { id: emb; fonteUrl: c.emblema; width: parent.width; height: width; cor: Qt.alpha(c.corTexto, 0.9) }
+        Tingida { id: emb; fonteUrl: c.emblema; tons: c.tonsEmblema; width: parent.width; height: width; cor: Qt.alpha(c.corTexto, 0.9) }
         Text {
             id: rotEmb
             y: emb.height + c.alt * 0.006

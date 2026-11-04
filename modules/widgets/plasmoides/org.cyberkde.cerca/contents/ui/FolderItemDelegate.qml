@@ -194,7 +194,7 @@ Item {
                 id: toolTip
                 anchors.fill: impl
 
-                active: (Plasmoid.configuration.toolTips || label.truncated)
+                active: (Plasmoid.configuration.toolTips || label.truncated || label.cortado || main.emCelula)
                         && impl.popupDialog === null
                         && !main.model.blank
                 interactive: false
@@ -277,18 +277,29 @@ Item {
             function nomeCabe(s, w, max) {
                 if (w <= 0) return s                  // ainda sem largura: não corta nada
                 if (max <= 1 || larg(s) <= w) return noMeio(s, w)
-                const pedacos = s.match(/[^ _-]+[ _-]*|[ _-]+/g) || [s]
+                // pedaços que terminam no separador; uma palavra que sozinha não cabe é partida onde couber
+                const pedacos = []
+                for (const p of (s.match(/[^ _-]+[ _-]*|[ _-]+/g) || [s])) {
+                    let r = p
+                    while (larg(r.trim()) > w && r.length > 1) {
+                        let k = r.length - 1
+                        while (k > 1 && larg(r.slice(0, k)) > w) k--
+                        pedacos.push(r.slice(0, k)); r = r.slice(k)
+                    }
+                    pedacos.push(r)
+                }
                 const linhas = []
                 let atual = ""
                 for (const p of pedacos) {
-                    if (atual && larg(atual + p) > w) { linhas.push(atual); atual = "" }
+                    if (atual && larg((atual + p).trim()) > w) { linhas.push(atual); atual = "" }
                     atual += p
                 }
                 if (atual) linhas.push(atual)
-                if (linhas.length <= max && linhas.every(l => larg(l.trim()) <= w)) return linhas.map(l => l.trim()).join("\n")
-                // não cabe: as primeiras linhas inteiras e o resto cortado no meio
-                const ini = linhas.slice(0, max - 1).filter(l => larg(l.trim()) <= w).map(l => l.trim())
-                return ini.concat([noMeio(s.slice(ini.join("").length).replace(/^[ ]+/, ""), w)]).join("\n")
+                if (linhas.length <= max) return linhas.map(l => l.trim()).join("\n")
+                // não cabe: as primeiras linhas inteiras e, na última, o resto cortado no meio (com a extensão)
+                const ini = linhas.slice(0, max - 1)
+                const resto = s.slice(ini.join("").length)
+                return ini.map(l => l.trim()).concat([noMeio(resto.trim(), w)]).join("\n")
             }
 
             // listras do layout dados e a célula chanfrada do inventário
@@ -320,7 +331,7 @@ Item {
                         width: Math.hypot(bx - ax, by - ay)
                         rotation: Math.atan2(by - ay, bx - ax) * 180 / Math.PI
                         transformOrigin: Item.Left
-                        color: parent.anima ? parent.anima.corAlerta : "transparent"
+                        color: parent.anima ? parent.anima.corCartao : "transparent"
                         opacity: (parent.e?.fio ?? 0) * 0.5
                         visible: opacity > 0.01
                     }
@@ -333,7 +344,7 @@ Item {
                         readonly property bool retic: deco.e?.trava !== undefined
                         readonly property size tam: Qt.size(width, height)
                         readonly property size miolo: retic ? Qt.size(ico, ico) : Qt.size(ico + 10, ico + 16)
-                        readonly property real modo: retic ? 1 : 0
+                        readonly property real modo: retic ? 1 : deco.anima ? deco.anima.modoDeco : 0
                         readonly property real fl: deco.e?.fl ?? 0
                         readonly property real rasgo: deco.e?.rasgo ?? 0
                         readonly property real trava: deco.e?.trava ?? 0
@@ -341,7 +352,7 @@ Item {
                         readonly property real semente: main.index % 97
                         readonly property real quadro: deco.e?.quadro ?? 0
                         readonly property color cor: deco.anima ? deco.anima.cor : "transparent"
-                        readonly property color alerta: deco.anima ? deco.anima.corAlerta : "transparent"
+                        readonly property color alerta: deco.anima ? deco.anima.corCartao : "transparent"
                         opacity: deco.e?.c ?? 0
                         visible: opacity > 0.01
                         fragmentShader: Qt.resolvedUrl("anim/deco.frag.qsb")
@@ -457,7 +468,9 @@ Item {
                     readonly property bool renaming: (editor && editor.targetItem === main)
                     // Quem limita as linhas é impl.nomeCabe. NÃO usar maximumLineCount aqui: mudá-lo pelo estado,
                     // com o Text ainda sem largura, derrubava o plasmashell (QTextLine::setLineWidth, nomes de 1 letra).
-                    readonly property int linhasNome: main.emLinha ? 1 : Plasmoid.configuration.textLines
+                    readonly property int linhasNome: main.emLinha ? 1 : main.GridView.view.linhasNome
+                    // o nome foi encurtado por impl.nomeCabe: a dica mostra o nome inteiro
+                    readonly property bool cortado: text.indexOf("…") >= 0 && String(main.model.display).indexOf("…") < 0
 
                     z: 2 // So it's always above the highlight effect
 

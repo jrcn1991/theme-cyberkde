@@ -69,13 +69,29 @@ def carregar():
     return d.values() if isinstance(d, dict) else d
 
 
+def tons(arq):
+    """Luminância (0–1) da cor mais escura e da mais clara do SVG; a tinta em dois tons usa as duas, e um logo de
+    uma cor só (ou de cores quase iguais) fica num tom só."""
+    if not arq:
+        return [0.0, 0.0]
+    import re
+    ls = []
+    for h in re.findall(r'fill="#([0-9A-Fa-f]{6})"', open(os.path.join(ASSETS_CORP, arq), encoding="utf-8").read()):
+        r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        ls.append(0.3 * r + 0.59 * g + 0.11 * b)
+    return [round(min(ls), 3), round(max(ls), 3)] if len(ls) > 1 and max(ls) - min(ls) >= 0.15 else [0.0, 0.0]
+
+
 def tabela():
     """Lista de corporações com as cores do papel e os arquivos de logo/emblema (só os que existem)."""
     out = []
     for c in carregar():
         cid = c["id"]
         cores = ARASAKA if cid == "arasaka" else derivar(c["destaque"], c["fundo"])
-        logo = "%s-logo.svg" % cid
+        # para fundo escuro: a versão "-logo-escuro", quando existe, mantém o recorte interno (as folhas da Biotechnica)
+        logo = "%s-logo-escuro.svg" % cid
+        if not os.path.exists(os.path.join(ASSETS_CORP, logo)):
+            logo = "%s-logo.svg" % cid
         emb = "%s.svg" % cid
         out.append({
             "id": cid,
@@ -88,6 +104,8 @@ def tabela():
             "logo": logo if os.path.exists(os.path.join(ASSETS_CORP, logo)) else "",
             "emblema": emb if os.path.exists(os.path.join(ASSETS_CORP, emb)) else "",
         })
+        out[-1]["tonsLogo"] = tons(out[-1]["logo"])
+        out[-1]["tonsEmblema"] = tons(out[-1]["emblema"])
     return out
 
 
@@ -161,6 +179,7 @@ props = {"corLuz": QColor(c["luz"]), "corNevoa": QColor(c["nevoa"]), "corBase": 
          "logo": QUrl.fromLocalFile(base + c["logo"]) if c["logo"] and a.get("logo", True) else QUrl(),
          "emblema": QUrl.fromLocalFile(base + c["emblema"]) if c["emblema"] and a.get("logo", True) else QUrl(),
          "nome": c["nome"], "lema": c["lema"], "codigo": c["codigo"], "grao": a.get("grao", 1.0),
+         "tonsLogo": c.get("tonsLogo", [0, 0]), "tonsEmblema": c.get("tonsEmblema", [0, 0]),
          "mostrarTextos": a.get("textos", True), "intensidade": a.get("intensidade", 1.0), "comEntrada": bool(a.get("entrada"))}
 for k, val in props.items(): r.setProperty(k, val)
 v.resize(a["largura"], a["altura"])

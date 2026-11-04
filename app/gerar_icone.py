@@ -72,6 +72,17 @@ def simbolo_svg(id_):
     return vb.group(1), m.group(1).strip()
 
 
+def achata(vb, miolo, x, y, w, h):
+    """O símbolo numa caixa x,y,w,h como <g transform>, sem <svg> aninhado (o QtSvg não desenha esse):
+    escala que cabe na caixa e centraliza, como o preserveAspectRatio padrão (xMidYMid meet)."""
+    minx, miny, vw, vh = (float(v) for v in vb.replace(",", " ").split())
+    k = min(w / vw, h / vh)
+    tx = x + (w - vw * k) / 2 - minx * k
+    ty = y + (h - vh * k) / 2 - miny * k
+    miolo = re.sub(r"</?svg\b[^>]*>", "", miolo)  # nenhum <svg> interno sobra
+    return f'<g transform="translate({tx:.4f} {ty:.4f}) scale({k:.6f})">{miolo}</g>'
+
+
 def monta_svg(corp="", cor=""):
     corp = "" if corp in ("nenhuma", "personalizada") else corp
     dados = corporacao(corp)
@@ -84,7 +95,7 @@ def monta_svg(corp="", cor=""):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">\n'
             f'  <!-- Ícone do painel do CyberKDE: moldura chanfrada do tema, símbolo da corporação ({corp}) e a cor de destaque. -->\n'
             f'  <path d="{MOLDURA}" fill="{fundo}" stroke="{cor}" stroke-width="4" stroke-linejoin="miter"/>\n'
-            f'  <svg x="13" y="12" width="38" height="38" viewBox="{vb}">{miolo}</svg>\n'
+            f'  {achata(vb, miolo, 13, 12, 38, 38)}\n'
             f'  <path d="M46 60L60 48H46Z" fill="{cor}"/>\n'
             f'</svg>\n')
 

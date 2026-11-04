@@ -297,7 +297,10 @@ wallpapers_set() {
 wallpapers_own() {
   # Com o FUI escolhido, a imagem própria fica guardada (volta com outra opção), mas não vale.
   [[ $(papel_opcao) != fui ]] || return 0
+  # Uma opção escolhida pelo efeito (a-d, corp) é escolha explícita: a imagem própria fica guardada e
+  # volta com "cyberkde papel <imagem>" ([papel] propria=true).
   local own=${CYBERKDE_WALLPAPER:-}
+  if [[ -z $own && $(kreadconfig6 --file "$config/cyberkde/efeitos" --group papel --key propria --default true 2>/dev/null) == false ]]; then return 0; fi
   if [[ -z $own && -s $config/cyberkde/papel-de-parede ]]; then own=$(<"$config/cyberkde/papel-de-parede"); fi
   printf '%s\n' "$own"
 }

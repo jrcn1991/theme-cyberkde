@@ -13,7 +13,15 @@ var CORPS = [
   "base": "#111111",
   "texto": "#EEEEEE",
   "logo": "arasaka-logo.svg",
-  "emblema": "arasaka.svg"
+  "emblema": "arasaka.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "biotechnica",
@@ -25,8 +33,16 @@ var CORPS = [
   "nevoa": "#023018",
   "base": "#0E1210",
   "texto": "#EEEEEE",
-  "logo": "biotechnica-logo.svg",
-  "emblema": "biotechnica.svg"
+  "logo": "biotechnica-logo-escuro.svg",
+  "emblema": "biotechnica.svg",
+  "tonsLogo": [
+   0.533,
+   0.866
+  ],
+  "tonsEmblema": [
+   0.533,
+   0.866
+  ]
  },
  {
   "id": "delamain",
@@ -39,7 +55,15 @@ var CORPS = [
   "base": "#100E14",
   "texto": "#EEEEEE",
   "logo": "delamain-logo.svg",
-  "emblema": "delamain.svg"
+  "emblema": "delamain.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "dynalar",
@@ -52,7 +76,15 @@ var CORPS = [
   "base": "#10120E",
   "texto": "#EEEEEE",
   "logo": "dynalar-logo.svg",
-  "emblema": "dynalar.svg"
+  "emblema": "dynalar.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "kangtao",
@@ -65,7 +97,15 @@ var CORPS = [
   "base": "#120F0E",
   "texto": "#EEEEEE",
   "logo": "kangtao-logo.svg",
-  "emblema": "kangtao.svg"
+  "emblema": "kangtao.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "kiroshi",
@@ -78,7 +118,15 @@ var CORPS = [
   "base": "#120E12",
   "texto": "#EEEEEE",
   "logo": "kiroshi-logo.svg",
-  "emblema": "kiroshi.svg"
+  "emblema": "kiroshi.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "militech",
@@ -91,7 +139,15 @@ var CORPS = [
   "base": "#11100E",
   "texto": "#EEEEEE",
   "logo": "militech-logo.svg",
-  "emblema": "militech.svg"
+  "emblema": "militech.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "mooretech",
@@ -104,7 +160,15 @@ var CORPS = [
   "base": "#100E0F",
   "texto": "#EEEEEE",
   "logo": "mooretech-logo.svg",
-  "emblema": "mooretech.svg"
+  "emblema": "mooretech.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "netwatch",
@@ -116,8 +180,16 @@ var CORPS = [
   "nevoa": "#031630",
   "base": "#0E1016",
   "texto": "#EEEEEE",
-  "logo": "netwatch-logo.svg",
-  "emblema": "netwatch.svg"
+  "logo": "netwatch-logo-escuro.svg",
+  "emblema": "netwatch.svg",
+  "tonsLogo": [
+   0.607,
+   0.866
+  ],
+  "tonsEmblema": [
+   0.607,
+   0.866
+  ]
  },
  {
   "id": "nightcorp",
@@ -129,8 +201,16 @@ var CORPS = [
   "nevoa": "#302107",
   "base": "#10100E",
   "texto": "#EEEEEE",
-  "logo": "nightcorp-logo.svg",
-  "emblema": "nightcorp.svg"
+  "logo": "nightcorp-logo-escuro.svg",
+  "emblema": "nightcorp.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "petrochem",
@@ -143,7 +223,15 @@ var CORPS = [
   "base": "#0E1212",
   "texto": "#EEEEEE",
   "logo": "petrochem-logo.svg",
-  "emblema": "petrochem.svg"
+  "emblema": "petrochem.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "segotari",
@@ -156,7 +244,15 @@ var CORPS = [
   "base": "#0E1014",
   "texto": "#EEEEEE",
   "logo": "segotari-logo.svg",
-  "emblema": "segotari.svg"
+  "emblema": "segotari.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "traumateam",
@@ -169,7 +265,15 @@ var CORPS = [
   "base": "#120E10",
   "texto": "#EEEEEE",
   "logo": "traumateam-logo.svg",
-  "emblema": "traumateam.svg"
+  "emblema": "traumateam.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "zetatech",
@@ -181,8 +285,16 @@ var CORPS = [
   "nevoa": "#302C2C",
   "base": "#101012",
   "texto": "#EEEEEE",
-  "logo": "zetatech-logo.svg",
-  "emblema": "zetatech.svg"
+  "logo": "zetatech-logo-escuro.svg",
+  "emblema": "zetatech.svg",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  },
  {
   "id": "nenhuma",
@@ -195,7 +307,15 @@ var CORPS = [
   "base": "#101014",
   "texto": "#EEEEEE",
   "logo": "",
-  "emblema": ""
+  "emblema": "",
+  "tonsLogo": [
+   0.0,
+   0.0
+  ],
+  "tonsEmblema": [
+   0.0,
+   0.0
+  ]
  }
 ];
 

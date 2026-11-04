@@ -27,6 +27,10 @@ float e(float a, float b, float x) { return smoothstep(a, b, x); }
 vec4 luz(vec3 c, float a) { return vec4(c * a, a); }
 vec4 sobre(vec4 cima, vec4 baixo) { return cima + baixo * (1.0 - cima.a); }
 
+float vn(vec2 p) {
+    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y);
+}
 float cinza(vec4 c) { return dot(c.rgb, vec3(0.3, 0.59, 0.11)); }
 
 void main() {
@@ -82,6 +86,22 @@ void main() {
             float a = go[k] > 0.0 ? texture(fonte, uv - vec2(gx[k] / tam.x, 0)).a : 0.0;
             r = sobre(r, luz(k == 1 ? cor2.rgb : cor.rgb, a * go[k] * lin));
         }
+    } else if (m == 11) {               // explosão tóxica: q = limpeza (0 contaminado), q2 = o que sobra (saída)
+        float n = vn(px / 6.0 + semente) * 0.8 + vn(px / 2.5 + semente) * 0.2;
+        vec2 o = 2.5 / tam;
+        float viz = min(min(texture(fonte, uv + vec2(o.x, 0)).a, texture(fonte, uv - vec2(o.x, 0)).a),
+                        min(texture(fonte, uv + vec2(0, o.y)).a, texture(fonte, uv - vec2(0, o.y)).a));
+        float borda = c.a * (1.0 - viz);
+        // a limpeza desce de cima, com frente irregular
+        float sujo = step(0.0, uv.y - (q * 1.4 - 0.25) + (n - 0.5) * 0.35) * step(q, 0.999);
+        float puls = 0.65 + 0.35 * h21(vec2(floor(q * 23.0 + semente), 3.0));
+        vec3 tox = mix(cor2.rgb, cor.rgb, step(0.72, n)) * puls;
+        r = c;
+        r.rgb = mix(r.rgb, tox * c.a, sujo * 0.85);
+        r *= 1.0 - borda * sujo * step(0.5, n);                  // a borda roída
+        vec2 cel = floor(px / 5.0), f = fract(px / 5.0) - 0.5;    // bolhas na parte suja
+        r = sobre(luz(cor2.rgb, step(abs(length(f) - 0.3), 0.09) * step(0.86, h21(cel + 3.0)) * c.a * sujo * 0.85), r);
+        r *= step(1.0 - q2, (vn(px / 6.0 + semente * 3.0) * 0.8 + vn(px / 2.5) * 0.15) * (1.0 - 0.5 * borda) + 0.02);
     } else if (m == 10) {               // nome: colunas que acendem no lugar, sem mudar uma letra de posição
         vec2 b = vec2(floor(px.x / 5.0), floor(px.y / 18.0));
         r = c * step(h21(b), q * 1.02);
