@@ -294,6 +294,19 @@ def tile(emblema):
             f'<g transform="translate(256 256) scale(3.05) translate(-50 -50)">{emblema}</g></svg>\n')
 
 
+# .desktop de cada app (para achar o ícone que ele instalou: ver apps_marca.localiza)
+DESKTOPS = {
+    "pycharm": ["pycharm_pycharm.desktop", "jetbrains-pycharm.desktop", "jetbrains-pycharm-ce.desktop"], "datagrip": ["datagrip.desktop"],
+    "dbeaver": ["dbeaver-ce.desktop", "dbeaver.desktop"], "steam": ["steam.desktop"], "google-chrome": ["google-chrome.desktop"],
+    "claude-desktop": ["com.anthropic.Claude.desktop", "claude-desktop.desktop"], "spotify": ["spotify.desktop"], "1password": ["1password.desktop"],
+    "telegram": ["org.telegram.desktop.desktop", "telegramdesktop.desktop"], "obs-studio": ["com.obsproject.Studio.desktop"],
+    "remmina": ["org.remmina.Remmina.desktop"], "filezilla": ["filezilla.desktop"], "virtualbox": ["virtualbox.desktop"],
+    "kate": ["org.kde.kate.desktop"], "systemsettings": ["systemsettings.desktop"], "plasma-systemmonitor": ["org.kde.plasma-systemmonitor.desktop"],
+    "libreoffice": ["libreoffice-startcenter.desktop"], "software": ["org.kubuntu.manage-software.desktop", "snap-store_snap-store.desktop"],
+    "vscode": ["code.desktop"], "shotcut": ["org.shotcut.Shotcut.desktop"], "cura": ["com.ultimaker.cura.desktop"],
+    "meshmixer": ["meshmixer.desktop"], "text-editor": ["org.gnome.TextEditor.desktop"], "calculator": ["org.gnome.Calculator.desktop"],
+}
+
 # .desktop cujo Icon= é um caminho de arquivo: o tema de ícones não alcança. Para o ícone do tema valer, o
 # .desktop precisa de um override do usuário (~/.local/share/applications/<id>) com Icon=<nome>; quem aplica
 # (reversível, put_file) é o orquestrador. O nome é o primeiro de APPS[...] do app.
@@ -310,7 +323,7 @@ def gera():
         for aid, (nome, nomes, fn) in APPS.items():
             (tmp / f"{aid}.svg").write_text(tile(fn()))
             cmds += f"file-open:{tmp / (aid + '.svg')}; export-filename:{OUT / (aid + '.png')}; export-width:512; export-height:512; export-do; file-close\n"
-            meta[aid] = {"nome": nome, "nomes": nomes}
+            meta[aid] = {"nome": nome, "nomes": nomes, "desktops": DESKTOPS.get(aid, [])}
         subprocess.run(["inkscape", "--shell"], input=cmds, text=True, capture_output=True)
         for aid in APPS:
             if not (OUT / f"{aid}.png").is_file():

@@ -22,6 +22,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import apps_marca  # noqa: E402
 import cyberlib  # noqa: E402
 from cyberlib import BASE, CYAN, GOLD, GREEN, RED, TOK, VISITED, mix  # noqa: E402
 
@@ -142,10 +143,12 @@ ICONS = {
 # cada um atende todos os nomes de ícone listados no apps.json (o primeiro é o arquivo real).
 APPS_SRC = ROOT / "assets" / "icons" / "apps"
 APPS_NOVOS = set()
+APPS_META = {}
 if (APPS_SRC / "apps.json").is_file():
     for _id, _m in json.loads((APPS_SRC / "apps.json").read_text()).items():
         ICONS[_id] = ("apps", _m["nomes"])
         APPS_NOVOS.add(_id)
+        APPS_META[_id] = _m
 EXTRA = {"inode-directory": ("mimetypes", "folder")}  # pastas no Dolphin usam o ícone do tipo MIME
 # Nomes de contexto exatos da especificação; o KDE ignora grafias como "Mimetypes".
 CONTEXTS = {"places": "Places", "devices": "Devices", "mimetypes": "MimeTypes", "apps": "Applications"}
@@ -245,6 +248,27 @@ def passthrough(defined):
     return meta
 
 
+def app_fonte(aid, estilo, tmp):
+    """Arquivo de origem de um app favorito, já na cor certa, ou None (o app fica sem ícone do tema).
+    estilo: "marca" e "recolorido" usam o ícone que o app instalou na máquina (apps_marca; nada disso é versionado);
+    "silhueta" (e o que não tem ícone instalado) usa a silhueta de assets/icons/apps; "nenhum" não gera apps
+    (é o padrão, porque themes/icons/CyberKDE é versionado e não pode levar arte de marca)."""
+    if estilo == "nenhum":
+        return None
+    if estilo in ("marca", "recolorido"):
+        m = APPS_META.get(aid, {})
+        src = apps_marca.localiza(m.get("nomes", []), m.get("desktops", []))
+        if src is not None:
+            try:
+                return apps_marca.compoe(src, estilo, RED, tmp, accented)
+            except (OSError, subprocess.CalledProcessError) as e:
+                print(f"aviso: {aid}: não consegui usar {src} ({e}); fica a silhueta", file=sys.stderr)
+    arq = APPS_SRC / f"{aid}.png"
+    if not arq.is_file():
+        return None
+    return accented(arq) if RED.upper() != DEFAULT_RED.upper() else arq
+
+
 def fonte(base, alt):
     """Arquivo de origem de um ícone: o alternativo, se o grupo dele foi escolhido; senão, o do ai-final."""
     if base in APPS_NOVOS:
@@ -254,7 +278,7 @@ def fonte(base, alt):
     return SRC / f"{base}.png"
 
 
-def main(alt=frozenset()):
+def main(alt=frozenset(), apps_estilo="nenhum"):
     shutil.rmtree(OUT, ignore_errors=True)
     dirs = set()
     seen = {}
@@ -270,6 +294,9 @@ def main(alt=frozenset()):
             for base, (ctx, names) in ICONS.items():
                 if changed:
                     names = [n for n in names if n != "folder-red"]
+                if base in APPS_NOVOS:
+                    pending.append((pool.submit(app_fonte, base, apps_estilo, tmp), ctx, names))
+                    continue
                 pending.append((pool.submit(source, fonte(base, alt)), ctx, names))
             pending += [(pool.submit(source, SRC / f"{base}.png"), ctx, [name]) for name, (ctx, base) in EXTRA.items()]
             for color, value in FOLDER_COLORS.items():
@@ -277,6 +304,7 @@ def main(alt=frozenset()):
                 pending.append((pool.submit(lambda s=src, v=value: (recolor(SRC / "folder.png", s, v), s)[1]),
                                 "places", [f"folder-{color}"]))
             entries = [(fut.result(), ctx, names) for fut, ctx, names in pending]
+            entries = [e for e in entries if e[0] is not None]  # app sem ícone: fica sem o do tema
             if changed:
                 entries.append((SRC / "folder.png", "places", ["folder-red"]))
 
@@ -348,6 +376,28 @@ def previas(destino):
     print(f"prévias em {destino}")
 
 
+def grade_apps(arq, estilo):
+    """Grade de todos os apps no estilo pedido (128 e 48/32/22 px) e a lista dos que não tinham ícone instalado."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="cyberkde-grade-"))
+    try:
+        itens, sem = [], []
+        for aid, m in APPS_META.items():
+            instalado = apps_marca.localiza(m["nomes"], m.get("desktops", [])) is not None
+            p = app_fonte(aid, estilo, tmp)
+            if p is None:
+                sem.append(f"{aid} (sem ícone e sem silhueta)")
+                continue
+            itens.append((m["nome"] + ("" if instalado else " [silhueta]"), p))
+            if not instalado:
+                sem.append(f"{aid} (sem ícone instalado → silhueta)")
+        apps_marca.grade(itens, arq)
+        print(f"{len(itens)} apps em {arq}")
+        for x in sem:
+            print("  sem ícone instalado:", x)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def argumentos():
     """--alt documents,music,...|todos: estilos alternativos (assets/icons/alternativos).
     --saida DIR: gera fora de themes/icons/CyberKDE (que é versionado)."""
@@ -357,9 +407,15 @@ def argumentos():
     ap.add_argument("--alt", default="", help="grupos com o estilo alternativo: " + ",".join(ALT_GRUPOS) + " ou todos")
     ap.add_argument("--saida", default="", help="pasta de saída (padrão: themes/icons/CyberKDE)")
     ap.add_argument("--previas", default="", help="só grava as miniaturas das opções nesta pasta e sai")
+    ap.add_argument("--apps-estilo", default="nenhum", choices=["nenhum", "marca", "recolorido", "silhueta"],
+                    help="ícones dos apps favoritos (padrão: nenhum, para o tema versionado não levar arte de marca)")
+    ap.add_argument("--grade", default="", help="só grava a grade de conferência dos apps no estilo de --apps-estilo e sai")
     a = ap.parse_args()
     if a.previas:
         previas(pathlib.Path(a.previas))
+        raise SystemExit(0)
+    if a.grade:
+        grade_apps(a.grade, a.apps_estilo if a.apps_estilo != "nenhum" else "marca")
         raise SystemExit(0)
     grupos = list(ALT_GRUPOS) if a.alt.strip() == "todos" else [g for g in a.alt.replace(" ", "").split(",") if g]
     ruim = [g for g in grupos if g not in ALT_GRUPOS]
@@ -367,8 +423,9 @@ def argumentos():
         ap.error(f"grupo desconhecido: {', '.join(ruim)} (há: {', '.join(ALT_GRUPOS)})")
     if a.saida:
         OUT = pathlib.Path(a.saida)
-    return frozenset(ALT_GRUPOS[g] for g in grupos)
+    return frozenset(ALT_GRUPOS[g] for g in grupos), a.apps_estilo
 
 
 if __name__ == "__main__":
-    main(argumentos())
+    _alt, _estilo = argumentos()
+    main(_alt, _estilo)

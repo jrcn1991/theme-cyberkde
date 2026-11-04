@@ -11,7 +11,13 @@
 # repositório (~/.cache/cyberkde/icones-alt) e instalado por cima pelo gancho abaixo, no fim do
 # "cyberkde install"/"on" (depois de o install_files instalar o padrão).
 
-CYBERKDE_EFEITOS+=(icones)
+#
+# Efeito "icones-apps": estilo dos ícones dos apps favoritos (assets/icons/apps/apps.json): marca (o logo original
+# do app, com as cores da marca, dentro da moldura do tema; é o padrão), recolorido (o logo original nos tons do
+# destaque) e silhueta (o desenho do tema). O logo vem do ícone que o PRÓPRIO app instalou (hicolor, snap, flatpak,
+# Icon= do .desktop), lido na instalação: nenhuma arte de marca é versionada. App sem ícone instalado fica com a
+# silhueta. A moldura acompanha o destaque: "cyberkde cor"/"corp" rodam o install_files, e o gancho abaixo gera de novo.
+CYBERKDE_EFEITOS+=(icones icones-apps)
 CYBERKDE_INSTALLS+=(install_icones-opcoes)
 
 icones_grupos=(documents music pictures recent remote trash)
@@ -47,18 +53,99 @@ icones_alt_lista() {
 icones_opcoes_gerar() {  # lista
   local saida="${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde/icones-alt"
   rm -rf -- "$saida"
-  python3 "$project/generator/gen_icons.py" ${1:+--alt "$1"} --saida "$saida/CyberKDE" >/dev/null || return 1
+  python3 "$project/generator/gen_icons.py" ${1:+--alt "$1"} --apps-estilo "$(icones_apps_estilo)" --saida "$saida/CyberKDE" >/dev/null || return 1
   swap_dir "$saida/CyberKDE" "$data/icons/CyberKDE"
   rm -rf -- "$saida"
+  icones_apps_previas
   if declare -F icones_sistema_avisar >/dev/null; then icones_sistema_avisar; fi
 }
 
-# O install_files já instalou o padrão; com alternativos escolhidos, troca pelo tema com eles.
+# O install_files instalou o tema versionado (sem ícones de apps de marca); aqui entra o tema com os apps no
+# estilo escolhido (e os alternativos, se houver). Roda sempre, também no "cyberkde cor"/"corp" (a moldura segue o destaque).
 install_icones-opcoes() {
-  local lista
-  lista=$(icones_alt_lista)
-  [[ -n $lista ]] || return 0
-  icones_opcoes_gerar "$lista"
+  icones_opcoes_gerar "$(icones_alt_lista)"
+}
+
+# ---- efeito "icones-apps"
+icones_apps_estilos=(marca recolorido silhueta)
+icones_apps_estilo() {
+  local v
+  v=$(kreadconfig6 --file "$icones_efeitos_file" --group icones-apps --key estilo --default marca 2>/dev/null)
+  case $v in recolorido | silhueta) echo "$v" ;; *) echo marca ;; esac
+}
+icones_apps_previas_dir() { echo "${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde/previas/icones-apps"; }
+# Grades de conferência dos três estilos, só no cache do usuário (têm logos de marca: não vão para o repositório).
+icones_apps_previas() {
+  local d e
+  d=$(icones_apps_previas_dir)
+  mkdir -p -- "$d"
+  for e in "${icones_apps_estilos[@]}"; do
+    python3 "$project/generator/gen_icons.py" --apps-estilo "$e" --grade "$d/$e.png" >/dev/null 2>&1 || true
+  done
+}
+icones_apps_previa() {  # estilo -> caminho absoluto da prévia, ou nada
+  local f
+  f="$(icones_apps_previas_dir)/$1.png"
+  if [[ -f $f ]]; then printf '%s\n' "$f"; fi
+}
+icones_apps_nome() {  # estilo pt|en
+  case $1$2 in
+    marcapt) echo "Marca" ;; marcaen) echo "Brand" ;;
+    recoloridopt) echo "Recolorido" ;; recoloridoen) echo "Recolored" ;;
+    silhuetapt) echo "Silhueta" ;; silhuetaen) echo "Silhouette" ;;
+  esac
+}
+
+efeito_estado_icones-apps() {
+  local instalado=false
+  [[ -f $data/icons/CyberKDE/index.theme ]] && instalado=true
+  printf '{"estilo":"%s","temaInstalado":%s}' "$(icones_apps_estilo)" "$instalado"
+}
+
+efeito_json_icones-apps() {
+  local e valores=""
+  for e in "${icones_apps_estilos[@]}"; do
+    valores+="${valores:+,}{\"id\":\"$e\",\"nome\":$(json_str "$(icones_apps_nome "$e" pt)"),\"nome_en\":$(json_str "$(icones_apps_nome "$e" en)"),\"previa\":$(json_caminho "$(icones_apps_previa "$e")")}"
+  done
+  printf '{"id":"icones-apps","nome":%s,"nome_en":%s,"descricao":%s,"descricao_en":%s,"tipo":"variante","opcoes":[{"id":"estilo","nome":"Estilo","nome_en":"Style","tipo":"variante","padrao":"marca","valores":[%s]}],"estado":%s}' \
+    "$(json_str "Ícones dos aplicativos")" "$(json_str "App icons")" \
+    "$(json_str "Estilo dos ícones dos seus aplicativos favoritos: o logo original com as cores da marca dentro da moldura do tema, o logo nos tons do destaque, ou a silhueta do tema. O logo vem do ícone que o próprio app instalou. Vale na hora, nos apps abertos.")" \
+    "$(json_str "Style of your favorite apps' icons: the original logo in the brand colors inside the theme frame, the logo in the accent tones, or the theme silhouette. The logo comes from the icon the app itself installed. Applies right away, in open apps.")" \
+    "$valores" "$(efeito_estado_icones-apps)"
+}
+
+#   cyberkde efeito icones-apps [marca|recolorido|silhueta] [--json]   (sem estilo: só lê)
+#   --json: {"efeito":"icones-apps",<estado>,"avisos":[...]}. Saída: 0 · 1 falha · 2 uso · 3 ocupado
+efeito_cmd_icones-apps() {
+  local estilo="" arg
+  for arg in "$@"; do
+    case $arg in
+      marca | recolorido | silhueta) [[ -z $estilo ]] && estilo=$arg || estilo=invalido ;;
+      *) estilo=invalido ;;
+    esac
+  done
+  [[ $estilo != invalido ]] || cor_exit 2 "$(t "uso: cyberkde efeito icones-apps [marca|recolorido|silhueta] [--json]" "usage: cyberkde efeito icones-apps [marca|recolorido|silhueta] [--json]")"
+  local -a avisos=()
+  if [[ -n $estilo ]]; then
+    take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
+    mkdir -p -- "$(dirname -- "$icones_efeitos_file")"
+    kwriteconfig6 --file "$icones_efeitos_file" --group icones-apps --key estilo "$estilo"
+    if [[ -f $data/icons/CyberKDE/index.theme ]]; then
+      icones_opcoes_gerar "$(icones_alt_lista)" || cor_exit 1 "$(t "não consegui gerar o tema de ícones" "could not generate the icon theme")"
+    else
+      avisos+=("$(t "O tema de ícones CyberKDE não está instalado: a escolha foi guardada e vale no próximo cyberkde install." "The CyberKDE icon theme is not installed: the choice was saved and applies on the next cyberkde install.")")
+    fi
+  fi
+  local estado
+  estado=$(efeito_estado_icones-apps)
+  if (( cor_json )); then
+    local corpo=${estado#\{}
+    printf '{"efeito":"icones-apps",%s,"avisos":%s}\n' "${corpo%\}}" "$(json_list_str "${avisos[@]}")" >&3
+  else
+    echo "$(t "Ícones dos aplicativos" "App icons"): $estado"
+    local a
+    for a in "${avisos[@]}"; do echo "$(t Aviso Note): $a" >&2; done
+  fi
 }
 
 icones_previa() {  # grupo estilo -> caminho absoluto da prévia, ou nada

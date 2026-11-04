@@ -9,6 +9,11 @@
    "pycharm-edu",
    "jetbrains-pycharm-ce",
    "pycharm_pycharm"
+  ],
+  "desktops": [
+   "pycharm_pycharm.desktop",
+   "jetbrains-pycharm.desktop",
+   "jetbrains-pycharm-ce.desktop"
   ]
  },
  "datagrip": {
@@ -16,6 +21,9 @@
   "nomes": [
    "datagrip",
    "jetbrains-datagrip"
+  ],
+  "desktops": [
+   "datagrip.desktop"
   ]
  },
  "dbeaver": {
@@ -25,6 +33,10 @@
    "dbeaver-ce",
    "io.dbeaver.DBeaverCommunity",
    "dbeaver_dbeaver"
+  ],
+  "desktops": [
+   "dbeaver-ce.desktop",
+   "dbeaver.desktop"
   ]
  },
  "steam": {
@@ -34,6 +46,9 @@
    "steam_icon_steam",
    "com.valvesoftware.Steam",
    "steam-launcher"
+  ],
+  "desktops": [
+   "steam.desktop"
   ]
  },
  "google-chrome": {
@@ -45,6 +60,9 @@
    "chromium",
    "chromium-browser",
    "com.google.Chrome"
+  ],
+  "desktops": [
+   "google-chrome.desktop"
   ]
  },
  "claude-desktop": {
@@ -54,6 +72,10 @@
    "com.anthropic.Claude",
    "claude",
    "claude-ai"
+  ],
+  "desktops": [
+   "com.anthropic.Claude.desktop",
+   "claude-desktop.desktop"
   ]
  },
  "spotify": {
@@ -62,6 +84,9 @@
    "spotify-client",
    "spotify",
    "com.spotify.Client"
+  ],
+  "desktops": [
+   "spotify.desktop"
   ]
  },
  "1password": {
@@ -70,6 +95,9 @@
    "1password",
    "com.onepassword.OnePassword",
    "onepassword"
+  ],
+  "desktops": [
+   "1password.desktop"
   ]
  },
  "telegram": {
@@ -80,6 +108,10 @@
    "telegram-desktop",
    "org.telegram.desktop.desktop",
    "telegramdesktop"
+  ],
+  "desktops": [
+   "org.telegram.desktop.desktop",
+   "telegramdesktop.desktop"
   ]
  },
  "obs-studio": {
@@ -88,6 +120,9 @@
    "com.obsproject.Studio",
    "obs",
    "obs-studio"
+  ],
+  "desktops": [
+   "com.obsproject.Studio.desktop"
   ]
  },
  "remmina": {
@@ -96,6 +131,9 @@
    "org.remmina.Remmina",
    "remmina",
    "remmina-main"
+  ],
+  "desktops": [
+   "org.remmina.Remmina.desktop"
   ]
  },
  "filezilla": {
@@ -103,6 +141,9 @@
   "nomes": [
    "filezilla",
    "org.filezilla_project.Filezilla"
+  ],
+  "desktops": [
+   "filezilla.desktop"
   ]
  },
  "virtualbox": {
@@ -111,6 +152,9 @@
    "virtualbox",
    "org.virtualbox.VirtualBox",
    "virtualbox-ose"
+  ],
+  "desktops": [
+   "virtualbox.desktop"
   ]
  },
  "kate": {
@@ -119,6 +163,9 @@
    "kate",
    "org.kde.kate",
    "kate-symbolic-app"
+  ],
+  "desktops": [
+   "org.kde.kate.desktop"
   ]
  },
  "systemsettings": {
@@ -126,6 +173,9 @@
   "nomes": [
    "systemsettings",
    "org.kde.systemsettings"
+  ],
+  "desktops": [
+   "systemsettings.desktop"
   ]
  },
  "plasma-systemmonitor": {
@@ -133,6 +183,9 @@
   "nomes": [
    "org.kde.plasma-systemmonitor",
    "org.kde.plasma.systemmonitor"
+  ],
+  "desktops": [
+   "org.kde.plasma-systemmonitor.desktop"
   ]
  },
  "libreoffice": {
@@ -141,6 +194,9 @@
    "libreoffice-startcenter",
    "libreoffice-main",
    "libreoffice"
+  ],
+  "desktops": [
+   "libreoffice-startcenter.desktop"
   ]
  },
  "software": {
@@ -152,6 +208,10 @@
    "org.gnome.Software",
    "org.kde.discover",
    "plasmadiscover"
+  ],
+  "desktops": [
+   "org.kubuntu.manage-software.desktop",
+   "snap-store_snap-store.desktop"
   ]
  },
  "vscode": {
@@ -162,6 +222,9 @@
    "visual-studio-code",
    "com.visualstudio.code",
    "com.visualstudio.code.oss"
+  ],
+  "desktops": [
+   "code.desktop"
   ]
  },
  "shotcut": {
@@ -169,6 +232,9 @@
   "nomes": [
    "org.shotcut.Shotcut",
    "shotcut"
+  ],
+  "desktops": [
+   "org.shotcut.Shotcut.desktop"
   ]
  },
  "cura": {
@@ -177,12 +243,18 @@
    "cura-icon",
    "com.ultimaker.cura",
    "cura"
+  ],
+  "desktops": [
+   "com.ultimaker.cura.desktop"
   ]
  },
  "meshmixer": {
   "nome": "Meshmixer",
   "nomes": [
    "meshmixer"
+  ],
+  "desktops": [
+   "meshmixer.desktop"
   ]
  },
  "text-editor": {
@@ -190,6 +262,9 @@
   "nomes": [
    "org.gnome.TextEditor",
    "accessories-text-editor"
+  ],
+  "desktops": [
+   "org.gnome.TextEditor.desktop"
   ]
  },
  "calculator": {
@@ -199,6 +274,9 @@
    "accessories-calculator",
    "org.kde.kcalc",
    "kcalc"
+  ],
+  "desktops": [
+   "org.gnome.Calculator.desktop"
   ]
  }
 }
