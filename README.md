@@ -109,7 +109,7 @@ The panel never writes the theme configuration on its own: it only calls `cyberk
 Fences for the desktop: each fence is a real folder in a theme frame that rolls up to just its title. It comes from the same code as Plasma's folder view, so dragging, opening, renaming and the context menu work as you expect. Create as many as you like, on any screen.
 
 <p align="center">
-  <img src="assets/readme/cerca-animacoes.gif" width="100%" alt="Fences appearing and vanishing with the line draw, glitch, shards and hologram animations, and the icons coming in with data burst, cascade, decode and glitch">
+  <img src="assets/readme/cerca-animacoes.gif" width="100%" alt="Real fences showing their icons with Data burst and its no-blast and toxic variants, Quickhack, Braindance and Sandevistan">
 </p>
 
 **In a fence.** A real folder or a list of shortcuts (what you drop becomes a shortcut and nothing moves), tabs with other folders, a filter by type, compact density, subfolders in a popup, a color from the palette, a blurred background and the roll-up trigger (Ctrl+click, click or when the mouse leaves). Dropping files moves them right away; Ctrl copies, and it can be undone.
@@ -124,11 +124,11 @@ Fences for the desktop: each fence is a real folder in a theme frame that rolls 
 
 **Layouts.** Save the position, size and settings of every fence under a name and restore them whenever you want, even automatically when the monitors change (`--por-resolucao on`). Backup exports and imports rules, layouts and the current layout in one file.
 
-**Animations.** 16 for hiding and showing fences and 8 for the icons, with a preview in the panel's CYBER FENCE section.
+**Animations.** 16 for hiding and showing fences and 13 for the icons: Data burst (also with no blast and toxic), Quickhack, Braindance, Sandevistan, Cascade, Decode, Scan, Assembly, Chromatic glitch, Mosaic and None. All of them have a preview in the panel's CYBER FENCE section.
 
 | | |
 |---|---|
-| ![The 16 hide and show animations](assets/readme/cerca-16-animacoes.gif) | ![The 8 icon animations](assets/readme/cerca-8-icones.gif) |
+| ![The 16 hide and show animations](assets/readme/cerca-16-animacoes.gif) | ![The 13 icon animations, on real fences](assets/readme/cerca-icones.gif) |
 
 **Global shortcuts** (off until you turn them on; if a combination is taken, the theme warns you or picks the next free one):
 
@@ -385,7 +385,7 @@ cyberkde efeito papel fui        # animated; a | b | c | d = fixed static ones; 
 | Konsole | color scheme and profile; in the animated Konsole, the data cascade and 8 more effects |
 | Login | SDDM, startup splash and lock screen, with selectable animations |
 | Wallpaper | four options in the accent color, the corporation's own, the animated FUI or your own image |
-| Cyber Fence | desktop fences with rules, layouts, 16+8 animations and shortcuts |
+| Cyber Fence | desktop fences with rules, layouts, 16+13 animations and shortcuts |
 | DATASHARD | the theme's file manager, alongside Dolphin |
 | Widgets | 11 widgets, the FUI dashboard and 15 modules, with Jukebox and Neon Radio in media |
 | Dynamic island | a pill at the top of the screen with system modules and 4 themes (off by default) |

@@ -110,7 +110,7 @@ O painel nunca grava a configuração do tema por conta própria: ele só chama 
 Cercas para a área de trabalho: cada cerca é uma pasta real numa moldura do tema, que recolhe até só o título. Ela sai do mesmo código da Visão de pasta do Plasma, então arrastar, abrir, renomear e o menu de contexto funcionam como você espera. Crie quantas quiser, em qualquer tela.
 
 <p align="center">
-  <img src="assets/readme/cerca-animacoes.gif" width="100%" alt="Cercas aparecendo e sumindo com as animações traçado, glitch, cacos e holograma, e os ícones entrando em explosão, cascata, decodificação e glitch">
+  <img src="assets/readme/cerca-animacoes.gif" width="100%" alt="Cercas reais exibindo os ícones com a Explosão de dados e as variantes sem estouro e tóxica, Quickhack, Braindance e Sandevistan">
 </p>
 
 **Na cerca.** Pasta real ou lista de atalhos (o que você solta vira atalho e nada sai do lugar), abas com outras pastas, filtro por tipo, densidade compacta, subpasta em popup, cor da paleta, fundo desfocado e o gatilho de recolher (Ctrl+clique, clique ou ao sair o mouse). Soltar arquivos move direto; Ctrl copia, e dá para desfazer.
@@ -125,11 +125,11 @@ Cercas para a área de trabalho: cada cerca é uma pasta real numa moldura do te
 
 **Layouts.** Salve a posição, o tamanho e a configuração de todas as cercas com um nome e restaure quando quiser, inclusive sozinho ao trocar de monitor (`--por-resolucao on`). O backup exporta e importa regras, layouts e o layout atual num arquivo só.
 
-**Animações.** 16 para ocultar e exibir as cercas e 8 para os ícones, com prévia na seção CYBER FENCE do painel.
+**Animações.** 16 para ocultar e exibir as cercas e 13 para os ícones: Explosão de dados (também sem estouro e tóxica), Quickhack, Braindance, Sandevistan, Cascata, Decodificação, Varredura, Montagem, Glitch cromático, Mosaico e Nenhuma. Todas têm prévia na seção CYBER FENCE do painel.
 
 | | |
 |---|---|
-| ![As 16 animações de ocultar e exibir](assets/readme/cerca-16-animacoes.gif) | ![As 8 animações dos ícones](assets/readme/cerca-8-icones.gif) |
+| ![As 16 animações de ocultar e exibir](assets/readme/cerca-16-animacoes.gif) | ![As 13 animações dos ícones, em cercas reais](assets/readme/cerca-icones.gif) |
 
 **Atalhos globais** (desligados até você ligar; se a combinação já tiver dono, o tema avisa ou escolhe a próxima livre):
 
@@ -386,7 +386,7 @@ cyberkde efeito papel fui        # animado; a | b | c | d = estáticos fixos; co
 | Konsole | esquema de cores e perfil; no Konsole animado, a cascata de dados e mais 8 efeitos |
 | Login | SDDM, tela de abertura e tela de bloqueio, com animações escolhíveis |
 | Papel de parede | quatro opções na cor de destaque, o da corporação, o animado FUI ou uma imagem sua |
-| Cyber Fence | cercas na área de trabalho, com regras, layouts, 16+8 animações e atalhos |
+| Cyber Fence | cercas na área de trabalho, com regras, layouts, 16+13 animações e atalhos |
 | DATASHARD | gerenciador de arquivos do tema, ao lado do Dolphin |
 | Widgets | 11 widgets, o Painel FUI e 15 módulos, com Jukebox e Rádio Neon na mídia |
 | Ilha dinâmica | pílula no topo da tela com módulos do sistema e 4 temas (desligada por padrão) |
