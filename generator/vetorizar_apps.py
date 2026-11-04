@@ -9,6 +9,7 @@ Cada app tem uma lista de camadas (de baixo para cima): a cor-mestre em que cada
 vira (R vermelho, R2 escuro, R3 claro, C ciano, W branco, D escuro) e a regra que escolhe os pixels.
 O SVG do PyCharm e do DataGrip entram direto (já são vetor), em emblemas/pycharm.json e datagrip.json.
 """
+import os
 import colorsys
 import json
 import pathlib
@@ -115,7 +116,7 @@ def vetoriza(aid):
     ys, xs = np.where(np.any([m for _, m in camadas], axis=0))
     caixa = [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / f"{aid}.json").write_text(json.dumps({"fonte": src, "tamanho": T, "caixa": caixa, "camadas": [{"cor": c, "d": traca(m)} for c, m in camadas]}) + "\n")
+    (OUT / f"{aid}.json").write_text(json.dumps({"fonte": os.path.basename(str(src)), "tamanho": T, "caixa": caixa, "camadas": [{"cor": c, "d": traca(m)} for c, m in camadas]}) + "\n")
     print(aid, caixa, [len(traca(m)) for _, m in camadas])
 
 

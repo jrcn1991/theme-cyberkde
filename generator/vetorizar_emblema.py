@@ -8,6 +8,7 @@ O gen_apps_icons.py só lê o JSON gerado (sem dependência nova).
 
 Modo "claro": o emblema é a parte clara do ícone (luminância > corte) dentro do disco; o disco vem da caixa do alfa.
 """
+import os
 import json
 import math
 import pathlib
@@ -45,7 +46,7 @@ def main():
     cx, cy, r = (xs.min() + xs.max() + 1) / 2, (ys.min() + ys.max() + 1) / 2, (xs.max() - xs.min() + 1) / 2
     m = alfa & (lum > corte)
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / f"{nome}.json").write_text(json.dumps({"fonte": src, "tamanho": im.width, "disco": [cx, cy, r], "d": vetoriza(m)}) + "\n")
+    (OUT / f"{nome}.json").write_text(json.dumps({"fonte": os.path.basename(str(src)), "tamanho": im.width, "disco": [cx, cy, r], "d": vetoriza(m)}) + "\n")
     print(OUT / f"{nome}.json", "disco", cx, cy, r)
 
 
