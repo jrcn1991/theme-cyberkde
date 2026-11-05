@@ -37,6 +37,8 @@ TemaBase {
     readonly property real raioAba: 2
     readonly property real raioIcone: 2
     readonly property int segmentosBarra: 14
+    // o código de barras do Fusao.qml (14 px da borda, 16 px de largura) e 8 px até o conteúdo
+    reservaFusao: 26
     tempos: ({ abrir: 220, fechar: 150, anuncio: 200, conteudoEntra: 110, conteudoSai: 70, chegada: 240 })
     curvas: ({ abrir: [[0.25, 0.7], [0.5, 0.93], [1, 1]], fechar: [[0.3, 0.75], [0.6, 0.97], [1, 1]], anuncio: [[0.2, 0.7], [0.5, 0.95], [1, 1]], entrar: "entrar", sair: "sair", chegada: [[0.2, 0.7], [0.5, 0.95], [1, 1]] })
     // Traço: a gota nasce inteira e quem a revela é a moldura traçada

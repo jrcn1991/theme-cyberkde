@@ -165,7 +165,11 @@ login_fundo_tem_logo() {
 login_papel_atual() {  # [login|lockscreen] -> imagem do papel em uso, ou nada (fundo=login ou sem imagem)
   local tipo=${1:-login} img=""
   [[ $(login_fundo) == papel ]] || return 0
-  if declare -F wallpapers_own >/dev/null; then img=$(wallpapers_own 2>/dev/null || true); fi
+  # Item da pasta da pessoa (papel usuario:<id>): a imagem dela, ou o quadro do vídeo (wallpapers_image).
+  if declare -F papel_opcao >/dev/null && [[ $(papel_opcao 2>/dev/null) == usuario ]] && declare -F wallpapers_image >/dev/null; then
+    img=$(wallpapers_image lockscreen 2>/dev/null || true)
+  fi
+  if [[ ! -f $img ]] && declare -F wallpapers_own >/dev/null; then img=$(wallpapers_own 2>/dev/null || true); fi
   if [[ ! -f $img ]] && declare -F papel_instalado >/dev/null; then img=$(papel_instalado "$tipo" 2>/dev/null || true); fi
   if [[ ! -f $img && $tipo != login ]] && declare -F papel_instalado >/dev/null; then img=$(papel_instalado login 2>/dev/null || true); fi
   if [[ ! -f $img ]] && declare -F wallpapers_image >/dev/null; then img=$(wallpapers_image desktop 2>/dev/null || true); fi

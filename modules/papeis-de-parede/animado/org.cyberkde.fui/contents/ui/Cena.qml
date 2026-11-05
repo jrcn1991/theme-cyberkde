@@ -19,6 +19,7 @@ Item {
     property url emblema: ""
     property var tonsLogo: [0, 0]          // [escura, clara] do SVG (gen_fui.py), para a tinta em dois tons
     property var tonsEmblema: [0, 0]
+    property string corLogo: "tingido"     // tingido (na cor do texto) | original (as cores do arquivo)
     property string nome: "ARASAKA"
     property string lema: ""
     property string codigo: "ARS-54"
@@ -101,6 +102,9 @@ Item {
         property alias fonteUrl: img.source
         property color cor: c.corTexto
         property var tons: [0, 0]
+        property bool original: false
+        readonly property real orig: original ? 1 : 0
+        readonly property size tam: Qt.size(width, height)
         readonly property real lo: tons[0] || 0
         readonly property real hi: tons[1] || 0
         readonly property var fonte: img
@@ -146,6 +150,7 @@ Item {
             id: logoT
             fonteUrl: c.logo
             tons: c.tonsLogo
+            original: c.corLogo === "original"
             height: c.alt * 0.04
             width: Math.min(c.alt * 0.34, height * proporcao)
         }

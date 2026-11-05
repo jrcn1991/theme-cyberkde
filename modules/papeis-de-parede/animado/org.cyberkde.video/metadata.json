@@ -1,0 +1,22 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "CyberKDE"
+            }
+        ],
+        "Category": "",
+        "Description": "CyberKDE video wallpaper: a video from your own folder, looped and muted, paused when covered or locked",
+        "Description[pt_BR]": "Papel de parede em vídeo do CyberKDE: um vídeo da sua pasta, em loop e sem som, pausado quando coberto ou bloqueado",
+        "Icon": "video-x-generic",
+        "Id": "org.cyberkde.video",
+        "License": "GPL-3.0-or-later",
+        "Name": "CyberKDE Video",
+        "Name[pt_BR]": "CyberKDE Vídeo",
+        "Version": "1.0",
+        "Website": "https://github.com/jrcn1991/theme-cyberkde"
+    },
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

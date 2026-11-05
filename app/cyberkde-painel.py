@@ -2044,6 +2044,107 @@ class Painel(QObject):
                 "modo": st.get("modo", ""), "ligado": bool(est.get("ligado")), "imagemPropria": bool(est.get("imagemPropria") or st.get("imagemPropria")),
                 "corp": est.get("corp") or "", "fui": fui or {}, "fuiControles": fui is not None}
 
+    # ---- pasta de papéis do usuário. O QML conhece só este formato:
+    #   {"suporte": bool, "pasta": str, "existe": bool,
+    #    "itens": [{"id", "nome", "tipo": "imagem"|"video", "previa": url, "emUso": bool}]}
+    # O estado leve vem do status (efeitos.papelPasta); a lista sai de "papel --pasta --json", num QProcess
+    # (a primeira chamada gera as miniaturas e leva quase um segundo: nunca na thread da interface).
+    papelPastaMudou = pyqtSignal()
+
+    @pyqtProperty("QVariantMap", notify=papelPastaMudou)
+    def papelPasta(self):
+        if not hasattr(self, "_papelPasta"):
+            self._papelPasta = self._papelPastaTeste() or {"suporte": False, "pasta": "", "existe": False, "itens": []}
+            self._papelPastaChave = None
+            if not os.environ.get("CYBERKDE_PAINEL_PAPELPASTA"):
+                self.statusMudou.connect(self._papelPastaDoStatus)
+                # depois desta leitura: emitir papelPastaMudou dentro do getter é um laço de binding no QML
+                QTimer.singleShot(0, self._papelPastaDoStatus)
+        return self._papelPasta
+
+    def _papelPastaTeste(self):
+        """Só para capturas: CYBERKDE_PAINEL_PAPELPASTA aponta um JSON já no formato interno."""
+        f = os.environ.get("CYBERKDE_PAINEL_PAPELPASTA")
+        if not f:
+            return None
+        try:
+            d = json.loads(Path(f).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        for i in d.get("itens", []):
+            if i.get("previa") and not str(i["previa"]).startswith(("file:", "qrc:", "image:")):
+                i["previa"] = url_local(i["previa"])
+        return d
+
+    def _papelPastaGuardar(self, **campos):
+        self._papelPasta = dict(self._papelPasta, **campos)
+        self.papelPastaMudou.emit()
+
+    def _papelPastaDoStatus(self):
+        """status --json: efeitos.papelPasta = {caminho, existe, total}; efeitos.papel.usuario = o item em uso."""
+        efs = (self._status or {}).get("efeitos") or {}
+        pp = efs.get("papelPasta")
+        if not isinstance(pp, dict):
+            return
+        uso = ((efs.get("papel") or {}).get("usuario") or {}) if isinstance(efs.get("papel"), dict) else {}
+        caminho, existe = pp.get("caminho") or "", pp.get("existe") is True
+        self._papelPastaGuardar(suporte=True, pasta=caminho, existe=existe)
+        chave = (caminho, existe, pp.get("total"), (uso or {}).get("id"))
+        if chave != self._papelPastaChave:       # só relista quando algo mudou (o status vem toda hora)
+            self._papelPastaChave = chave
+            self._papelPastaListar()
+
+    def _papelPastaListar(self):
+        if not self._papelPasta.get("pasta") or not self._papelPasta.get("existe"):
+            self._papelPastaGuardar(itens=[])
+            return
+
+        def fim(codigo, saida, _erro):
+            if codigo == 0:
+                itens = self._papelPastaDoCli(saida)
+                if itens is not None:
+                    self._papelPastaGuardar(itens=itens)
+        self._processo(["papel", "--pasta", "--json"], fim)
+
+    def _papelPastaDoCli(self, saida):
+        """papel --pasta --json -> [{id, nome, tipo, caminho, miniatura|null, atual}]"""
+        try:
+            lista = json.loads(saida.strip() or "[]")
+        except ValueError:
+            return None
+        if not isinstance(lista, list):
+            return None
+        itens = []
+        for x in lista:
+            if not isinstance(x, dict) or not x.get("id"):
+                continue
+            mini = x.get("miniatura") or (x.get("caminho") if x.get("tipo") == "imagem" else "")
+            itens.append({"id": str(x["id"]), "nome": x.get("nome") or str(x["id"]), "tipo": "video" if x.get("tipo") == "video" else "imagem",
+                          "previa": url_local(mini) if mini else "", "emUso": x.get("atual") is True})
+        return itens
+
+    def _papelPastaComando(self, rotulo, args):
+        def depois(codigo, resultado):
+            if codigo == 0 and "caminho" in resultado:
+                self._papelPastaGuardar(suporte=True, pasta=resultado.get("caminho") or "", existe=resultado.get("existe") is True)
+            self._papelPastaChave = None          # relista com o próximo status
+            self._papelPastaListar()
+        self._enfileirar(rotulo, args, alvo="papel", progresso=False, depois=depois)
+
+    @pyqtSlot(str)
+    def papelPastaEscolher(self, caminho):
+        self._papelPastaComando(("rot.papelPasta", {"pasta": Path(caminho).name or caminho}),
+                                ["efeito", "papel-pasta", "--caminho", caminho, "--json"])
+
+    @pyqtSlot()
+    def papelPastaLimpar(self):
+        self._papelPastaComando(("rot.papelPastaLimpar", {}), ["efeito", "papel-pasta", "--limpar", "--json"])
+
+    @pyqtSlot(str)
+    def papelPastaAplicar(self, ident):
+        # o id é o nome do arquivo (espaços, colchetes): um argumento só, sem shell
+        self._papelPastaComando(("rot.papel", {"arquivo": ident}), ["efeito", "papel", "usuario:" + ident, "--json"])
+
     @pyqtSlot(str)
     def escolherPapelOpcao(self, opcao):
         """cyberkde efeito papel a|b|c|d|corp|fui (o modo segue: corp = acompanha a corporação; o resto = fixo)."""
@@ -2056,7 +2157,10 @@ class Painel(QObject):
         """Controles do papel animado (só quando o CLI expõe estado.fui): cyberkde efeito papel fui --<chave> <valor>."""
         if not self.papelInfo.get("fuiControles"):
             return
-        v = ("on" if valor else "off") if isinstance(valor, bool) else str(int(valor))
+        if chave == "cor-logo":
+            v = "original" if valor else "tingido"
+        else:
+            v = ("on" if valor else "off") if isinstance(valor, bool) else str(int(valor))
         self._enfileirar(("rot.papelFui", {"chave": chave, "valor": v}), ["efeito", "papel", "fui", "--" + chave, v, "--json"],
                          alvo="papel", progresso=False)
 

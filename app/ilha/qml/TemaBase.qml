@@ -35,6 +35,9 @@ QtObject {
     // ---- forma
     property string forma: "pilula"          // pilula | chanfro
     property real corte: 10
+    // px da ponta direita da pílula fundida e fechada que o Fusao.qml do tema ocupa: o núcleo alarga a pílula e afasta
+    // o conteúdo (espectro, título) dali. 0 = o Fusao não desenha nada na pílula fechada.
+    property real reservaFusao: 0
     property real larguraAberta: 488
     property real raioAberto: 40
     property real raioCartao: 24

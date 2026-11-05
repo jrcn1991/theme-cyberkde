@@ -469,6 +469,7 @@ Item {
                     // Quem limita as linhas é impl.nomeCabe. NÃO usar maximumLineCount aqui: mudá-lo pelo estado,
                     // com o Text ainda sem largura, derrubava o plasmashell (QTextLine::setLineWidth, nomes de 1 letra).
                     readonly property int linhasNome: main.emLinha ? 1 : main.GridView.view.linhasNome
+                    onTextChanged: if (!main.emLinha && label.text !== "" && main.GridView.view) main.GridView.view.pedirLinhas(label.text.split("\n").length)
                     // o nome foi encurtado por impl.nomeCabe: a dica mostra o nome inteiro
                     readonly property bool cortado: text.indexOf("…") >= 0 && String(main.model.display).indexOf("…") < 0
 

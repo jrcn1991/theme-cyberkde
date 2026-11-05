@@ -818,11 +818,8 @@ PlasmoidItem {
                         id: janela
                         anchors.fill: parent
                         anchors.topMargin: fitaAbas.height + (fitaAbas.visible ? 4 : 0)
-                        // sem fileira cortada: a área fecha em linhas inteiras
-                        readonly property real rodape: root.layoutCerca === "inventario" ? 38 : 0
-                        readonly property real util: parent.height - anchors.topMargin - rodape
-                        readonly property real celula: cam.view ? cam.view.view.cellHeight : 0
-                        anchors.bottomMargin: rodape + (celula > 0 && util > celula ? util % celula : 0)
+                        // a grade usa a altura toda (cortar em linhas inteiras escondia uma fileira que cabia)
+                        anchors.bottomMargin: root.layoutCerca === "inventario" ? 38 : 0
                         clip: true
                         visible: (!root.rolada || root.animando) && !root.nova
                         opacity: root.rolada ? 0 : 1

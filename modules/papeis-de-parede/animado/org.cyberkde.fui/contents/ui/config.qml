@@ -12,6 +12,7 @@ Kirigami.FormLayout {
     property int cfg_Velocidade
     property bool cfg_MostrarLogo
     property bool cfg_MostrarTextos
+    property string cfg_CorLogo
     property int cfg_FpsMax
     property bool cfg_PausarCoberto
     property string cfg_Movimento
@@ -36,6 +37,7 @@ Kirigami.FormLayout {
         QQC2.Label { text: raiz.cfg_Velocidade + "%" }
     }
     QQC2.CheckBox { Kirigami.FormData.label: raiz.tr("Mostrar:", "Show:"); text: raiz.tr("Logo e emblema da corporação", "Corporation logo and emblem"); checked: raiz.cfg_MostrarLogo; onToggled: raiz.cfg_MostrarLogo = checked }
+    QQC2.CheckBox { text: raiz.tr("Logo na cor original", "Logo in its original color"); checked: raiz.cfg_CorLogo === "original"; onToggled: raiz.cfg_CorLogo = checked ? "original" : "tingido" }
     QQC2.CheckBox { text: raiz.tr("Textos técnicos da lateral", "Side technical text"); checked: raiz.cfg_MostrarTextos; onToggled: raiz.cfg_MostrarTextos = checked }
     QQC2.ComboBox {
         Kirigami.FormData.label: raiz.tr("Quadros por segundo (máx.):", "Frames per second (max):")

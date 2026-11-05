@@ -808,7 +808,7 @@ FocusScope {
                         // the smallSpacings are for padding
                         // a altura cabe o nome inteiro, nas linhas que ele pode usar (o rótulo nunca fica cortado na
                         // vertical; se a cerca não comporta, ela rola)
-                        const iconHeight = iconSize + (Math.ceil(medidaNome.lineSpacing) * gridView.linhasNome) + Kirigami.Units.smallSpacing + (Kirigami.Units.smallSpacing * 3);
+                        const iconHeight = iconSize + (Math.ceil(medidaNome.lineSpacing) * gridView.linhasUsadas) + (Kirigami.Units.smallSpacing * 5);
                         if (root.isContainment && isRootView && scrollArea.viewportHeight > 0) {
                             let extraHeight = calcExtraSpacing(iconHeight, scrollArea.viewportHeight);
                             return iconHeight + extraHeight;
@@ -822,6 +822,11 @@ FocusScope {
                 readonly property alias medida: medidaNome
                 // linhas do nome na grade: as da configuração, e pelo menos 3
                 readonly property int linhasNome: Math.min(4, Math.max(3, Plasmoid.configuration.textLines))
+                // a altura da célula usa só as linhas que os nomes da pasta pedem (cada delegate avisa quantas usou);
+                // reservar sempre o máximo deixava uma fileira a menos e rolagem com espaço sobrando
+                property int linhasUsadas: 1
+                function pedirLinhas(n) { if (n > linhasUsadas) linhasUsadas = Math.min(linhasNome, n) }
+                Connections { target: main; function onUrlChanged() { gridView.linhasUsadas = 1 } }
                 FontMetrics { id: medidaNome }
 
                 delegate: FolderItemDelegate {

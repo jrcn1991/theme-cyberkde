@@ -20,17 +20,29 @@ Secao {
     readonly property bool ocupado: painel.alvo === "papel" || painel.alvo === "papeis-de-parede"
     readonly property var fui: info.fui || ({})
     readonly property bool lado: corpo.width >= 980
+    readonly property var pp: painel.papelPasta || ({ suporte: false, itens: [] })
+    readonly property bool temPasta: !!pp.pasta && pp.existe === true
+    function escolherPasta() { s.app.escolherPasta(pp.pasta || "", (c) => painel.papelPastaEscolher(c)) }
     // deslizadores: aplica 600 ms depois que param de mexer (um comando, não um por passo)
     property var _pend: ({})
     function ajustarDepois(k, v) { let p = Object.assign({}, _pend); p[k] = v; _pend = p; aplicaDepois.restart() }
-    Timer { id: aplicaDepois; interval: 600; onTriggered: { for (const k in s._pend) painel.ajustarFui(k, s._pend[k]); s._pend = ({}) } }
+    Timer {
+        id: aplicaDepois; interval: 600
+        onTriggered: {
+            for (const k in s._pend) painel.ajustarFui(k, s._pend[k])
+            s._pend = ({})
+        }
+    }
+    readonly property var itemPasta: (pp.itens || []).find(i => i.emUso) || null
     function nomeAtual() {
         if (propria) return Txt.t("papel.propria")
+        if (opcao === "usuario") return itemPasta ? itemPasta.nome : Txt.t("papel.suaPasta")
         const v = valores.find(x => x.id === opcao)
         return v ? v.nome : opcao.toUpperCase()
     }
     function previaAtual() {
         if (propria) return painel.papel
+        if (opcao === "usuario") return itemPasta ? itemPasta.previa : ""
         const v = valores.find(x => x.id === opcao)
         return v ? v.previa : ""
     }
@@ -40,7 +52,7 @@ Secao {
         id: atual
         width: s.corpo.width
         titulo: Txt.t("papel.atual")
-        codigo: "WALLPAPER // " + (s.opcao === "fui" ? "ANIMATED" : "STATIC") + " · " + (s.modo === "corp" ? "CORP" : "FIXED")
+        codigo: "WALLPAPER // " + (s.opcao === "fui" ? "ANIMATED" : s.itemPasta && s.itemPasta.tipo === "video" ? "VIDEO" : "STATIC") + " · " + (s.modo === "corp" ? "CORP" : "FIXED")
         Cascata { ativo: s.entrando; ordem: 0; alvo: atual }
         Row {
             width: parent.width
@@ -62,7 +74,9 @@ Secao {
                 spacing: 8
                 Row {
                     spacing: 10
-                    Rotulo { text: s.nomeAtual(); tamanho: 20; color: Tema.texto }
+                    // nome de arquivo da pessoa: fonte de leitura, com a caixa real
+                    Rotulo { visible: s.opcao !== "usuario"; text: s.nomeAtual(); tamanho: 20; color: Tema.texto }
+                    Text { visible: s.opcao === "usuario"; text: s.nomeAtual(); font.family: Tema.fTexto; font.pixelSize: 20; font.weight: Font.DemiBold; color: Tema.texto }
                     // o modo: fixo ou acompanhando a corporação
                     Item {
                         anchors.verticalCenter: parent.verticalCenter
@@ -149,16 +163,18 @@ Secao {
                     }
                 }
                 Repeater {
-                    model: [{ k: "logo", t: "papel.logo" }, { k: "textos", t: "papel.textos" }, { k: "pausar", t: "papel.pausar" }]
+                    model: [{ k: "logo", t: "papel.logo" }, { k: "corLogo", t: "papel.corLogo", cli: "cor-logo" }, { k: "textos", t: "papel.textos" }, { k: "pausar", t: "papel.pausar" }]
                     Row {
                         required property var modelData
                         spacing: 10
                         opacity: s.info.fuiControles ? 1 : 0.45
                         Interruptor {
                             anchors.verticalCenter: parent.verticalCenter
-                            ligado: s.info.fuiControles ? s.fui[parent.modelData.k] !== false : null
-                            habilitado: !!s.info.fuiControles && !s.ocupado
-                            onAlternado: (v) => painel.ajustarFui(parent.modelData.k, v)
+                            // corLogo é escolha (tingido|original), não liga/desliga; sem ela no CLI, o interruptor fica apagado
+                            readonly property bool ehCor: parent.modelData.k === "corLogo"
+                            ligado: !s.info.fuiControles ? null : ehCor ? s.fui.corLogo === "original" : s.fui[parent.modelData.k] !== false
+                            habilitado: !!s.info.fuiControles && !s.ocupado && (!ehCor || s.fui.corLogo !== undefined)
+                            onAlternado: (v) => painel.ajustarFui(parent.modelData.cli || parent.modelData.k, v)
                         }
                         Leitura { anchors.verticalCenter: parent.verticalCenter; tamanho: 13; wrapMode: Text.NoWrap; text: Txt.t(parent.modelData.t) }
                     }
@@ -203,6 +219,81 @@ Secao {
                     ocupado: s.ocupado
                     onEscolhido: if (!s.ocupado) s.app.escolherPapel()
                 }
+            }
+            // ---- a pasta do usuário: cards depois dos do tema. Sem suporte no CLI, nada aparece; sem pasta (ou
+            // pasta que sumiu), só um card discreto para escolher.
+            Item {
+                visible: s.pp.suporte === true
+                width: parent.width; height: visible ? 1 : 0
+                Rectangle { width: parent.width; height: 1; color: Tema.linha }
+            }
+            Item {
+                visible: s.pp.suporte === true && s.temPasta
+                width: parent.width; height: visible ? 30 : 0
+                Codigo { anchors.verticalCenter: parent.verticalCenter; text: Txt.t("papel.suaPasta") + " · " + s.pp.itens.length; tamanho: 11; color: Tema.texto2 }
+                Row {
+                    id: acoesPasta
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                    Botao { text: Txt.t("papel.trocarPasta"); tipo: "sutil"; tamanho: 11; habilitado: !s.ocupado; onClicado: s.escolherPasta() }
+                    Botao { text: Txt.t("papel.limparPasta"); tipo: "sutil"; tamanho: 11; habilitado: !s.ocupado; onClicado: painel.papelPastaLimpar() }
+                }
+            }
+            Text {
+                visible: s.pp.suporte === true && s.temPasta
+                width: parent.width; text: s.pp.pasta; elide: Text.ElideMiddle
+                font.family: Tema.fTexto; font.pixelSize: 12; color: Tema.texto3
+            }
+            Flow {
+                visible: s.pp.suporte === true
+                width: parent.width
+                spacing: 12
+                readonly property real lt: (width - 2 * 12) / 3
+                Repeater {
+                    model: s.temPasta ? s.pp.itens : []
+                    Item {
+                        id: cp
+                        required property var modelData
+                        width: parent.lt; height: tile.implicitHeight
+                        TilePrevia {
+                            id: tile
+                            width: parent.width
+                            nome: cp.modelData.nome
+                            // sem miniatura, o tipo vai no texto
+                            descricao: cp.modelData.previa ? "" : (cp.modelData.tipo === "video" ? Txt.t("papel.seloVideo") : Txt.t("papel.seloImagem"))
+                            previa: cp.modelData.previa || ""
+                            proporcao: 9 / 16
+                            selecionado: cp.modelData.emUso === true
+                            ocupado: s.ocupado
+                            onEscolhido: if (!s.ocupado && !cp.modelData.emUso) painel.papelPastaAplicar(cp.modelData.id)
+                        }
+                        // selo do tipo, no canto da miniatura
+                        Rectangle {
+                            visible: !!cp.modelData.previa
+                            x: 12; y: 12
+                            width: tSelo.implicitWidth + 10; height: 17
+                            color: Tema.alfa(Tema.escuro, 0.85)
+                            border.color: cp.modelData.tipo === "video" ? Tema.secundaria : Tema.linha
+                            Codigo {
+                                id: tSelo; anchors.centerIn: parent; tamanho: 9
+                                color: cp.modelData.tipo === "video" ? Tema.secundaria : Tema.texto2
+                                text: cp.modelData.tipo === "video" ? Txt.t("papel.seloVideo") : Txt.t("papel.seloImagem")
+                            }
+                        }
+                    }
+                }
+                // sem pasta: o card discreto
+                TilePrevia {
+                    visible: !s.temPasta
+                    width: parent.lt
+                    nome: Txt.t("papel.escolherPasta")
+                    descricao: s.pp.pasta && !s.pp.existe ? Txt.t("papel.pastaSumiu") : Txt.t("papel.escolherPastaDica")
+                    ocupado: s.ocupado
+                    onEscolhido: if (!s.ocupado) s.escolherPasta()
+                }
+            }
+            Leitura {
+                visible: s.pp.suporte === true && s.temPasta && s.pp.itens.length === 0
+                width: parent.width; tamanho: 12; color: Tema.texto3; text: Txt.t("papel.pastaVazia")
             }
             Botao {
                 visible: s.propria

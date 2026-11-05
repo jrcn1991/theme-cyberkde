@@ -51,9 +51,14 @@ icones_alt_lista() {
 
 # Gera o tema com a lista de alternativos fora do repositório e instala por cima do tema de ícones.
 icones_opcoes_gerar() {  # lista
-  local saida="${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde/icones-alt"
-  rm -rf -- "$saida"
-  python3 "$project/generator/gen_icons.py" ${1:+--alt "$1"} --apps-estilo "$(icones_apps_estilo)" --saida "$saida/CyberKDE" >/dev/null || return 1
+  local saida
+  mkdir -p -- "${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde"
+  saida=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/cyberkde/icones-alt.XXXXXX")  # um por execução: duas não se pisam
+  if ! python3 "$project/generator/gen_icons.py" ${1:+--alt "$1"} --apps-estilo "$(icones_apps_estilo)" --saida "$saida/CyberKDE" >/dev/null; then
+    echo "Aviso: não consegui gerar o tema de ícones com os apps no estilo '$(icones_apps_estilo)'; nada foi trocado nesta etapa (numa troca de cor, os apps ficam com o ícone original até a próxima geração)." >&2
+    rm -rf -- "$saida"
+    return 1
+  fi
   swap_dir "$saida/CyberKDE" "$data/icons/CyberKDE"
   rm -rf -- "$saida"
   icones_apps_previas
@@ -63,7 +68,9 @@ icones_opcoes_gerar() {  # lista
 # O install_files instalou o tema versionado (sem ícones de apps de marca); aqui entra o tema com os apps no
 # estilo escolhido (e os alternativos, se houver). Roda sempre, também no "cyberkde cor"/"corp" (a moldura segue o destaque).
 install_icones-opcoes() {
-  icones_opcoes_gerar "$(icones_alt_lista)"
+  # Falhar aqui não derruba o install_files (o set -e do cyberkde abortaria o "cor"/"corp" inteiro): avisa e segue.
+  icones_opcoes_gerar "$(icones_alt_lista)" || echo "Aviso: ícones dos apps não atualizados (veja acima)." >&2
+  return 0
 }
 
 # ---- efeito "icones-apps"

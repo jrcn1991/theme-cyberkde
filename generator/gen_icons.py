@@ -269,6 +269,21 @@ def app_fonte(aid, estilo, tmp):
     return accented(arq) if RED.upper() != DEFAULT_RED.upper() else arq
 
 
+def checa_apps_instalados(estilo):
+    """Os estilos marca e recolorido dependem do ícone que cada app instalou. Se NENHUM dos apps tem ícone achado,
+    o ambiente está errado (HOME/XDG, pasta de ícones ilegível...): em vez de cair na silhueta em todos de uma vez,
+    aborta com erro, e quem chamou (o gancho de instalação) mantém o tema de ícones sem os apps (eles ficam com o ícone original), em vez de pôr silhueta em todos. Um app sem ícone instalado
+    é outra coisa: cai na silhueta só ele, e isso vai para o stderr."""
+    if estilo not in ("marca", "recolorido") or not APPS_META:
+        return
+    sem = [a for a, m in APPS_META.items() if apps_marca.localiza(m.get("nomes", []), m.get("desktops", [])) is None]
+    if len(sem) == len(APPS_META) and len(APPS_META) >= 5:
+        sys.exit(f"erro: nenhum dos {len(APPS_META)} apps tem ícone instalado (HOME={pathlib.Path.home()}); "
+                 "ambiente suspeito, não gero o tema dos apps em silhueta por engano")
+    if sem:
+        print(f"aviso: sem ícone instalado, ficam na silhueta: {', '.join(sem)}", file=sys.stderr)
+
+
 def fonte(base, alt):
     """Arquivo de origem de um ícone: o alternativo, se o grupo dele foi escolhido; senão, o do ai-final."""
     if base in APPS_NOVOS:
@@ -278,11 +293,76 @@ def fonte(base, alt):
     return SRC / f"{base}.png"
 
 
+# Contexto do hicolor → nome exato no index.theme (especificação de temas de ícones)
+CONTEXTOS_HICOLOR = {"apps": "Applications", "actions": "Actions", "categories": "Categories", "devices": "Devices",
+                     "emblems": "Emblems", "mimetypes": "MimeTypes", "places": "Places", "status": "Status"}
+
+
+def icones_de_passagem(nomes_nossos):
+    """Ícones instalados (hicolor do usuário e do sistema, flatpak, pixmaps) cujo nome começa com "<nome nosso>-" e que não
+    são nossos. O KIconLoader/Qt corta o nome no último hífen quando não o acha ("claude-mascot" → "claude") e acharia o NOSSO
+    ícone antes de chegar ao hicolor; um link com o nome exato para o arquivo original faz valer o original.
+    Devolve [(contexto, tamanho|"scalable", nome com extensão, caminho original)]. Só roda na instalação (os links
+    apontam para caminhos desta máquina: nunca vão para o tema versionado)."""
+    prefixos = tuple(f"{n}-" for n in nomes_nossos)
+    home = pathlib.Path.home()
+    achados = []
+    for raiz in (home / ".local/share/icons/hicolor", pathlib.Path("/usr/share/icons/hicolor"),
+                 home / ".local/share/flatpak/exports/share/icons/hicolor", pathlib.Path("/var/lib/flatpak/exports/share/icons/hicolor")):
+        if not raiz.is_dir():
+            continue
+        for pasta in sorted(raiz.iterdir()):
+            if "@" in pasta.name or not (pasta.name == "scalable" or pasta.name[:1].isdigit()):
+                continue
+            tam = "scalable" if pasta.name == "scalable" else pasta.name.split("x")[0]
+            for ctx_dir in pasta.iterdir():
+                if ctx_dir.name not in CONTEXTOS_HICOLOR or not ctx_dir.is_dir():
+                    continue
+                for arq in ctx_dir.iterdir():
+                    if arq.suffix in (".png", ".svg") and arq.stem.startswith(prefixos) and arq.stem not in nomes_nossos:
+                        achados.append((ctx_dir.name, tam, arq.name, arq))
+    for raiz in (pathlib.Path("/usr/share/pixmaps"), home / ".local/share/pixmaps"):
+        if not raiz.is_dir():
+            continue
+        for arq in raiz.iterdir():
+            if arq.suffix in (".png", ".svg") and arq.stem.startswith(prefixos) and arq.stem not in nomes_nossos:
+                tam = "scalable"
+                if arq.suffix == ".png":
+                    try:
+                        from PIL import Image
+                        with Image.open(arq) as im:
+                            tam = str(max(im.size))
+                    except OSError:
+                        continue
+                achados.append(("apps", tam, arq.name, arq))
+    return achados
+
+
+def liga_passagem(nomes_nossos, dirs, extra_meta):
+    """Cria os links de icones_de_passagem em OUT e registra as pastas novas (dirs: as da numeração normal; extra_meta:
+    linhas do index.theme das pastas que o tema ainda não tinha, como apps/512 e apps/scalable)."""
+    feitos = {}
+    for ctx, tam, nome, origem in icones_de_passagem(nomes_nossos):
+        chave = f"{ctx}/{tam}"
+        destino = OUT / ctx / tam / nome
+        if destino.exists() or destino.is_symlink() or (chave, nome[: -len(destino.suffix)]) in feitos:
+            continue
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.symlink_to(origem)
+        feitos[(chave, destino.stem)] = origem
+        if tam == "scalable":
+            extra_meta.setdefault(chave, ["Size=128", f"Context={CONTEXTOS_HICOLOR[ctx]}", "Type=Scalable", "MinSize=8", "MaxSize=512"])
+        elif (ctx, int(tam)) not in dirs:
+            extra_meta.setdefault(chave, [f"Size={tam}", f"Context={CONTEXTOS_HICOLOR[ctx]}", "Type=Fixed"])
+    return len(feitos)
+
+
 def main(alt=frozenset(), apps_estilo="nenhum"):
     shutil.rmtree(OUT, ignore_errors=True)
     dirs = set()
     seen = {}
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="cyberkde-icons-"))
+    checa_apps_instalados(apps_estilo)
     try:
         # Com outra cor de destaque ("cyberkde cor"), os ícones da IA são recoloridos; a pasta "vermelha"
         # do Dolphin continua sendo o mestre vermelho.
@@ -345,6 +425,9 @@ def main(alt=frozenset(), apps_estilo="nenhum"):
     ordered = sorted(dirs, key=lambda d: (d[0], d[1]))
     ours = [f"{c}/{s}" for c, s in ordered]
     borrowed = passthrough({name for _, name in seen})
+    if apps_estilo != "nenhum":  # só na instalação: os links apontam para arquivos desta máquina
+        n_passagem = liga_passagem({name for c, name in seen if c == "apps"}, dirs, borrowed)
+        print(f"{n_passagem} links de passagem para ícones instalados (claude-mascot etc.)")
     extra = sorted(k for k in borrowed if k not in ours)
     lines = ["[Icon Theme]", "Name=CyberKDE",
              "Comment=CyberKDE neo-military folders, places and file types; inherits Breeze Dark",

@@ -295,8 +295,10 @@ Item {
     Timer { id: fecharDemo; interval: 2200; onTriggered: if (!g.hover) g.aberta = false }
 
     // ---- geometria
-    readonly property real larguraResumo: Math.max(pilulaMin, Math.min(pilulaMax, medeResumo.implicitWidth + 24))
-    readonly property real larguraEvento: Math.max(200, Math.min(pilulaMax, medeAnuncio.implicitWidth + 28))
+    // fundida e fechada, a ponta direita é do Fusao.qml do tema (tema.reservaFusao px): o conteúdo não entra ali
+    readonly property real reservaFusao: fusao ? Math.max(0, tema.reservaFusao || 0) : 0
+    readonly property real larguraResumo: Math.max(pilulaMin, Math.min(pilulaMax, medeResumo.implicitWidth + 24) + reservaFusao)
+    readonly property real larguraEvento: Math.max(200, Math.min(pilulaMax, medeAnuncio.implicitWidth + 28) + reservaFusao)
     readonly property real alturaCorpo: corpoCarga.item ? Math.min(456 + (fusao ? barra.altura : 0), corpoCarga.item.implicitHeight + 8 + (fusao ? barra.altura : 0)) : alturaPilula
     readonly property bool anunciando: !!evento && !aberta
     // movimento "expandir" e similares vêm do tema; "aberta" manda no tempo e na curva
@@ -442,6 +444,7 @@ Item {
         Row {
             id: medeResumo
             anchors.centerIn: parent
+            anchors.horizontalCenterOffset: -g.reservaFusao / 2
             spacing: 10
             Resumo { tema: g.tema; ui: g; a: g.principal; niveis: g.niveis; alturaPilula: g.alturaPilula; agora: g.agora }
             Repeater {
@@ -471,7 +474,7 @@ Item {
         visible: g.anunciando
         opacity: g.evento && g.evento.saindo ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: g.tema.reduzir ? 0 : 180 } }
-        Anuncio { id: medeAnuncio; anchors.centerIn: parent; tema: g.tema; ev: g.evento ? g.evento.dado : ({}) }
+        Anuncio { id: medeAnuncio; anchors.centerIn: parent; anchors.horizontalCenterOffset: -g.reservaFusao / 2; tema: g.tema; ev: g.evento ? g.evento.dado : ({}) }
     }
     // ---- corpo
     // recorta só enquanto a geometria anima: parada, a gota não paga clip

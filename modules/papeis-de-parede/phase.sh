@@ -17,6 +17,9 @@ CYBERKDE_INSTALLS+=(install_papeis-de-parede)
 CYBERKDE_OFF_HOOKS+=(off_papeis-de-parede)
 CYBERKDE_EFEITOS+=(papel)  # "cyberkde efeito papel <a|b|c|d|corp|fui>": a opção de papel de parede (modules/CONTRATO.md)
 CYBERKDE_INSTALLS+=(install_papel_fui)
+CYBERKDE_EFEITOS+=(papel-pasta)  # "cyberkde efeito papel-pasta [--caminho PASTA|--limpar|--itens]": a pasta da pessoa
+CYBERKDE_EFEITO_GRUPO+=([papel-pasta]=area-de-trabalho)
+CYBERKDE_INSTALLS+=(install_papel_video)
 
 wallpapers_dir() { printf '%s\n' "$data/wallpapers/CyberKDE"; }
 wallpapers_record() { printf '%s\n' "$state/papeis-de-parede.tsv"; }  # id  tela  plugin  imagem
@@ -27,7 +30,7 @@ wallpapers_record() { printf '%s\n' "$state/papeis-de-parede.tsv"; }  # id  tela
 papel_opcao() {
   local v
   v=$(kreadconfig6 --file "$config/cyberkde/efeitos" --group papel --key opcao --default a 2>/dev/null)
-  case $v in a | b | c | d | corp | fui) printf '%s\n' "$v" ;; *) echo a ;; esac
+  case $v in a | b | c | d | corp | fui | usuario) printf '%s\n' "$v" ;; *) echo a ;; esac
 }
 
 # ------------------------------------------------------------------ papel animado FUI (org.cyberkde.fui)
@@ -59,15 +62,16 @@ install_papel_fui() {
 # [papel-fui] e gravados nas chaves do plugin em cada área de trabalho com ele. Sem escolha, os padrões
 # do main.xml do pacote.
 papel_fui_pref() { kreadconfig6 --file "$config/cyberkde/efeitos" --group papel-fui --key "$1" --default "$2" 2>/dev/null; }
-papel_fui_json() {  # -> {"intensidade":N,"velocidade":N,"fps":N,"logo":b,"textos":b,"pausar":b}
-  local v k i=() b=()
+papel_fui_json() {  # -> {"intensidade":N,"velocidade":N,"fps":N,"logo":b,"textos":b,"pausar":b,"corLogo":"tingido|original"}
+  local v k i=() b=() cl
   for k in intensidade:100 velocidade:100 fps:30; do
     v=$(papel_fui_pref "${k%%:*}" "${k#*:}"); [[ $v =~ ^[0-9]+$ ]] || v=${k#*:}; i+=("$v")
   done
   for k in logo textos pausar; do
     [[ $(papel_fui_pref "$k" true) == false ]] && b+=(false) || b+=(true)
   done
-  printf '{"intensidade":%d,"velocidade":%d,"fps":%d,"logo":%s,"textos":%s,"pausar":%s}' "${i[@]}" "${b[@]}"
+  [[ $(papel_fui_pref corLogo tingido) == original ]] && cl=original || cl=tingido
+  printf '{"intensidade":%d,"velocidade":%d,"fps":%d,"logo":%s,"textos":%s,"pausar":%s,"corLogo":"%s"}' "${i[@]}" "${b[@]}" "$cl"
 }
 # As mesmas, com os nomes das chaves do plugin (objeto JS).
 papel_fui_chaves() {
@@ -75,7 +79,8 @@ papel_fui_chaves() {
   j=$(papel_fui_json)
   python3 -c 'import json, sys; d = json.loads(sys.argv[1])
 print(json.dumps({"Intensidade": d["intensidade"], "Velocidade": d["velocidade"], "FpsMax": d["fps"],
-                  "MostrarLogo": d["logo"], "MostrarTextos": d["textos"], "PausarCoberto": d["pausar"]}))' "$j"
+                  "MostrarLogo": d["logo"], "MostrarTextos": d["textos"], "PausarCoberto": d["pausar"],
+                  "CorLogo": d["corLogo"]}))' "$j"
 }
 # Ao vivo: grava as chaves nas áreas de trabalho que estão com o FUI (o plugin lê a configuração na hora:
 # sem reiniciar o plasmashell). Sem plasmashell, nada (o próximo "on" grava pelo wallpapers_set).
@@ -88,6 +93,134 @@ papel_fui_ao_vivo() {
       for (var k in c) d.writeConfig(k, c[k]);
       d.reloadConfig(); n++; }
     print(n);" 2>/dev/null
+}
+
+# ------------------------------------------------------------------ pasta de papéis da pessoa (org.cyberkde.video)
+# A pessoa aponta uma pasta (efeito papel-pasta, [papel-pasta] caminho em ~/.config/cyberkde/efeitos; padrão: nenhuma)
+# e cada imagem (jpg, png, webp) ou vídeo (mp4, webm, mkv, mov) do primeiro nível vira uma opção extra do efeito papel:
+# "cyberkde efeito papel usuario:<nome do arquivo>" ([papel] opcao=usuario, usuario=<nome>). Imagem: plugin
+# org.kde.image. Vídeo: plugin org.cyberkde.video (animado/), em loop, sem som, pausado quando coberto, bloqueado ou
+# com movimento mínimo. Os arquivos da pessoa nunca são copiados nem apagados: o tema guarda só o caminho, e no
+# cache (~/.cache/cyberkde/papel-pasta) as miniaturas e o quadro do vídeo para o bloqueio (generator/papel_pasta.py).
+# Pasta sem configurar, que não existe ou item que sumiu: nada quebra, vale o papel padrão do tema (opção a).
+papel_pasta_py="$project/modules/papeis-de-parede/generator/papel_pasta.py"
+papel_video_plugin=org.cyberkde.video
+install_papel_video() {
+  [[ -f $papel_fui_src/$papel_video_plugin/metadata.json ]] || return 0
+  local tmp
+  tmp=$(mktemp -d)
+  cp -a -- "$papel_fui_src/$papel_video_plugin/." "$tmp/"
+  chmod 755 "$tmp"
+  swap_dir "$tmp" "$data/plasma/wallpapers/$papel_video_plugin"
+  rm -rf -- "$tmp"
+}
+papel_pasta_caminho() {  # -> a pasta escolhida (exista ou não), ou nada
+  kreadconfig6 --file "$config/cyberkde/efeitos" --group papel-pasta --key caminho 2>/dev/null
+}
+papel_usuario_id() { kreadconfig6 --file "$config/cyberkde/efeitos" --group papel --key usuario 2>/dev/null; }
+# O item escolhido, se ainda está na pasta: "tipo<TAB>caminho" (tipo imagem|video). Senão falha (sem mensagem).
+papel_usuario_item() {
+  local pasta id
+  pasta=$(papel_pasta_caminho); id=$(papel_usuario_id)
+  papel_pasta_item "$pasta" "$id"
+}
+# "tipo<TAB>caminho" de um arquivo do primeiro nível da pasta (as mesmas regras do papel_pasta.py, sem Python).
+papel_pasta_item() {  # pasta id
+  local pasta=$1 id=$2 ext
+  [[ -n $pasta && -n $id && -d $pasta && $id != */* && $id != .* && -f $pasta/$id ]] || return 1
+  ext=${id##*.}; ext=${ext,,}
+  case $ext in
+    jpg | jpeg | png | webp) printf 'imagem\t%s\n' "$(realpath -- "$pasta/$id")" ;;
+    mp4 | webm | mkv | mov) printf 'video\t%s\n' "$(realpath -- "$pasta/$id")" ;;
+    *) return 1 ;;
+  esac
+}
+# Lista da pasta para o painel: [{id, nome, tipo, caminho, miniatura, atual}] (sem pasta: []).
+papel_pasta_itens_json() {
+  local pasta atual=""
+  pasta=$(papel_pasta_caminho)
+  [[ $(papel_opcao) == usuario ]] && atual=$(papel_usuario_id)
+  if [[ -z $pasta || ! -d $pasta ]]; then echo '[]'; return 0; fi
+  python3 -I "$papel_pasta_py" listar "$pasta" --atual "$atual" 2>/dev/null || echo '[]'
+}
+# Quantos itens a pasta tem, sem Python (o estado entra no status --json, chamado o tempo todo).
+papel_pasta_total() {
+  local pasta f n=0
+  pasta=$(papel_pasta_caminho)
+  [[ -n $pasta && -d $pasta ]] || { echo 0; return; }
+  shopt -s nullglob nocaseglob
+  for f in "$pasta"/*.{jpg,jpeg,png,webp,mp4,webm,mkv,mov}; do [[ -f $f ]] && n=$((n + 1)); done
+  shopt -u nullglob nocaseglob
+  echo "$n"
+}
+
+efeito_estado_papel-pasta() {
+  local pasta existe=false
+  pasta=$(papel_pasta_caminho)
+  [[ -n $pasta && -d $pasta ]] && existe=true
+  printf '{"caminho":%s,"existe":%s,"total":%d,"itensCom":"cyberkde papel --pasta --json","aplicarCom":"cyberkde efeito papel usuario:{id}"}' \
+    "$(json_caminho "$pasta")" "$existe" "$(papel_pasta_total)"
+}
+efeito_json_papel-pasta() {
+  printf '{"id":"papel-pasta","grupo":"area-de-trabalho","nome":%s,"nome_en":%s,"descricao":%s,"descricao_en":%s,"tipo":"variante","comando":"cyberkde efeito papel-pasta [--caminho {caminho}] [--limpar]","forma":{"liga":false,"opcoes":{"caminho":"flag"}},"opcoes":[{"id":"caminho","nome":"Pasta","nome_en":"Folder","tipo":"texto","padrao":"","dica":"Pasta com imagens (jpg, png, webp) e vídeos (mp4, webm, mkv, mov); vazio = nenhuma","dica_en":"Folder with images (jpg, png, webp) and videos (mp4, webm, mkv, mov); empty = none"}],"estado":%s}' \
+    "$(json_str "Pasta de papéis de parede")" "$(json_str "Wallpaper folder")" \
+    "$(json_str "Imagens e vídeos de uma pasta sua entram como opções extras do papel de parede (os vídeos ficam animados, sem som, e pausam com janela maximizada ou tela bloqueada). Os arquivos não são copiados.")" \
+    "$(json_str "Images and videos from a folder of yours become extra wallpaper options (videos are animated, muted, and pause under a maximized window or a locked screen). The files are not copied.")" \
+    "$(efeito_estado_papel-pasta)"
+}
+
+#   cyberkde efeito papel-pasta [--caminho PASTA | PASTA | --limpar] [--itens] [--json]
+#   Sem nada: só lê. --itens: imprime a lista (o mesmo que "cyberkde papel --pasta --json") e sai.
+#   --limpar (ou --caminho ""): sem pasta; se o papel em uso era dela, volta ao padrão do tema.
+#   --json: {"efeito":"papel-pasta",<estado>,"avisos":[...]}. Saída: 0 · 1 falha · 2 uso · 3 ocupado
+efeito_cmd_papel-pasta() {
+  local caminho="" mudar=0 itens=0 arg erro=0
+  while (( $# )); do
+    arg=$1; shift
+    case $arg in
+      --caminho) (( $# )) || { erro=1; break; }; caminho=$1; shift; mudar=1 ;;
+      --caminho=*) caminho=${arg#--caminho=}; mudar=1 ;;
+      --limpar) caminho=""; mudar=1 ;;
+      --itens) itens=1 ;;
+      -*) erro=1 ;;
+      *) (( mudar )) && erro=1; caminho=$arg; mudar=1 ;;
+    esac
+  done
+  (( ! erro )) || cor_exit 2 "$(t "uso: cyberkde efeito papel-pasta [--caminho PASTA | --limpar] [--itens] [--json]" "usage: cyberkde efeito papel-pasta [--caminho FOLDER | --clear] [--itens] [--json]")"
+  if (( itens && ! mudar )); then papel_pasta_itens_json >&3; return 0; fi
+  local -a avisos=()
+  if (( mudar )); then
+    take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
+    mkdir -p -- "$config/cyberkde"
+    if [[ -n $caminho ]]; then
+      [[ $caminho == ~* ]] && caminho="$HOME${caminho#\~}"
+      caminho=$(realpath -m -- "$caminho")
+      kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel-pasta --key caminho "$caminho"
+      [[ -d $caminho ]] || avisos+=("$(t "A pasta não existe agora: fica guardada, e os itens aparecem quando ela existir." "The folder does not exist right now: it is kept, and its items show up once it exists.")")
+    else
+      kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel-pasta --key caminho --delete
+    fi
+    # O papel em uso era da pasta e não está na nova: volta ao padrão do tema.
+    if [[ $(papel_opcao) == usuario ]] && ! papel_usuario_item >/dev/null; then
+      kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel --key opcao a
+      kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel --key usuario --delete
+      if fase_ligada papeis-de-parede; then
+        (fase_atual=papeis-de-parede; efeito_papel_aplicar) || cor_exit 1 "$(t "não consegui aplicar o papel de parede" "could not apply the wallpaper")"
+      fi
+      avisos+=("$(t "O papel em uso era da pasta antiga: voltou ao padrão do tema." "The wallpaper in use was from the old folder: back to the theme default.")")
+    fi
+  fi
+  if (( itens )); then papel_pasta_itens_json >&3; return 0; fi
+  local estado
+  estado=$(efeito_estado_papel-pasta)
+  if (( cor_json )); then
+    local corpo=${estado#\{}
+    printf '{"efeito":"papel-pasta",%s,"avisos":%s}\n' "${corpo%\}}" "$(json_list_str "${avisos[@]}")" >&3
+  else
+    echo "$(t "Pasta de papéis" "Wallpaper folder"): $estado"
+    local a
+    for a in "${avisos[@]}"; do echo "$(t Aviso Note): $a" >&2; done
+  fi
 }
 
 # Quadro estático da corporação, em cache (refeito quando o gerador, a cena, as cores ou os logos mudam).
@@ -127,11 +260,12 @@ papel_corp_id() {
 }
 # Sufixo do arquivo instalado: nenhum na opção a (como sempre foi) e -b/-c/-d nas outras. O caminho muda
 # com a opção, e assim o Plasma e o bloqueio recarregam a imagem na troca.
-papel_sufixo() { local o; o=$(papel_opcao); [[ $o == a ]] || printf -- '-%s' "$o"; }
+papel_sufixo() { local o; o=$(papel_opcao); [[ $o == a || $o == usuario ]] || printf -- '-%s' "$o"; }
 # Pasta com desktop/lockscreen/login.png de uma opção (gera b, c e d quando faltam ou estão velhas).
 papel_origem() {  # opção
   local o=$1 gen="$project/modules/papeis-de-parede/generator/gen_opcao.py" dir id
-  if [[ $o == a ]]; then printf '%s\n' "$project/assets/wallpapers"; return 0; fi
+  # usuario (um item da pasta da pessoa): as do tema (opção a) ficam instaladas como reserva, e são as do login.
+  if [[ $o == a || $o == usuario ]]; then printf '%s\n' "$project/assets/wallpapers"; return 0; fi
   if [[ $o == fui ]]; then
     # Os três (desktop, lockscreen, login) são o mesmo quadro estático; a área de trabalho usa o plugin,
     # o desktop.png é a reserva (e o que o login usa com fundo=papel).
@@ -166,6 +300,7 @@ papel_instalado() { printf '%s/%s%s.png\n' "$(wallpapers_dir)" "$1" "$(papel_suf
 install_papeis-de-parede() {
   local opcao src f cru=0
   install_papel_fui
+  install_papel_video
   opcao=$(papel_opcao)
   src=$(papel_origem "$opcao") || return 1
   [[ $opcao == corp && $src == */build/corp/* ]] && cru=1  # já sai na paleta da corporação
@@ -251,6 +386,7 @@ wallpapers_set() {
     done
     qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
       var fuiChaves = $(papel_fui_chaves 2>/dev/null || echo '{}');
+      var videoReserva = \"$(wallpapers_js "file://$(papel_instalado desktop)")\";
       function apply(id, screen, plugin, image) {
         var all = desktops(), hit = [];
         for (var i = 0; i < all.length; i++)
@@ -260,7 +396,12 @@ wallpapers_set() {
         for (var k = 0; k < hit.length; k++) {
           var d = hit[k];
           d.wallpaperPlugin = plugin;
-          if (plugin === 'org.cyberkde.fui') {
+          if (plugin === 'org.cyberkde.video') {
+            // vídeo da pasta da pessoa: a imagem vem como video:<url>; a reserva é o papel padrão do tema
+            d.currentConfigGroup = ['Wallpaper', 'org.cyberkde.video', 'General'];
+            d.writeConfig('Video', image.replace(/^video:/, ''));
+            d.writeConfig('Reserva', videoReserva);
+          } else if (plugin === 'org.cyberkde.fui') {
             // papel animado: a imagem vem como corp:<id>
             d.currentConfigGroup = ['Wallpaper', 'org.cyberkde.fui', 'General'];
             d.writeConfig('Corporacao', image.replace(/^corp:/, ''));
@@ -281,6 +422,11 @@ wallpapers_set() {
       if [[ $wp == "$papel_fui_plugin" ]]; then
         kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --group Wallpaper \
           --group "$papel_fui_plugin" --group General --key Corporacao "${img#corp:}"
+      elif [[ $wp == "$papel_video_plugin" ]]; then
+        kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --group Wallpaper \
+          --group "$papel_video_plugin" --group General --key Video "${img#video:}"
+        kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --group Wallpaper \
+          --group "$papel_video_plugin" --group General --key Reserva "file://$(papel_instalado desktop)"
       else
         kwriteconfig6 --file "$appletsrc" --group Containments --group "$id" --group Wallpaper \
           --group org.kde.image --group General --key Image "$img"
@@ -296,7 +442,7 @@ wallpapers_set() {
 # papel-de-parede); CYBERKDE_WALLPAPER=/caminho/imagem vale por cima, só naquela execução.
 wallpapers_own() {
   # Com o FUI escolhido, a imagem própria fica guardada (volta com outra opção), mas não vale.
-  [[ $(papel_opcao) != fui ]] || return 0
+  case $(papel_opcao) in fui | usuario) return 0 ;; esac  # (o item da pasta é escolha explícita, como o FUI)
   # Uma opção escolhida pelo efeito (a-d, corp) é escolha explícita: a imagem própria fica guardada e
   # volta com "cyberkde papel <imagem>" ([papel] propria=true).
   local own=${CYBERKDE_WALLPAPER:-}
@@ -307,7 +453,14 @@ wallpapers_own() {
 
 # Imagem da área de trabalho e do bloqueio: a própria, se existir; senão, as do tema.
 wallpapers_image() {  # desktop|lockscreen
-  local own
+  local own u
+  # Item da pasta da pessoa: a imagem dela; no bloqueio, a imagem ou o quadro do vídeo (em cache).
+  if [[ $(papel_opcao) == usuario ]] && u=$(papel_usuario_item); then
+    if [[ ${u%%$'\t'*} == imagem ]]; then printf '%s\n' "${u#*$'\t'}"; return 0; fi
+    if [[ $1 == lockscreen ]] && own=$(python3 -I "$papel_pasta_py" quadro "${u#*$'\t'}" 2>/dev/null); then
+      printf '%s\n' "$own"; return 0
+    fi
+  fi
   own=$(wallpapers_own)
   if [[ -n $own && -f $own ]]; then
     printf '%s\n' "$own"
@@ -320,8 +473,11 @@ wallpapers_image() {  # desktop|lockscreen
 papel_aplicar() {
   # Área de trabalho (todas as telas): registra o original e troca.
   wallpapers_save
+  local u
   if [[ $(papel_opcao) == fui && -d $data/plasma/wallpapers/$papel_fui_plugin ]]; then
     printf '*\t-1\t%s\tcorp:%s\n' "$papel_fui_plugin" "$(papel_fui_corp)" | wallpapers_set
+  elif [[ $(papel_opcao) == usuario ]] && u=$(papel_usuario_item) && [[ ${u%%$'\t'*} == video && -d $data/plasma/wallpapers/$papel_video_plugin ]]; then
+    printf '*\t-1\t%s\tvideo:file://%s\n' "$papel_video_plugin" "${u#*$'\t'}" | wallpapers_set
   else
     printf '*\t-1\torg.kde.image\tfile://%s\n' "$(wallpapers_image desktop)" | wallpapers_set
   fi
@@ -393,8 +549,16 @@ efeito_estado_papel() {
   [[ -n $(wallpapers_own) ]] && propria=true
   local cid=""
   cid=$(papel_corp_id 2>/dev/null) || cid=""
-  printf '{"opcao":"%s","corp":%s,"ligado":%s,"imagemPropria":%s,"fui":%s,"ligarCom":"cyberkde on papeis-de-parede","desligarCom":"cyberkde off papeis-de-parede"}' \
-    "$(papel_opcao)" "$(json_caminho "$cid")" "$ligado" "$propria" "$(papel_fui_json)"
+  local usu=null u
+  if [[ $(papel_opcao) == usuario ]]; then
+    if u=$(papel_usuario_item); then
+      usu="{\"id\":$(json_str "$(papel_usuario_id)"),\"tipo\":\"${u%%$'\t'*}\",\"existe\":true}"
+    else
+      usu="{\"id\":$(json_caminho "$(papel_usuario_id)"),\"tipo\":null,\"existe\":false}"
+    fi
+  fi
+  printf '{"opcao":"%s","corp":%s,"ligado":%s,"imagemPropria":%s,"usuario":%s,"fui":%s,"ligarCom":"cyberkde on papeis-de-parede","desligarCom":"cyberkde off papeis-de-parede"}' \
+    "$(papel_opcao)" "$(json_caminho "$cid")" "$ligado" "$propria" "$usu" "$(papel_fui_json)"
 }
 
 efeito_json_papel() {
@@ -410,18 +574,21 @@ efeito_json_papel() {
 }
 
 #   cyberkde efeito papel [a|b|c|d|corp|fui|padrao] [--json]   (sem opção: só lê)
-#   cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off]
+#   cyberkde efeito papel usuario:<arquivo>   um item da pasta da pessoa (efeito papel-pasta); o id é o nome do
+#                             arquivo, como no "cyberkde papel --pasta --json". Código 2 se ele não está lá.
+#   cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off] [--cor-logo tingido|original]
 #                             [--textos on|off] [--pausar on|off] [--json]
-#   Os controles do FUI valem ao vivo nas telas com ele; com o FUI já escolhido, mudar só os controles
-#   não reaplica o papel (nem o bloqueio e o login).
+#   Os controles do FUI só gravam a preferência ([papel-fui]) e valem ao vivo se o FUI está em uso; não
+#   escolhem o FUI (nem com "fui" junto) e não reaplicam o papel, o bloqueio e o login. "fui" sozinho escolhe.
 #   --json: {"efeito":"papel",<estado>,"avisos":[...]}. Saída: 0 · 1 falha · 2 uso · 3 ocupado
 efeito_cmd_papel() {
-  local opcao="" arg v
+  local opcao="" arg v usuario=""
   local -A fui=()
   while (( $# )); do
     arg=$1; shift
     case $arg in
       a | b | c | d | corp | fui) [[ -z $opcao ]] && opcao=$arg || opcao=invalida ;;
+      usuario:?*) [[ -z $opcao ]] && { opcao=usuario; usuario=${arg#usuario:}; } || opcao=invalida ;;
       padrao) [[ -z $opcao ]] && opcao=a || opcao=invalida ;;
       --intensidade | --velocidade | --fps)
         v=${1:-}; shift || true; v=${v%\%}
@@ -435,30 +602,46 @@ efeito_cmd_papel() {
       --logo | --textos | --pausar)
         case ${1:-} in on | true) fui[${arg#--}]=true ;; off | false) fui[${arg#--}]=false ;; *) opcao=invalida ;; esac
         shift || true ;;
+      --cor-logo)
+        case ${1:-} in tingido | original) fui[corLogo]=$1 ;; *) opcao=invalida ;; esac
+        shift || true ;;
       *) opcao=invalida ;;
     esac
   done
-  # Os controles são do FUI: com outra opção na mesma chamada (ou escolhida antes, sem "fui"), não valem.
+  # Ajustes do FUI só gravam a preferência (e recarregam o FUI se ele está em uso): não escolhem o FUI, nem
+  # com "fui" junto. Com outra opção na mesma chamada, não valem.
   if (( ${#fui[@]} )) && [[ $opcao != invalida ]]; then
-    [[ ${opcao:-$(papel_opcao)} == fui ]] || opcao=invalida
+    case $opcao in "" | fui) opcao="" ;; *) opcao=invalida ;; esac
   fi
-  [[ $opcao != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito papel [a|b|c|d|corp|fui|padrao] [--json]; o FUI: cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off] [--textos on|off] [--pausar on|off]" "usage: cyberkde efeito papel [a|b|c|d|corp|fui|padrao] [--json]; FUI: cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off] [--textos on|off] [--pausar on|off]")"
+  [[ $opcao != invalida ]] || cor_exit 2 "$(t "uso: cyberkde efeito papel [a|b|c|d|corp|fui|padrao|usuario:<arquivo da pasta>] [--json]; o FUI: cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off] [--cor-logo tingido|original] [--textos on|off] [--pausar on|off]" "usage: cyberkde efeito papel [a|b|c|d|corp|fui|padrao|usuario:<file in the folder>] [--json]; FUI: cyberkde efeito papel fui [--intensidade 30..200] [--velocidade 25..300] [--fps 30|60] [--logo on|off] [--cor-logo tingido|original] [--textos on|off] [--pausar on|off]")"
+  # Item da pasta da pessoa: precisa estar lá agora (e ser imagem ou vídeo suportado).
+  if [[ $opcao == usuario ]]; then
+    local pasta
+    pasta=$(papel_pasta_caminho)
+    [[ -n $pasta ]] || cor_exit 2 "$(t "nenhuma pasta de papéis escolhida: cyberkde efeito papel-pasta --caminho PASTA" "no wallpaper folder chosen: cyberkde efeito papel-pasta --caminho FOLDER")"
+    papel_pasta_item "$pasta" "$usuario" >/dev/null ||
+      cor_exit 2 "$(t "não há esse arquivo (imagem ou vídeo) na pasta de papéis: $usuario" "no such file (image or video) in the wallpaper folder: $usuario")"
+  fi
   local -a avisos=()
   if (( ${#fui[@]} )); then
     take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
     mkdir -p -- "$config/cyberkde"
     local k
     for k in "${!fui[@]}"; do kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel-fui --key "$k" "${fui[$k]}"; done
-    # Já no FUI: só os controles, ao vivo (sem reaplicar papel, bloqueio e login).
+    # FUI em uso: os controles valem ao vivo (sem reaplicar papel, bloqueio e login). Senão, ficam guardados.
     if [[ $(papel_opcao) == fui ]] && fase_ligada papeis-de-parede; then
       [[ $(papel_fui_ao_vivo) =~ ^[1-9] ]] || avisos+=("$(t "Nenhuma tela está com o FUI agora: os controles foram guardados e valem quando ele for aplicado." "No screen is showing FUI right now: the controls were saved and apply when it is applied.")")
-      [[ $opcao == fui ]] && opcao=""
     fi
   fi
   if [[ -n $opcao ]]; then
     take_lock || cor_exit 3 "$(t "ocupado: outra execução do cyberkde está em andamento" "busy: another cyberkde run is in progress")"
     mkdir -p -- "$config/cyberkde"
     kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel --key opcao "$opcao"
+    if [[ $opcao == usuario ]]; then
+      kwriteconfig6 --file "$config/cyberkde/efeitos" --group papel --key usuario "$usuario"
+      [[ $(papel_usuario_item) != video* || -f $papel_fui_src/$papel_video_plugin/metadata.json ]] ||
+        avisos+=("$(t "O plugin de vídeo não está no projeto: fica o papel padrão do tema." "The video plugin is missing from the project: the theme default is used.")")
+    fi
     if fase_ligada papeis-de-parede; then
       (fase_atual=papeis-de-parede; efeito_papel_aplicar) || cor_exit 1 "$(t "não consegui aplicar o papel de parede" "could not apply the wallpaper")"
     else

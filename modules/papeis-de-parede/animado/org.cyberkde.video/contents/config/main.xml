@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- file:// do vídeo (na pasta da pessoa: o tema guarda só o caminho) -->
+    <entry name="Video" type="String"><default></default></entry>
+    <!-- file:// da imagem de reserva: aparece se o vídeo sumiu ou não abre (o papel padrão do tema) -->
+    <entry name="Reserva" type="String"><default></default></entry>
+    <!-- cortar (preenche a tela, recorta o excesso) | ajustar (inteiro, com faixas) | esticar -->
+    <entry name="Preenchimento" type="String"><default>cortar</default></entry>
+    <!-- pausa com janela maximizada ou em tela cheia por cima -->
+    <entry name="PausarCoberto" type="Bool"><default>true</default></entry>
+    <!-- pausa com a tela bloqueada (org.freedesktop.ScreenSaver) -->
+    <entry name="PausarBloqueio" type="Bool"><default>true</default></entry>
+    <!-- auto = segue o movimento do tema (fator de animação do KDE 0 → quadro parado); completo | minimo força -->
+    <entry name="Movimento" type="String"><default>auto</default></entry>
+  </group>
+</kcfg>

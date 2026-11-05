@@ -36,14 +36,52 @@ def mic_mudo():
     return None if s is None else ("yes" in s or "sim" in s)
 
 
+def _do_tema(pid, raiz=None):
+    """O PID é a própria ilha ou um filho dela (o parec do espectro)?"""
+    import os
+    raiz = raiz or os.getpid()
+    for _ in range(64):
+        if pid == raiz:
+            return True
+        try:
+            with open("/proc/%d/stat" % pid) as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])   # o campo depois do nome é o PPID
+        except (OSError, ValueError, IndexError):
+            return False
+        if pid <= 1:
+            return False
+    return False
+
+
 def quem_grava():
-    """Quem está com o microfone aberto: a ilha mostra, para não ser surpresa."""
+    """Quem está com o MICROFONE aberto: a ilha mostra, para não ser surpresa. Não contam a captura de um
+    monitor (o som que sai, não um microfone: é o que o espectro da própria ilha lê) nem os processos dela."""
     import json
-    s = cmd("pactl", "-f", "json", "list", "source-outputs")
     try:
-        return [(x.get("properties") or {}).get("application.name", "?") for x in json.loads(s or "[]")]
+        saidas_ = json.loads(cmd("pactl", "-f", "json", "list", "source-outputs") or "[]")
     except ValueError:
         return []
+    monitores, sinks = set(), set()
+    try:
+        for f in json.loads(cmd("pactl", "-f", "json", "list", "sources") or "[]"):
+            if f.get("monitor_source") is None and (f.get("monitor_of_sink") not in (None, "", "n/a") or str(f.get("name", "")).endswith(".monitor")):
+                monitores.add(f.get("index"))
+        sinks = {x.get("name") for x in json.loads(cmd("pactl", "-f", "json", "list", "sinks") or "[]")}
+    except ValueError:
+        pass
+    nomes = []
+    for x in saidas_:
+        p = x.get("properties") or {}
+        alvo = str(p.get("target.object") or "")
+        if x.get("source") in monitores or alvo in sinks or alvo.endswith(".monitor") or alvo == "@DEFAULT_MONITOR@":
+            continue
+        try:
+            if _do_tema(int(p.get("application.process.id") or 0)):
+                continue
+        except ValueError:
+            pass
+        nomes.append(p.get("application.name", "?"))
+    return nomes
 
 
 def definir_volume(pct):

@@ -57,3 +57,17 @@ Medido na RTX 3060 por EGL sem tela, em um passo e GL_TIME_ELAPSED:
 | 3840x2160 | 4,8 ms | ~14 % da GPU | ~29 % da GPU |
 
 Cada tela tem o seu papel. Pausado (janela maximizada, tela cheia ou movimento mínimo), não há nenhum redesenho: no teste, a CPU caiu ao nível do papel de cor sólida.
+
+# Papel de parede em vídeo (`org.cyberkde.video`)
+
+Toca um vídeo da pasta da pessoa (`cyberkde efeito papel-pasta`, `cyberkde efeito papel usuario:<arquivo>`): em loop, sem som e preenchendo a tela. As regras de pausa estão no começo de `org.cyberkde.video/contents/ui/main.qml`.
+
+| Chave (`[Wallpaper][org.cyberkde.video][General]`) | Padrão | O que faz |
+|---|---|---|
+| `Video` | vazio | file:// do vídeo |
+| `Reserva` | vazio | file:// da imagem mostrada se o vídeo não abre (o CLI põe o `desktop.png` do tema) |
+| `Preenchimento` | `cortar` | `cortar`, `ajustar` ou `esticar` |
+| `PausarCoberto` / `PausarBloqueio` | `true` | pausa com janela maximizada ou em tela cheia / com a tela bloqueada |
+| `Movimento` | `auto` | `auto` segue o fator de animação do KDE (0 = parado); `minimo` força o quadro parado |
+
+`contents/ui/Tocador.qml` não depende do Plasma: dá para testar num `QQuickView` (PyQt6) no Xvfb.

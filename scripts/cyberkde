@@ -27,7 +27,8 @@
 #     estilo-*               estilos da interface (seleção, brilho, corte, abas, foco, presets...): --variante V
 #     cursor <padrao|neon|minimo|mira|off>   cursor do tema (escolher liga a fase cursor; off devolve o de antes)
 #     som <padrao|discreto|off>  sons do tema (escolher liga a fase som; off devolve os de antes)
-#     papel <a|b|c|d|corp|fui|padrao> papel de parede do tema (fui: animado, com --intensidade, --velocidade, --fps, --logo, --textos, --pausar)
+#     papel-pasta [--caminho P|--limpar] pasta de imagens/vídeos da pessoa (itens: cyberkde papel --pasta --json)
+#     papel <a|b|c|d|corp|fui|padrao> papel de parede do tema (fui: animado, com --intensidade, --velocidade, --fps, --logo, --textos, --cor-logo, --pausar)
 #           icones [padrao|alt|<grupo>=<padrao|alt>]
 #     movimento <completo|reduzido|minimo>   nível de animação de tudo (KDE e efeitos do tema)
 #     menu <padrao|lista|grade|tela-cheia>   menu iniciar
@@ -41,6 +42,7 @@
 #   cyberkde cor '#hex'  troca a cor de destaque do tema inteiro ('cyberkde cor padrao' volta ao vermelho)
 #                        opções: --sem-sudo (nunca pede senha; login fica pendente) e --json (para programas)
 #   cyberkde papel [imagem|padrao]  papel de parede próprio para a área de trabalho e o bloqueio
+#   cyberkde papel --pasta [--json] itens da pasta de papéis (efeito papel-pasta), em JSON
 #                        ('padrao' volta às imagens do tema)
 #   cyberkde padrao [app] abre o app (padrão: dolphin) com a aparência original, para comparar
 #   cyberkde install     só instala/atualiza os arquivos do tema (cores, Kvantum, fontes)
@@ -2118,16 +2120,22 @@ if declare -F efeito_cmd_papel >/dev/null; then
   eval "$(declare -f efeito_cmd_papel | sed '1s/^efeito_cmd_papel /efeito_cmd_papel_modulo /')"
   efeito_cmd_papel() {
     local arg modo=""
+    # Ajustes do FUI (--intensidade, --cor-logo...): só a preferência, não escolhem papel (o módulo trata).
+    for arg in "$@"; do
+      case $arg in --intensidade | --velocidade | --fps | --logo | --textos | --pausar | --cor-logo)
+        efeito_cmd_papel_modulo "$@"; return ;;
+      esac
+    done
     for arg in "$@"; do
       # fui: fixo (a corporação não troca o papel por outro; ela só muda a Corporacao do FUI).
-      case $arg in a | b | c | d | fui) modo=fixo ;; corp | padrao) modo=corp ;; esac
+      case $arg in a | b | c | d | fui | usuario:?*) modo=fixo ;; corp | padrao) modo=corp ;; esac
     done
     if [[ " $* " == *" corp "* ]] && ! papel_corp_suportado; then
       cor_exit 2 "$(t "o papel por corporação ainda não existe nesta versão do módulo de papel de parede" "the per-corporation wallpaper does not exist in this version of the wallpaper module yet")"
     fi
     if [[ -n $modo ]]; then papel_modo_gravar "$modo"; fi
     local escolheu=0
-    for arg in "$@"; do [[ $arg == a || $arg == b || $arg == c || $arg == d || $arg == corp || $arg == fui || $arg == padrao ]] && escolheu=1; done
+    for arg in "$@"; do [[ $arg == a || $arg == b || $arg == c || $arg == d || $arg == corp || $arg == fui || $arg == padrao || $arg == usuario:?* ]] && escolheu=1; done
     # Escolha explícita vence a imagem própria, que fica guardada (cyberkde papel <imagem> a traz de volta).
     if (( escolheu )); then mkdir -p -- "$(dirname -- "$efeitos_file")"; kwriteconfig6 --file "$efeitos_file" --group papel --key propria false; fi
     # "fui" de novo, com o FUI já escolhido e a fase ligada: só os controles (ao vivo), nada a seguir no login.
@@ -3375,6 +3383,11 @@ cmd_padrao() {
 # --json (sem imagem): {"papel":"/caminho"|null}, para o painel.
 cmd_papel() {
   local file="$config/cyberkde/papel-de-parede" img=${1:-}
+  # --pasta [--json]: os itens da pasta de papéis da pessoa (efeito papel-pasta do módulo), para o painel.
+  if [[ $img == --pasta ]]; then
+    if declare -F papel_pasta_itens_json >/dev/null; then papel_pasta_itens_json; else echo '[]'; fi
+    return
+  fi
   if [[ $img == --json ]]; then
     if [[ -s $file ]]; then printf '{"papel":%s}\n' "$(json_str "$(<"$file")")"; else echo '{"papel":null}'; fi
     return
@@ -3393,8 +3406,8 @@ cmd_papel() {
     readlink -f -- "$img" >"$file"
     kwriteconfig6 --file "$efeitos_file" --group papel --key propria true
     papel_modo_gravar fixo  # escolha da pessoa: a corporação não sobrescreve
-    # Com o FUI escolhido, a imagem própria não valeria: escolher uma imagem sai do FUI.
-    if [[ $(kreadconfig6 --file "$efeitos_file" --group papel --key opcao 2>/dev/null) == fui ]]; then
+    # Com o FUI ou um item da pasta escolhido, a imagem própria não valeria: escolher uma imagem sai deles.
+    if [[ $(kreadconfig6 --file "$efeitos_file" --group papel --key opcao 2>/dev/null) =~ ^(fui|usuario)$ ]]; then
       kwriteconfig6 --file "$efeitos_file" --group papel --key opcao a
     fi
     echo "Papel de parede: $(<"$file")"
@@ -3908,7 +3921,9 @@ cmd_uninstall() {
   rm -f "$data/color-schemes/CyberKDE.colors" "$data/kwin/effects/.cyberkde_"*
   # Widgets do tema (modules/widgets): os pacotes instalados. A configuração guardada deles (as notas)
   # fica, como os logos da usuária (abaixo).
-  rm -rf -- "$data/plasma/plasmoids/org.cyberkde."* "$data/plasma/wallpapers/org.cyberkde.fui"
+  rm -rf -- "$data/plasma/plasmoids/org.cyberkde."* "$data/plasma/wallpapers/org.cyberkde.fui" \
+    "$data/plasma/wallpapers/org.cyberkde.video"
+  rm -rf -- "$data/plasma/wallpapers/org.cyberkde.blackwall" "$data/dbus-1/services/org.cyberkde.Espectro.service"  # sobra de um papel abandonado
   rmdir -- "$data/plasma/wallpapers" 2>/dev/null || true
   rmdir -- "$data/plasma/plasmoids" 2>/dev/null || true
   # Ícones do menu (gen_menu.py) no hicolor do usuário, que pode ter ícones de outros programas: só os

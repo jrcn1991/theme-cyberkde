@@ -37,6 +37,8 @@ TemaBase {
     readonly property real raioAba: 0
     readonly property real raioIcone: 0
     readonly property int segmentosBarra: 10
+    // os 4 traços do Fusao.qml (12 px da borda, ~30 px de largura com a inclinação) e 8 px até o conteúdo
+    reservaFusao: 38
     tempos: ({ abrir: 200, fechar: 130, anuncio: 140, conteudoEntra: 100, conteudoSai: 60, chegada: 180 })
     readonly property var _degraus: [[0.17, 0.1], [0.171, 0.34], [0.34, 0.36], [0.341, 0.62], [0.55, 0.64], [0.551, 0.9], [0.75, 0.92], [0.751, 1], [1, 1]]
     curvas: ({ abrir: _degraus, fechar: [[0.5, 0.8], [0.501, 0.98], [1, 1]], anuncio: _degraus, entrar: "entrar", sair: "sair", chegada: _degraus })
